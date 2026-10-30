@@ -364,6 +364,12 @@ async function submitClaim(event) {
 
 /* ---------------- boot ---------------- */
 document.addEventListener('DOMContentLoaded', async () => {
+  // Arriving from a "Log out" link — make sure the session is really gone.
+  if (window.location.search.includes('loggedout=1')) {
+    Auth.clear();
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+
   paintAuthState();
   initMobileNav();
   initScrollReveal();

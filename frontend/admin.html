@@ -20,7 +20,7 @@
       </nav>
       <div class="header-actions">
         <span class="form-note" id="who"></span>
-        <button class="btn" id="logout">Log out</button>
+        <a class="btn" id="logout" href="index.html?loggedout=1">Log out</a>
       </div>
     </div>
   </header>
@@ -91,7 +91,9 @@
 
     document.getElementById('who').textContent = Auth.user ? Auth.user.name : '';
 
-    document.getElementById('logout').addEventListener('click', () => logoutAndGo('index.html'));
+    document.getElementById('logout').addEventListener('click', () => {
+      try { Auth.clear(); } catch { /* the link still navigates */ }
+    });
 
     function row(cells) {
       return `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`;
