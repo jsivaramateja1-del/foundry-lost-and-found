@@ -371,12 +371,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Log out from the header
   const headerLogout = document.getElementById('header-logout');
   if (headerLogout) {
-    headerLogout.addEventListener('click', async () => {
-      try { await api('/auth/logout', { method: 'POST', auth: true }); } catch { /* token is stateless */ }
-      Auth.clear();
-      paintAuthState();
-      ui.toast('Logged out');
-    });
+    headerLogout.addEventListener('click', () => logoutAndGo('index.html'));
   }
 
   const meta = await loadMeta();

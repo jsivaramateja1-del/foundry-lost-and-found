@@ -91,11 +91,7 @@
 
     document.getElementById('who').textContent = Auth.user ? Auth.user.name : '';
 
-    document.getElementById('logout').addEventListener('click', async () => {
-      try { await api('/auth/logout', { method: 'POST', auth: true }); } catch { /* stateless */ }
-      Auth.clear();
-      window.location.href = 'index.html';
-    });
+    document.getElementById('logout').addEventListener('click', () => logoutAndGo('index.html'));
 
     function row(cells) {
       return `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`;
@@ -154,6 +150,8 @@
             ])).join('')
           : '<tr><td colspan="5" style="color:var(--muted)">No claims.</td></tr>';
       } catch (err) {
+        // If the user just logged out, don't flash the guard message
+        if (!Auth.isLoggedIn) return;
         if (err.status === 401 || err.status === 403) {
           document.getElementById('admin-content').hidden = true;
           document.getElementById('guard').hidden = false;

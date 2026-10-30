@@ -86,11 +86,7 @@
     document.getElementById('who').textContent = Auth.user ? Auth.user.name : '';
     document.querySelectorAll('[data-admin-only]').forEach((n) => { n.hidden = !Auth.isAdmin; });
 
-    document.getElementById('logout').addEventListener('click', async () => {
-      try { await api('/auth/logout', { method: 'POST', auth: true }); } catch { /* token is stateless */ }
-      Auth.clear();
-      window.location.href = 'index.html';
-    });
+    document.getElementById('logout').addEventListener('click', () => logoutAndGo('index.html'));
 
     const row = (cells) => `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`;
     const statusTag = (s) => `<span class="status status--${s}">${ui.esc(s)}</span>`;
@@ -101,6 +97,8 @@
       try {
         data = await api('/dashboard/me', { auth: true });
       } catch (err) {
+        // If the user just logged out, stay quiet instead of bouncing them back
+        if (!Auth.isLoggedIn) return;
         if (err.status === 401) return Auth.requireLogin('dashboard.html');
         ui.toast(err.message);
         return;

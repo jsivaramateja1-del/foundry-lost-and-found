@@ -128,6 +128,27 @@ const ui = {
   }
 };
 
+/**
+ * Log out. Clears the session and navigates IMMEDIATELY, then tells the
+ * server as a fire-and-forget request. Never await anything before
+ * redirecting — a slow or failing request must not block the user.
+ */
+function logoutAndGo(target = 'index.html') {
+  const token = Auth.token;
+  Auth.clear();
+  window.location.replace(target);
+  if (token) {
+    try {
+      fetch(`${API_BASE}/auth/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      }).catch(() => {});
+    } catch {
+      /* the token is stateless — the session is already gone locally */
+    }
+  }
+}
+
 /** Reveal elements as they scroll into view. */
 function initScrollReveal() {
   const targets = document.querySelectorAll('[data-reveal]');
