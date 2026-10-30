@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — Foundry</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap site-header__inner">
+      <a href="index.html" class="logo">foundry <span>Sai Campus / Lost + Found</span></a>
+      <nav class="nav" aria-label="Primary">
+        <a href="index.html">Home</a>
+        <a href="dashboard.html" aria-current="page">Dashboard</a>
+        <a href="admin.html" data-admin-only hidden>Admin</a>
+      </nav>
+      <div class="header-actions">
+        <span class="form-note" id="who"></span>
+        <button class="btn" id="logout">Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="page-head">
+      <p class="eyebrow">Your account</p>
+      <h1 class="display">Dashboard</h1>
+    </div>
+
+    <div class="cards-row">
+      <div class="metric"><div class="metric__value" data-metric="listings">—</div><div class="metric__label">Your listings</div></div>
+      <div class="metric"><div class="metric__value" data-metric="open">—</div><div class="metric__label">Still open</div></div>
+      <div class="metric"><div class="metric__value" data-metric="returned">—</div><div class="metric__label">Returned</div></div>
+      <div class="metric"><div class="metric__value" data-metric="claimsMade">—</div><div class="metric__label">Claims you made</div></div>
+      <div class="metric"><div class="metric__value" data-metric="points">—</div><div class="metric__label">Points</div></div>
+    </div>
+
+    <!-- Claims received on your listings -->
+    <section class="panel">
+      <div class="panel__head">
+        <h2>Claims on your listings</h2>
+        <span class="form-note" id="received-count"></span>
+      </div>
+      <div class="panel__body" style="overflow-x:auto;">
+        <table class="table">
+          <thead><tr><th>Item</th><th>Claimed by</th><th>Their message</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody id="received-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Your listings -->
+    <section class="panel">
+      <div class="panel__head">
+        <h2>Your listings</h2>
+        <a href="index.html#browse" class="btn btn--ghost">Browse all</a>
+      </div>
+      <div class="panel__body" style="overflow-x:auto;">
+        <table class="table">
+          <thead><tr><th>Item</th><th>Type</th><th>Location</th><th>Date</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody id="listings-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Claims you made -->
+    <section class="panel">
+      <div class="panel__head"><h2>Claims you have made</h2></div>
+      <div class="panel__body" style="overflow-x:auto;">
+        <table class="table">
+          <thead><tr><th>Item</th><th>Your message</th><th>Status</th><th>Sent</th></tr></thead>
+          <tbody id="claims-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="assets/js/api.js"></script>
+  <script>
+    if (!Auth.isLoggedIn) Auth.requireLogin('dashboard.html');
+
+    document.getElementById('who').textContent = Auth.user ? Auth.user.name : '';
+    document.querySelectorAll('[data-admin-only]').forEach((n) => { n.hidden = !Auth.isAdmin; });
+
+    document.getElementById('logout').addEventListener('click', async () => {
+      try { await api('/auth/logout', { method: 'POST', auth: true }); } catch { /* token is stateless */ }
+      Auth.clear();
+      window.location.href = 'index.html';
+    });
+
+    const row = (cells) => `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`;
+    const statusTag = (s) => `<span class="status status--${s}">${ui.esc(s)}</span>`;
+
+    /** Load everything and paint the three tables. */
+    async function refresh() {
+      let data;
+      try {
+        data = await api('/dashboard/me', { auth: true });
+      } catch (err) {
+        if (err.status === 401) return Auth.requireLogin('dashboard.html');
+        ui.toast(err.message);
+        return;
+      }
+
+      Object.entries(data.stats).forEach(([key, value]) => {
+        const node = document.querySelector(`[data-metric="${key}"]`);
+        if (node) node.textContent = value;
+      });
+
+      // --- your listings ---
+      document.getElementById('listings-body').innerHTML = data.items.length
+        ? data.items.map((i) => row([
+            ui.esc(i.title),
+            i.type === 'lost' ? 'Lost' : 'Found',
+            ui.esc(i.location),
+            ui.date(i.date),
+            statusTag(i.status),
+            i.status === 'returned'
+              ? '<span class="form-note">Returned</span>'
+              : `<button class="btn btn--ghost" data-return="${i.id}">Mark returned</button>`
+          ])).join('')
+        : '<tr><td colspan="6" style="color:var(--muted)">You have not posted anything yet.</td></tr>';
+
+      // --- claims you made ---
+      document.getElementById('claims-body').innerHTML = data.claims.length
+        ? data.claims.map((c) => row([
+            ui.esc(c.item?.title || 'Item removed'),
+            ui.esc(c.message).slice(0, 80),
+            statusTag(c.status),
+            ui.date(c.createdAt)
+          ])).join('')
+        : '<tr><td colspan="4" style="color:var(--muted)">No claims yet.</td></tr>';
+
+      // --- claims received on your listings ---
+      const perItem = await Promise.all(
+        data.items.map((i) =>
+          api(`/claims/item/${i.id}`, { auth: true })
+            .then((res) => res.claims.map((c) => ({ ...c, itemTitle: i.title })))
+            .catch(() => [])
+        )
+      );
+      const received = perItem.flat();
+      document.getElementById('received-count').textContent =
+        received.length ? `${received.length} total` : '';
+
+      document.getElementById('received-body').innerHTML = received.length
+        ? received.map((c) => row([
+            ui.esc(c.itemTitle),
+            ui.esc(c.claimant?.name || 'A student'),
+            ui.esc(c.message),
+            statusTag(c.status),
+            c.status === 'pending'
+              ? `<button class="btn btn--ghost" data-approve="${c.id}">Approve</button>
+                 <button class="btn btn--ghost" data-reject="${c.id}">Reject</button>`
+              : '<span class="form-note">Reviewed</span>'
+          ])).join('')
+        : '<tr><td colspan="5" style="color:var(--muted)">Nobody has claimed any of your items yet.</td></tr>';
+    }
+
+    // Approve / reject / mark returned — one delegated listener for the whole page
+    document.addEventListener('click', async (event) => {
+      const approve = event.target.closest('[data-approve]');
+      const reject = event.target.closest('[data-reject]');
+      const markReturned = event.target.closest('[data-return]');
+      const button = approve || reject || markReturned;
+      if (!button) return;
+
+      button.disabled = true;
+      try {
+        if (approve) {
+          await api(`/claims/${approve.dataset.approve}`, { method: 'PATCH', body: { status: 'approved' }, auth: true });
+          ui.toast('Claim approved');
+        } else if (reject) {
+          await api(`/claims/${reject.dataset.reject}`, { method: 'PATCH', body: { status: 'rejected' }, auth: true });
+          ui.toast('Claim rejected');
+        } else {
+          await api(`/items/${markReturned.dataset.return}`, { method: 'PATCH', body: { status: 'returned' }, auth: true });
+          ui.toast('Marked as returned — points awarded');
+        }
+        await refresh();
+      } catch (err) {
+        ui.toast(err.message);
+        button.disabled = false;
+      }
+    });
+
+    refresh();
+  </script>
+</body>
+</html>

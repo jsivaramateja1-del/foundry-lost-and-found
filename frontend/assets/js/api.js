@@ -1,0 +1,161 @@
+/* ============================================================
+   api.js — one place for every call to the backend.
+   Shared by index.html, auth.html, dashboard.html and admin.html.
+   ============================================================ */
+
+/**
+ * Work out where the API lives.
+ * When Express serves this frontend the API is on the same origin.
+ * If you open index.html with VS Code Live Server instead, fall back
+ * to the local backend port.
+ */
+const API_BASE = (() => {
+  const { protocol, hostname, port } = window.location;
+  if (protocol === 'file:') return 'http://localhost:5000/api';
+  // Served by our own Express server (port 5000 by default)
+  if (port === '5000' || port === '') return `${window.location.origin}/api`;
+  // Live Server / any other static preview
+  return `http://${hostname || 'localhost'}:5000/api`;
+})();
+
+const TOKEN_KEY = 'foundry.token';
+const USER_KEY = 'foundry.user';
+
+const Auth = {
+  get token() {
+    return localStorage.getItem(TOKEN_KEY) || '';
+  },
+  get user() {
+    try {
+      return JSON.parse(localStorage.getItem(USER_KEY) || 'null');
+    } catch {
+      return null;
+    }
+  },
+  get isLoggedIn() {
+    return Boolean(this.token);
+  },
+  get isAdmin() {
+    return this.user?.role === 'admin';
+  },
+  save(token, user) {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  },
+  clear() {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+  },
+  /** Send the visitor to the login page, remembering where they came from. */
+  requireLogin(redirect = window.location.pathname) {
+    window.location.href = `auth.html?next=${encodeURIComponent(redirect)}`;
+  }
+};
+
+/**
+ * Core request helper.
+ * Throws an Error with a readable message on any non-2xx response,
+ * so callers can just try/catch and show err.message.
+ */
+async function api(path, { method = 'GET', body, auth = false, signal } = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (auth && Auth.token) headers.Authorization = `Bearer ${Auth.token}`;
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') throw err;
+    throw new Error('Cannot reach the server. Is the backend running on port 5000?');
+  }
+
+  let data = null;
+  const text = await response.text();
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { message: text };
+    }
+  }
+
+  if (!response.ok) {
+    const error = new Error(data?.message || `Request failed (${response.status})`);
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
+
+/** Small helpers used across pages */
+const ui = {
+  /** Show a toast message for a couple of seconds. */
+  toast(message) {
+    let el = document.querySelector('.toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'toast';
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-live', 'polite');
+      document.body.appendChild(el);
+    }
+    el.textContent = message;
+    el.dataset.show = 'true';
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => {
+      el.dataset.show = 'false';
+    }, 3200);
+  },
+
+  /** Format a date as 12 Oct 2026 */
+  date(value) {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  },
+
+  /** Escape user text before putting it in HTML. */
+  esc(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+};
+
+/** Reveal elements as they scroll into view. */
+function initScrollReveal() {
+  const targets = document.querySelectorAll('[data-reveal]');
+  if (!targets.length) return;
+  if (!('IntersectionObserver' in window) ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    targets.forEach((el) => el.classList.add('is-in'));
+    return;
+  }
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('is-in');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+  targets.forEach((el) => observer.observe(el));
+}
+
+/** Wire the mobile menu button. */
+function initMobileNav() {
+  const toggle = document.querySelector('.menu-toggle');
+  const nav = document.querySelector('.nav');
+  if (!toggle || !nav) return;
+  toggle.addEventListener('click', () => {
+    const open = nav.dataset.open === 'true';
+    nav.dataset.open = String(!open);
+    toggle.setAttribute('aria-expanded', String(!open));
+  });
+}

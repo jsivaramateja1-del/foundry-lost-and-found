@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — Foundry</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap site-header__inner">
+      <a href="index.html" class="logo">foundry <span>Sai Campus / Lost + Found</span></a>
+      <nav class="nav" aria-label="Primary">
+        <a href="index.html">Home</a>
+        <a href="dashboard.html">Dashboard</a>
+        <a href="admin.html" aria-current="page">Admin</a>
+      </nav>
+      <div class="header-actions">
+        <span class="form-note" id="who"></span>
+        <button class="btn" id="logout">Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="page-head">
+      <p class="eyebrow">Staff view</p>
+      <h1 class="display">Admin dashboard</h1>
+    </div>
+
+    <p class="form-note" id="guard" style="padding:2rem 0;" hidden>
+      This page is for admin accounts only. <a href="auth.html?next=admin.html" style="color:var(--accent)">Log in as admin</a>.
+    </p>
+
+    <div id="admin-content" hidden>
+      <div class="cards-row">
+        <div class="metric"><div class="metric__value" data-total="items">—</div><div class="metric__label">Total listings</div></div>
+        <div class="metric"><div class="metric__value" data-total="lost">—</div><div class="metric__label">Lost</div></div>
+        <div class="metric"><div class="metric__value" data-total="found">—</div><div class="metric__label">Found</div></div>
+        <div class="metric"><div class="metric__value" data-total="returned">—</div><div class="metric__label">Returned</div></div>
+        <div class="metric"><div class="metric__value" data-total="claims">—</div><div class="metric__label">Claims</div></div>
+        <div class="metric"><div class="metric__value" data-total="users">—</div><div class="metric__label">Users</div></div>
+      </div>
+
+      <section class="panel">
+        <div class="panel__head"><h2>Listings by category</h2></div>
+        <div class="chart" id="chart-category"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel__head"><h2>New listings, last 7 days</h2></div>
+        <div class="chart" id="chart-perday"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel__head">
+          <h2>All listings</h2>
+          <span class="form-note" id="items-count"></span>
+        </div>
+        <div class="panel__body" style="overflow-x:auto;">
+          <table class="table">
+            <thead><tr><th>Item</th><th>Type</th><th>Category</th><th>Reported by</th><th>Date</th><th>Status</th></tr></thead>
+            <tbody id="admin-items"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel__head">
+          <h2>All claims</h2>
+          <span class="form-note" id="claims-count"></span>
+        </div>
+        <div class="panel__body" style="overflow-x:auto;">
+          <table class="table">
+            <thead><tr><th>Item</th><th>Claimed by</th><th>Message</th><th>Status</th><th>Sent</th></tr></thead>
+            <tbody id="admin-claims"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="assets/js/api.js"></script>
+  <script>
+    if (!Auth.isLoggedIn) {
+      Auth.requireLogin('admin.html');
+    }
+
+    document.getElementById('who').textContent = Auth.user ? Auth.user.name : '';
+
+    document.getElementById('logout').addEventListener('click', async () => {
+      try { await api('/auth/logout', { method: 'POST', auth: true }); } catch { /* stateless */ }
+      Auth.clear();
+      window.location.href = 'index.html';
+    });
+
+    function row(cells) {
+      return `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`;
+    }
+
+    function drawBars(container, rows, labelKey, valueKey) {
+      const max = Math.max(...rows.map((r) => r[valueKey]), 1);
+      container.innerHTML = rows.length
+        ? rows.map((r) => `
+            <div class="chart__row">
+              <span>${ui.esc(r[labelKey])}</span>
+              <span class="chart__bar"><span class="chart__fill" style="width:${(r[valueKey] / max) * 100}%"></span></span>
+              <span class="chart__val">${r[valueKey]}</span>
+            </div>`).join('')
+        : '<p class="form-note">No data yet.</p>';
+    }
+
+    (async () => {
+      if (!Auth.isAdmin) {
+        document.getElementById('guard').hidden = false;
+        return;
+      }
+      document.getElementById('admin-content').hidden = false;
+
+      try {
+        const stats = await api('/admin/stats', { auth: true });
+        Object.entries(stats.totals).forEach(([key, value]) => {
+          const node = document.querySelector(`[data-total="${key}"]`);
+          if (node) node.textContent = value;
+        });
+        drawBars(document.getElementById('chart-category'), stats.byCategory, 'category', 'count');
+        drawBars(document.getElementById('chart-perday'), stats.perDay, 'date', 'count');
+
+        const items = await api('/admin/items', { auth: true });
+        document.getElementById('items-count').textContent = `${items.count} listings`;
+        document.getElementById('admin-items').innerHTML = items.items.length
+          ? items.items.map((i) => row([
+              ui.esc(i.title),
+              i.type === 'lost' ? 'Lost' : 'Found',
+              ui.esc(i.category),
+              ui.esc(i.reportedBy?.name || '—'),
+              ui.date(i.date),
+              `<span class="status">${ui.esc(i.status)}</span>`
+            ])).join('')
+          : '<tr><td colspan="6" style="color:var(--muted)">No listings.</td></tr>';
+
+        const claims = await api('/admin/claims', { auth: true });
+        document.getElementById('claims-count').textContent = `${claims.count} claims`;
+        document.getElementById('admin-claims').innerHTML = claims.claims.length
+          ? claims.claims.map((c) => row([
+              ui.esc(c.item?.title || 'Item removed'),
+              ui.esc(c.claimant?.name || '—'),
+              ui.esc(c.message).slice(0, 70),
+              `<span class="status status--${c.status}">${ui.esc(c.status)}</span>`,
+              ui.date(c.createdAt)
+            ])).join('')
+          : '<tr><td colspan="5" style="color:var(--muted)">No claims.</td></tr>';
+      } catch (err) {
+        if (err.status === 401 || err.status === 403) {
+          document.getElementById('admin-content').hidden = true;
+          document.getElementById('guard').hidden = false;
+        } else {
+          ui.toast(err.message);
+        }
+      }
+    })();
+  </script>
+</body>
+</html>
