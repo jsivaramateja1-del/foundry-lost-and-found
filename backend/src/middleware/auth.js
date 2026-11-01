@@ -1,7 +1,18 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-const secret = () => process.env.JWT_SECRET || 'dev_only_secret_change_me';
+/**
+ * The signing secret. There is deliberately NO fallback value: a default
+ * secret committed to the repository would let anyone mint an admin token.
+ * If it is missing the server refuses to start (see server.js).
+ */
+const secret = () => {
+  const value = process.env.JWT_SECRET;
+  if (!value) {
+    throw new Error('JWT_SECRET is not set. Add it to backend/.env (see .env.example) and restart.');
+  }
+  return value;
+};
 
 /** Require a valid Bearer token and attach req.user */
 const protect = async (req, res, next) => {

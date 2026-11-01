@@ -129,7 +129,7 @@
       document.getElementById('claims-body').innerHTML = data.claims.length
         ? data.claims.map((c) => row([
             ui.esc(c.item?.title || 'Item removed'),
-            ui.esc(c.message).slice(0, 80),
+            ui.esc(String(c.message).slice(0, 80)),
             statusTag(c.status),
             ui.date(c.createdAt)
           ])).join('')
@@ -178,7 +178,7 @@
           await api(`/claims/${reject.dataset.reject}`, { method: 'PATCH', body: { status: 'rejected' }, auth: true });
           ui.toast('Claim rejected');
         } else {
-          await api(`/items/${markReturned.dataset.return}`, { method: 'PATCH', body: { status: 'returned' }, auth: true });
+          await api(`/items/${markReturned.dataset.return}/status`, { method: 'PATCH', body: { status: 'returned' }, auth: true });
           ui.toast('Marked as returned — points awarded');
         }
         await refresh();

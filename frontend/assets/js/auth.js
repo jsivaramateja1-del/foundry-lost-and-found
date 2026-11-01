@@ -1,7 +1,12 @@
 /* auth.js — login and registration */
 
 const params = new URLSearchParams(window.location.search);
-const nextUrl = params.get('next') || 'index.html';
+
+// Where to send the student after a successful login.
+// Only accept a plain page on this site: a ?next= value such as
+// "//evil.example/login" would otherwise redirect them off-site.
+const requestedNext = params.get('next') || '';
+const nextUrl = /^[a-z0-9_-]+\.html(\?[^#]*)?$/i.test(requestedNext) ? requestedNext : 'index.html';
 
 const tabs = {
   login: { tab: document.getElementById('tab-login'), form: document.getElementById('form-login') },

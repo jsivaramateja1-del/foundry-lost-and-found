@@ -146,7 +146,7 @@
           ? claims.claims.map((c) => row([
               ui.esc(c.item?.title || 'Item removed'),
               ui.esc(c.claimant?.name || '—'),
-              ui.esc(c.message).slice(0, 70),
+              ui.esc(String(c.message).slice(0, 70)),
               `<span class="status status--${c.status}">${ui.esc(c.status)}</span>`,
               ui.date(c.createdAt)
             ])).join('')

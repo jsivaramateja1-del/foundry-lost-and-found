@@ -271,11 +271,13 @@ router.patch('/:id/status', protect, async (req, res, next) => {
       return res.status(403).json({ message: 'You can only change the status of your own listings' });
     }
 
+    // Remember the old status so points cannot be farmed by clicking twice
+    const previousStatus = item.status;
     item.status = status;
     await item.save();
 
-    // Award points once, when an item is marked returned
-    if (status === 'returned') {
+    // Award points once, the first time an item is marked returned
+    if (status === 'returned' && previousStatus !== 'returned') {
       const User = require('../models/User');
       const Claim = require('../models/Claim');
       await User.findByIdAndUpdate(item.reportedBy, { $inc: { points: 10, returns: 1 } });
