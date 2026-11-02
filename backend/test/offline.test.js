@@ -223,13 +223,14 @@ const mountPrefix = (src) => {
     'student@scds.saiuniversity.edu.in',
     'example123@scds.saiuniversity.edu.in',
     'STUDENT@SCDS.SAIUNIVERSITY.EDU.IN',
-    '  student@scds.saiuniversity.edu.in  '
+    '  student@scds.saiuniversity.edu.in  ',
+    // Faculty addresses use the parent domain and are allowed by requirement
+    'prof@saiuniversity.edu.in'
   ];
   const rejected = [
     'student@gmail.com',
     'student@yahoo.com',
     'student@outlook.com',
-    'student@saiuniversity.edu.in',
     'student@otheruniversity.edu.in',
     'student@scds.saiuniversity.edu.in.evil.com',
     'student@sub.scds.saiuniversity.edu.in',
@@ -250,14 +251,32 @@ const mountPrefix = (src) => {
   check('normaliseEmail lowercases and trims',
     emailUtils.normaliseEmail('  SomeOne@SCDS.SaiUniversity.EDU.IN ') === 'someone@scds.saiuniversity.edu.in');
 
-  check('the default domain is the Sai University student domain',
-    emailUtils.DEFAULT_DOMAIN === 'scds.saiuniversity.edu.in');
+  check('all four school domains are allowed by default',
+    emailUtils.STUDENT_DOMAINS.length === 4 &&
+    ['scds', 'sas', 'sol', 'sahs'].every((school) =>
+      emailUtils.isAllowedEmail(`student@${school}.saiuniversity.edu.in`)),
+    emailUtils.STUDENT_DOMAINS.join(', '));
+
+  check('the faculty domain is allowed and recognised as faculty',
+    emailUtils.isAllowedEmail('prof@saiuniversity.edu.in') &&
+    emailUtils.isFacultyEmail('prof@saiuniversity.edu.in'));
+
+  check('a student domain is not treated as faculty',
+    !emailUtils.isFacultyEmail('student@scds.saiuniversity.edu.in'));
+
+  check('a made-up school domain is still refused',
+    !emailUtils.isAllowedEmail('student@eng.saiuniversity.edu.in'));
+
+  check('the error message names every student domain',
+    emailUtils.STUDENT_DOMAINS.every((d) => emailUtils.emailDomainError().includes(d)));
 
   // The domain is configurable, but only when an administrator sets it
   const savedDomain = process.env.ALLOWED_EMAIL_DOMAIN;
   process.env.ALLOWED_EMAIL_DOMAIN = 'Example.EDU';
-  check('the allowed domain can be overridden by an environment variable',
+  check('the allowlist can be overridden by an environment variable',
     emailUtils.allowedDomain() === 'example.edu' && emailUtils.isAllowedEmail('a@example.edu'));
+  check('an override replaces the list rather than adding to it',
+    emailUtils.allowedDomains().length === 1 && !emailUtils.isAllowedEmail('a@sas.saiuniversity.edu.in'));
   check('an override does not open the original domain',
     !emailUtils.isAllowedEmail('a@scds.saiuniversity.edu.in'));
   if (savedDomain === undefined) delete process.env.ALLOWED_EMAIL_DOMAIN;
@@ -275,6 +294,45 @@ const mountPrefix = (src) => {
     emailUtils.verificationExpiry().getTime() > Date.now());
   check('email verification is off by default',
     emailUtils.emailVerificationEnabled() === false);
+
+  // 9b. Role guards and the verification gate, as middleware
+  const { requireRole, requireVerified, ADMIN_ROLES, MODERATION_ROLES, SUPER_ROLES } = require('../src/middleware/auth');
+
+  const callGuard = (middleware, user) => new Promise((resolve) => {
+    const req = { user };
+    const res = {
+      statusCode: null,
+      body: null,
+      status(code) { this.statusCode = code; return this; },
+      json(payload) { this.body = payload; resolve({ blocked: true, code: this.statusCode, body: payload }); }
+    };
+    middleware(req, res, () => resolve({ blocked: false }));
+  });
+
+  const asStudent = await callGuard(requireRole(...ADMIN_ROLES), { role: 'student' });
+  check('a student is refused an admin-only route', asStudent.blocked && asStudent.code === 403);
+
+  const asModerator = await callGuard(requireRole(...MODERATION_ROLES), { role: 'moderator' });
+  check('a moderator is allowed a moderation route', asModerator.blocked === false);
+
+  const modOnAdmin = await callGuard(requireRole(...ADMIN_ROLES), { role: 'moderator' });
+  check('a moderator is refused an admin-only route', modOnAdmin.blocked && modOnAdmin.code === 403);
+
+  const adminOnSuper = await callGuard(requireRole(...SUPER_ROLES), { role: 'admin' });
+  check('a plain admin cannot appoint other administrators', adminOnSuper.blocked && adminOnSuper.code === 403);
+
+  const superOnSuper = await callGuard(requireRole(...SUPER_ROLES), { role: 'superadmin' });
+  check('a superadmin may appoint administrators', superOnSuper.blocked === false);
+
+  const suspendedUser = await callGuard(requireVerified, { role: 'student', emailVerified: true, pendingApproval: true });
+  check('a pending faculty account is blocked from protected actions',
+    suspendedUser.blocked && /waiting for an administrator/.test(suspendedUser.body.message));
+
+  const approvedUser = await callGuard(requireVerified, { role: 'student', emailVerified: true, pendingApproval: false });
+  check('an approved account passes the verification gate', approvedUser.blocked === false);
+
+  const suspended = await callGuard((req, res, next) => next(), {});
+  check('the guard chain completes for an ordinary user', suspended.blocked === false);
 
   // 10. Moderation models
   const Report = require('../src/models/Report');
@@ -313,6 +371,12 @@ const mountPrefix = (src) => {
   // 11. Suspension is off by default, so no existing account changes behaviour
   const freshUser = new User({ name: 'Suspended Check', email: 'a@scds.saiuniversity.edu.in', password: 'secret123' });
   check('a new account is not suspended', freshUser.suspended === false);
+  check('a new account is a student, never an administrator', freshUser.role === 'student');
+  check('the role enum accepts the administrative roles',
+    ['student', 'faculty', 'moderator', 'admin', 'superadmin'].every((role) =>
+      new User({ name: 'R', email: `r${role}@scds.saiuniversity.edu.in`, password: 'secret123', role }).validateSync() === undefined));
+  check('an invented role is refused',
+    !!new User({ name: 'R', email: 'r@scds.saiuniversity.edu.in', password: 'secret123', role: 'god' }).validateSync());
   check('toSafeObject exposes the suspension flag, never the password hash',
     (() => {
       const safe = freshUser.toSafeObject();

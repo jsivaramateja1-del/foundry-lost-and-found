@@ -45,13 +45,13 @@ const check = (name, condition, detail = '') => {
     // ---------- 1. Authentication ----------
     const reg = await request(app)
       .post('/api/auth/register')
-      .send({ name: 'Test Student', email: 'test@sai.edu', password: 'secret123' });
+      .send({ name: 'Test Student', email: 'test@scds.saiuniversity.edu.in', password: 'secret123' });
     check('POST /api/auth/register returns 201', reg.status === 201, `got ${reg.status}`);
     check('register response contains a token', !!reg.body.token);
 
     const dupe = await request(app)
       .post('/api/auth/register')
-      .send({ name: 'Test Student', email: 'test@sai.edu', password: 'secret123' });
+      .send({ name: 'Test Student', email: 'test@scds.saiuniversity.edu.in', password: 'secret123' });
     check('duplicate email returns 400', dupe.status === 400, `got ${dupe.status}`);
 
     const badReg = await request(app)
@@ -61,12 +61,12 @@ const check = (name, condition, detail = '') => {
 
     const badLogin = await request(app)
       .post('/api/auth/login')
-      .send({ email: 'test@sai.edu', password: 'wrongpass' });
+      .send({ email: 'test@scds.saiuniversity.edu.in', password: 'wrongpass' });
     check('wrong password returns 401', badLogin.status === 401, `got ${badLogin.status}`);
 
     const login = await request(app)
       .post('/api/auth/login')
-      .send({ email: 'test@sai.edu', password: 'secret123' });
+      .send({ email: 'test@scds.saiuniversity.edu.in', password: 'secret123' });
     check('POST /api/auth/login returns 200', login.status === 200, `got ${login.status}`);
 
     const token = login.body.token;
@@ -75,7 +75,7 @@ const check = (name, condition, detail = '') => {
     // Second user, who will be the "other" party for permission tests
     const reg2 = await request(app)
       .post('/api/auth/register')
-      .send({ name: 'Other Student', email: 'other@sai.edu', password: 'secret123' });
+      .send({ name: 'Other Student', email: 'other@scds.saiuniversity.edu.in', password: 'secret123' });
     const token2 = reg2.body.token;
     const auth2 = { Authorization: `Bearer ${token2}` };
 
@@ -217,7 +217,7 @@ const check = (name, condition, detail = '') => {
     check('student cannot read admin stats (403)', studentStats.status === 403, `got ${studentStats.status}`);
 
     await User.findByIdAndUpdate(login.body.user.id, { role: 'admin' });
-    const relogin = await request(app).post('/api/auth/login').send({ email: 'test@sai.edu', password: 'secret123' });
+    const relogin = await request(app).post('/api/auth/login').send({ email: 'test@scds.saiuniversity.edu.in', password: 'secret123' });
     const adminAuth = { Authorization: `Bearer ${relogin.body.token}` };
 
     const adminStats = await request(app).get('/api/admin/stats').set(adminAuth);

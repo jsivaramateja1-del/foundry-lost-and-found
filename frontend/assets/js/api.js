@@ -35,8 +35,14 @@ const Auth = {
   get isLoggedIn() {
     return Boolean(this.token);
   },
+  // Anyone who may open the admin page: moderators see the moderation panels,
+  // administrators see everything. What they can actually DO is decided by the
+  // server, not by this flag.
   get isAdmin() {
-    return this.user?.role === 'admin';
+    return ['moderator', 'admin', 'superadmin'].includes(this.user?.role);
+  },
+  get isSuperAdmin() {
+    return this.user?.role === 'superadmin';
   },
   save(token, user) {
     localStorage.setItem(TOKEN_KEY, token);

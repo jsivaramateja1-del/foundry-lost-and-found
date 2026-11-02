@@ -65,7 +65,8 @@ const itemSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['open', 'claimed', 'returned', 'closed'],
+      // hidden = taken down by a moderator, not deleted; the owner still sees it
+      enum: ['open', 'claimed', 'returned', 'closed', 'hidden'],
       default: 'open'
     },
     // Optional image: an https URL or a small base64 data URL.

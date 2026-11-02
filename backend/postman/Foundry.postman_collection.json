@@ -1620,7 +1620,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"suspended\": true,\n  \"reason\": \"Demo of the moderation tools.\"\n}"
+              "raw": "{\n  \"suspended\": true,\n  \"reason\": \"Demo of the moderation tools.\",\n  \"durationDays\": 7\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/admin/users/{{otherUserId}}/suspend",
@@ -1635,7 +1635,7 @@
                 "suspend"
               ]
             },
-            "description": "Set otherUserId first. An admin cannot suspend themselves or another admin."
+            "description": "durationDays 0 or omitted = permanent. A temporary ban lifts itself when it expires."
           },
           "event": [
             {
@@ -1710,6 +1710,96 @@
                 "reports"
               ]
             }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve a pending faculty account (200)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approved\": true,\n  \"note\": \"Verified against the faculty list.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{otherUserId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{otherUserId}}",
+                "approve"
+              ]
+            },
+            "description": "Only for an account created with a faculty-domain address, which starts pending."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Appoint an administrator as a plain admin (403)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"admin\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{otherUserId}}/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{otherUserId}}",
+                "role"
+              ]
+            },
+            "description": "Role changes need a superadmin. A plain admin gets 403."
           },
           "event": [
             {

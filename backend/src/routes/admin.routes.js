@@ -5,18 +5,21 @@ const Claim = require('../models/Claim');
 const User = require('../models/User');
 const Report = require('../models/Report');
 const AuditLog = require('../models/AuditLog');
-const { protect, adminOnly } = require('../middleware/auth');
+const {
+  protect, requireRole, ADMIN_ROLES, MODERATION_ROLES, SUPER_ROLES
+} = require('../middleware/auth');
 const { audit } = require('../utils/audit');
 
 const router = express.Router();
 
-router.use(protect, adminOnly);
+// Authentication first; each route then states which roles may call it.
+router.use(protect);
 
 /**
  * GET /api/admin/stats
  * Admin only. Counters plus chart-ready groupings.
  */
-router.get('/stats', async (req, res, next) => {
+router.get('/stats', requireRole(...MODERATION_ROLES), async (req, res, next) => {
   try {
     const [totalItems, totalLost, totalFound, totalReturned, totalClaims, totalUsers, pendingClaims, openReports, suspendedUsers] =
       await Promise.all([
@@ -81,7 +84,7 @@ router.get('/stats', async (req, res, next) => {
  * GET /api/admin/items
  * Admin only. Every listing, newest first.
  */
-router.get('/items', async (req, res, next) => {
+router.get('/items', requireRole(...MODERATION_ROLES), async (req, res, next) => {
   try {
     const items = await Item.find()
       .populate('reportedBy', 'name email')
@@ -103,7 +106,7 @@ router.get('/items', async (req, res, next) => {
  * GET /api/admin/claims
  * Admin only. Every claim, newest first.
  */
-router.get('/claims', async (req, res, next) => {
+router.get('/claims', requireRole(...ADMIN_ROLES), async (req, res, next) => {
   try {
     const claims = await Claim.find()
       .populate('claimant', 'name email')
@@ -126,7 +129,7 @@ router.get('/claims', async (req, res, next) => {
  * GET /api/admin/users
  * Admin only. User list without password hashes.
  */
-router.get('/users', async (req, res, next) => {
+router.get('/users', requireRole(...ADMIN_ROLES), async (req, res, next) => {
   try {
     const users = await User.find().sort({ createdAt: -1 });
     res.status(200).json({ count: users.length, users: users.map((u) => u.toSafeObject()) });
@@ -139,7 +142,7 @@ router.get('/users', async (req, res, next) => {
  * PATCH /api/admin/items/:id/status
  * Admin only. Force any listing into a status.
  */
-router.patch('/items/:id/status', async (req, res, next) => {
+router.patch('/items/:id/status', requireRole(...MODERATION_ROLES), async (req, res, next) => {
   try {
     const { status } = req.body;
     const allowed = ['open', 'claimed', 'returned', 'closed'];
@@ -162,7 +165,7 @@ router.patch('/items/:id/status', async (req, res, next) => {
  * DELETE /api/admin/items/:id
  * Admin only. Removes a listing and every claim attached to it.
  */
-router.delete('/items/:id', async (req, res, next) => {
+router.delete('/items/:id', requireRole(...ADMIN_ROLES), async (req, res, next) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ message: 'Invalid item id' });
@@ -186,11 +189,12 @@ router.delete('/items/:id', async (req, res, next) => {
  * An admin cannot change their own role, so the last admin cannot lock
  * themselves out of the dashboard by accident.
  */
-router.patch('/users/:id/role', async (req, res, next) => {
+router.patch('/users/:id/role', requireRole(...SUPER_ROLES), async (req, res, next) => {
   try {
     const { role } = req.body;
-    if (!['student', 'admin'].includes(role)) {
-      return res.status(400).json({ message: 'role must be either student or admin' });
+    const assignable = ['student', 'faculty', 'moderator', 'admin', 'superadmin'];
+    if (!assignable.includes(role)) {
+      return res.status(400).json({ message: `role must be one of: ${assignable.join(', ')}` });
     }
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ message: 'Invalid user id' });
@@ -213,7 +217,7 @@ router.patch('/users/:id/role', async (req, res, next) => {
  * GET /api/admin/reports
  * Admin only. The moderation queue, newest first. Defaults to open reports.
  */
-router.get('/reports', async (req, res, next) => {
+router.get('/reports', requireRole(...MODERATION_ROLES), async (req, res, next) => {
   try {
     const status = req.query.status || 'open';
     const filter = status === 'all' ? {} : { status };
@@ -249,7 +253,7 @@ router.get('/reports', async (req, res, next) => {
  * Admin only. Resolve or dismiss a report. Deleting the listing is a separate
  * decision, made with DELETE /api/admin/items/:id.
  */
-router.patch('/reports/:id', async (req, res, next) => {
+router.patch('/reports/:id', requireRole(...MODERATION_ROLES), async (req, res, next) => {
   try {
     const { status, note } = req.body;
     if (!['resolved', 'dismissed'].includes(status)) {
@@ -283,11 +287,19 @@ router.patch('/reports/:id', async (req, res, next) => {
  * An admin cannot suspend themselves, and cannot suspend another admin: that
  * would let one compromised admin lock out the rest.
  */
-router.patch('/users/:id/suspend', async (req, res, next) => {
+router.patch('/users/:id/suspend', requireRole(...ADMIN_ROLES), async (req, res, next) => {
   try {
-    const { suspended, reason } = req.body;
+    const { suspended, reason, durationDays } = req.body;
     if (typeof suspended !== 'boolean') {
       return res.status(400).json({ message: 'suspended must be true or false' });
+    }
+    // 0, null or missing means "permanent"; a number means a temporary ban
+    let days = 0;
+    if (suspended && durationDays !== undefined && durationDays !== null) {
+      days = Number(durationDays);
+      if (!Number.isFinite(days) || days < 0 || days > 365) {
+        return res.status(400).json({ message: 'durationDays must be between 0 and 365 (0 = permanent)' });
+      }
     }
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ message: 'Invalid user id' });
@@ -305,13 +317,69 @@ router.patch('/users/:id/suspend', async (req, res, next) => {
     user.suspended = suspended;
     user.suspendedReason = suspended ? String(reason || '').trim() : undefined;
     user.suspendedAt = suspended ? new Date() : undefined;
+    user.suspendedUntil = suspended && days > 0
+      ? new Date(Date.now() + days * 24 * 60 * 60 * 1000)
+      : undefined;
     await user.save();
 
     await audit(req, suspended ? 'user_suspended' : 'user_unsuspended',
-      'user', user._id, user.suspendedReason || user.email);
+      'user', user._id,
+      suspended
+        ? `${user.suspendedReason || user.email}${days > 0 ? ` (${days} days)` : ' (permanent)'}`
+        : user.email);
 
     res.status(200).json({
-      message: suspended ? 'Account suspended' : 'Account reinstated',
+      message: suspended
+        ? (days > 0 ? `Account suspended for ${days} day(s)` : 'Account suspended permanently')
+        : 'Account reinstated',
+      user: user.toSafeObject()
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PATCH /api/admin/users/:id/approve
+ * Admin only. Approves or rejects a pending (faculty) registration.
+ * A rejection must say why, and the reason is shown to the applicant.
+ */
+router.patch('/users/:id/approve', requireRole(...ADMIN_ROLES), async (req, res, next) => {
+  try {
+    const { approved, note } = req.body;
+    if (typeof approved !== 'boolean') {
+      return res.status(400).json({ message: 'approved must be true or false' });
+    }
+    if (!approved && !String(note || '').trim()) {
+      return res.status(400).json({ message: 'A rejection must include a reason' });
+    }
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid user id' });
+    }
+
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (!user.pendingApproval) {
+      return res.status(400).json({ message: 'This account is not waiting for approval' });
+    }
+
+    user.pendingApproval = false;
+    user.approvalNote = approved
+      ? String(note || 'Approved').trim()
+      : String(note).trim();
+    if (!approved) {
+      // A rejected application cannot use the account at all
+      user.suspended = true;
+      user.suspendedReason = `Registration rejected: ${user.approvalNote}`;
+      user.suspendedAt = new Date();
+    }
+    await user.save();
+
+    await audit(req, approved ? 'user_approved' : 'user_rejected', 'user', user._id,
+      `${user.email}${note ? ` - ${note}` : ''}`);
+
+    res.status(200).json({
+      message: approved ? 'Account approved' : 'Registration rejected',
       user: user.toSafeObject()
     });
   } catch (err) {
@@ -323,7 +391,7 @@ router.patch('/users/:id/suspend', async (req, res, next) => {
  * GET /api/admin/audit
  * Admin only. The most recent administrative actions.
  */
-router.get('/audit', async (req, res, next) => {
+router.get('/audit', requireRole(...MODERATION_ROLES), async (req, res, next) => {
   try {
     const entries = await AuditLog.find().sort({ createdAt: -1 }).limit(50);
     res.status(200).json({

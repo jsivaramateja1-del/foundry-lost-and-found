@@ -5,6 +5,8 @@ const AUDIT_ACTIONS = [
   'item_status_changed',
   'user_role_changed',
   'user_suspended',
+  'user_approved',
+  'user_rejected',
   'user_unsuspended',
   'report_resolved',
   'report_dismissed'

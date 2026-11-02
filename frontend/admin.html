@@ -197,8 +197,15 @@
             ])).join('')
           : '<tr><td colspan="7" style="color:var(--muted)">No listings.</td></tr>';
 
-        const users = await api('/admin/users', { auth: true });
-        document.getElementById('users-count').textContent = `${users.count} accounts`;
+        // A moderator is not allowed to see the account list. That is a
+        // server decision, so the page has to cope with the 403.
+        let users = { count: 0, users: [] };
+        try {
+          users = await api('/admin/users', { auth: true });
+        } catch (err) {
+          document.getElementById('users-count').textContent = 'not available for your role';
+        }
+        document.getElementById('users-count').textContent = users.count ? `${users.count} accounts` : document.getElementById('users-count').textContent;
         document.getElementById('admin-users').innerHTML = users.users.length
           ? users.users.map((u) => row([
               ui.esc(u.name),
@@ -246,8 +253,13 @@
             ])).join('')
           : '<tr><td colspan="4" style="color:var(--muted)">No administrative actions recorded yet.</td></tr>';
 
-        const claims = await api('/admin/claims', { auth: true });
-        document.getElementById('claims-count').textContent = `${claims.count} claims`;
+        let claims = { count: 0, claims: [] };
+        try {
+          claims = await api('/admin/claims', { auth: true });
+        } catch (err) {
+          document.getElementById('claims-count').textContent = 'not available for your role';
+        }
+        document.getElementById('claims-count').textContent = claims.count ? `${claims.count} claims` : document.getElementById('claims-count').textContent;
         document.getElementById('admin-claims').innerHTML = claims.claims.length
           ? claims.claims.map((c) => row([
               ui.esc(c.item?.title || 'Item removed'),

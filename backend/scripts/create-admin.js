@@ -25,6 +25,10 @@ const MIN_PASSWORD = 8;
   const name = String(process.env.ADMIN_NAME || '').trim();
   const email = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
   const password = String(process.env.ADMIN_PASSWORD || '');
+  // The first administrator is a superadmin by default, because only a
+  // superadmin can appoint other administrators.
+  const requestedRole = String(process.env.ADMIN_ROLE || 'superadmin').trim().toLowerCase();
+  const role = ['admin', 'superadmin'].includes(requestedRole) ? requestedRole : 'superadmin';
 
   if (!name || !email || !password) {
     console.error('ADMIN_NAME, ADMIN_EMAIL and ADMIN_PASSWORD must all be set.');
@@ -42,18 +46,19 @@ const MIN_PASSWORD = 8;
     const existing = await User.findOne({ email });
 
     if (existing) {
-      if (existing.role === 'admin') {
-        console.log(`${email} is already an administrator. Nothing to do.`);
+      if (existing.role === 'admin' || existing.role === 'superadmin') {
+        console.log(`${email} is already an administrator (${existing.role}). Nothing to do.`);
       } else {
-        existing.role = 'admin';
+        existing.role = role;
+        existing.pendingApproval = false;
         await existing.save();
-        console.log(`${email} already had an account, so it was promoted to admin.`);
+        console.log(`${email} already had an account, so it was promoted to ${role}.`);
         console.log('Its password was left unchanged.');
       }
     } else {
       // The User model hashes the password in a pre-save hook
-      const admin = await User.create({ name, email, password, role: 'admin' });
-      console.log(`Administrator created: ${admin.email}`);
+      const admin = await User.create({ name, email, password, role, emailVerified: true });
+      console.log(`Administrator created: ${admin.email} (${role})`);
     }
 
     await mongoose.connection.close();

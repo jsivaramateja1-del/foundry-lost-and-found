@@ -23,9 +23,14 @@ const userSchema = new mongoose.Schema(
       minlength: [6, 'Password must be at least 6 characters'],
       select: false // never returned in queries unless explicitly asked for
     },
+    // superadmin  - everything, including who else is an administrator
+    // admin       - users, listings, claims, reports
+    // moderator   - reports and listing visibility only
+    // faculty     - staff account, no administrative powers
+    // student     - the default
     role: {
       type: String,
-      enum: ['student', 'admin'],
+      enum: ['student', 'faculty', 'moderator', 'admin', 'superadmin'],
       default: 'student'
     },
     // Simple gamification: points are awarded when a return is completed
@@ -34,11 +39,16 @@ const userSchema = new mongoose.Schema(
     // Email verification. Only used when EMAIL_VERIFICATION=enabled; accounts
     // created while it is disabled are verified immediately.
     emailVerified: { type: Boolean, default: false },
+    // Faculty accounts stay pending until an administrator approves them
+    pendingApproval: { type: Boolean, default: false },
+    approvalNote: { type: String, trim: true, maxlength: 200 },
     // Set by an administrator when an account is misused. A suspended account
     // cannot log in or use any protected route.
     suspended: { type: Boolean, default: false },
     suspendedReason: { type: String, trim: true, maxlength: 200 },
     suspendedAt: { type: Date },
+    // A temporary suspension clears itself when this moment passes
+    suspendedUntil: { type: Date },
     // Only the hash of the token is stored, so a database leak cannot be used
     // to verify somebody else's address
     verificationTokenHash: { type: String, select: false },
@@ -69,7 +79,10 @@ userSchema.methods.toSafeObject = function () {
     points: this.points,
     returns: this.returns,
     emailVerified: Boolean(this.emailVerified),
+    pendingApproval: Boolean(this.pendingApproval),
+    approvalNote: this.approvalNote || '',
     suspended: Boolean(this.suspended),
+    suspendedUntil: this.suspendedUntil || null,
     createdAt: this.createdAt
   };
 };

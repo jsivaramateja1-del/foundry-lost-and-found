@@ -4,6 +4,8 @@ const User = require('../models/User');
 const { protect, signToken } = require('../middleware/auth');
 const {
   allowedDomain,
+  studentDomains,
+  isFacultyEmail,
   normaliseEmail,
   isAllowedEmail,
   emailDomainError,
@@ -41,6 +43,8 @@ const verifyLimiter = rateLimit({
  */
 router.get('/config', (req, res) => {
   res.status(200).json({
+    // Every domain a student may use, plus the first one for older clients
+    allowedEmailDomains: studentDomains(),
     allowedEmailDomain: allowedDomain(),
     emailVerification: emailVerificationEnabled()
   });
@@ -77,11 +81,16 @@ router.post('/register', authLimiter, async (req, res, next) => {
     const needsVerification = emailVerificationEnabled();
     const token = needsVerification ? createVerificationToken() : null;
 
+    // A faculty address creates a faculty account that an administrator must
+    // approve. It never carries administrative powers by itself.
+    const faculty = isFacultyEmail(email);
+
     const user = await User.create({
       name: String(name).trim(),
       email,
       password,
-      role: 'student',
+      role: faculty ? 'faculty' : 'student',
+      pendingApproval: faculty,
       emailVerified: !needsVerification,
       ...(needsVerification
         ? {
@@ -110,7 +119,8 @@ router.post('/register', authLimiter, async (req, res, next) => {
     res.status(201).json({
       token: signToken(user._id),
       user: user.toSafeObject(),
-      verificationRequired: needsVerification
+      verificationRequired: needsVerification,
+      pendingApproval: faculty
     });
   } catch (err) {
     next(err);

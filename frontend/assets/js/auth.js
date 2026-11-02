@@ -31,7 +31,11 @@ if (params.get('mode') === 'register') selectTab('register');
 
 // Filled from GET /api/auth/config so the browser and the server can never
 // disagree about which domain is accepted. The default matches the backend.
-let authConfig = { allowedEmailDomain: 'scds.saiuniversity.edu.in', emailVerification: false };
+let authConfig = {
+  allowedEmailDomains: ['scds.saiuniversity.edu.in', 'sas.saiuniversity.edu.in', 'sol.saiuniversity.edu.in', 'sahs.saiuniversity.edu.in'],
+  allowedEmailDomain: 'scds.saiuniversity.edu.in',
+  emailVerification: false
+};
 
 (async () => {
   try {
@@ -39,8 +43,9 @@ let authConfig = { allowedEmailDomain: 'scds.saiuniversity.edu.in', emailVerific
   } catch {
     /* fall back to the built-in default; the server still enforces its own rule */
   }
+  const domains = authConfig.allowedEmailDomains || [authConfig.allowedEmailDomain];
   document.querySelectorAll('[data-allowed-domain]').forEach((node) => {
-    node.textContent = `@${authConfig.allowedEmailDomain}`;
+    node.textContent = domains.map((d) => `@${d}`).join(', ');
   });
 })();
 
@@ -49,7 +54,8 @@ function isAllowedEmail(email) {
   const value = String(email || '').trim().toLowerCase();
   const at = value.lastIndexOf('@');
   if (at <= 0) return false;
-  return value.slice(at + 1) === authConfig.allowedEmailDomain.toLowerCase();
+  const domains = (authConfig.allowedEmailDomains || [authConfig.allowedEmailDomain]).map((d) => d.toLowerCase());
+  return domains.includes(value.slice(at + 1));
 }
 
 function showError(id, message) {
@@ -163,7 +169,7 @@ document.getElementById('form-register').addEventListener('submit', async (event
   if (!email) return showError('register-error', 'Please enter your email.');
   if (!isAllowedEmail(email)) {
     return showError('register-error',
-      `Only Sai University addresses ending in @${authConfig.allowedEmailDomain} can register.`);
+      `Registration is limited to Sai University addresses: ${(authConfig.allowedEmailDomains || [authConfig.allowedEmailDomain]).map((d) => `@${d}`).join(', ')}.`);
   }
   if (password.length < 6) return showError('register-error', 'Password must be at least 6 characters.');
   if (password !== confirm) return showError('register-error', 'The two passwords do not match.');

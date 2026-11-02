@@ -27,6 +27,13 @@ const protect = async (req, res, next) => {
     if (!user) {
       return res.status(401).json({ message: 'Not authorized, user no longer exists' });
     }
+    // A temporary suspension expires on its own
+    if (user.suspended && user.suspendedUntil && user.suspendedUntil <= new Date()) {
+      user.suspended = false;
+      user.suspendedUntil = undefined;
+      user.suspendedReason = undefined;
+      await user.save();
+    }
     if (user.suspended) {
       return res.status(403).json({ message: 'This account has been suspended. Contact the administrator.' });
     }
@@ -44,6 +51,11 @@ const protect = async (req, res, next) => {
  */
 const requireVerified = (req, res, next) => {
   const enabled = String(process.env.EMAIL_VERIFICATION || '').toLowerCase() === 'enabled';
+  if (req.user.pendingApproval) {
+    return res.status(403).json({
+      message: 'Your account is waiting for an administrator to approve it. You can browse in the meantime.'
+    });
+  }
   if (enabled && !req.user.emailVerified) {
     return res.status(403).json({
       message: 'Confirm your email address before doing that. Check your inbox, or request a new link.'
@@ -52,15 +64,32 @@ const requireVerified = (req, res, next) => {
   next();
 };
 
-/** Require the authenticated user to be an admin */
-const adminOnly = (req, res, next) => {
-  if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({ message: 'Admin access required' });
+/** Require one of the given roles. Always used after protect. */
+const requireRole = (...roles) => (req, res, next) => {
+  if (!req.user || !roles.includes(req.user.role)) {
+    return res.status(403).json({ message: `This action needs one of these roles: ${roles.join(', ')}` });
   }
   next();
 };
 
+/** Kept for backwards compatibility: any administrative role. */
+const adminOnly = requireRole('admin', 'superadmin');
+
+// The three tiers, named once so the routes read clearly
+const ADMIN_ROLES = ['admin', 'superadmin'];
+const MODERATION_ROLES = ['moderator', 'admin', 'superadmin'];
+const SUPER_ROLES = ['superadmin'];
+
 const signToken = (userId) =>
   jwt.sign({ id: userId }, secret(), { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 
-module.exports = { protect, adminOnly, requireVerified, signToken };
+module.exports = {
+  protect,
+  adminOnly,
+  requireRole,
+  requireVerified,
+  signToken,
+  ADMIN_ROLES,
+  MODERATION_ROLES,
+  SUPER_ROLES
+};

@@ -95,12 +95,16 @@ foundry/
 
 ## 4. Who can register
 
-Foundry is for the Sai University community, so registration accepts **one
-domain only**:
+Foundry is for the Sai University community. Registration accepts the four
+school domains plus the faculty domain, and nothing else:
 
-```
-@scds.saiuniversity.edu.in
-```
+| Domain | Who |
+|---|---|
+| `@scds.saiuniversity.edu.in` | School of Computing and Data Science |
+| `@sas.saiuniversity.edu.in` | School of Arts and Sciences |
+| `@sol.saiuniversity.edu.in` | School of Law |
+| `@sahs.saiuniversity.edu.in` | School of Allied Health Sciences |
+| `@saiuniversity.edu.in` | Faculty (account needs administrator approval) |
 
 The rule lives in `backend/src/utils/email.js` and is applied in
 `POST /api/auth/register`. It is enforced on the server, so a direct API call
@@ -112,19 +116,42 @@ message. The comparison is exact and case-insensitive:
 | `audisiva.i-29@scds.saiuniversity.edu.in` | accepted |
 | `STUDENT@SCDS.SAIUNIVERSITY.EDU.IN` | accepted (case-insensitive) |
 | `student@gmail.com` | refused |
-| `student@saiuniversity.edu.in` | refused — different domain |
+| `student@saiuniversity.edu.in` | accepted, created as a **faculty** account pending approval |
+| `student@sai.edu` | refused — not a university domain |
+| `student@eng.saiuniversity.edu.in` | refused — not one of the four schools |
 | `student@scds.saiuniversity.edu.in.evil.com` | refused — suffix trick |
 | `student@sub.scds.saiuniversity.edu.in` | refused — subdomain |
 
-The domain is configurable with `ALLOWED_EMAIL_DOMAIN`, and nothing else widens
-it: no extra domains and no subdomains. Registration always creates a
+The list is configurable with `ALLOWED_EMAIL_DOMAIN` (comma separated). Setting
+it **replaces** the list rather than adding to it, so a mistake in the
+environment cannot quietly widen the rule. Nothing widens it otherwise: no
+extra domains and no subdomains. Registration always creates a
 **student**; the role is never read from the request body. Administrators are
 only created through `npm run create-admin`.
 
 Accounts that already exist on another domain keep working — the rule applies
 to new registrations, so no production account is locked out.
 
-## 5. Setup from a fresh clone
+## 5. Roles
+
+| Role | Can do | Cannot do |
+|---|---|---|
+| `student` | report, claim, edit own listings, report abuse | anything administrative |
+| `faculty` | the same, once an administrator approves the account | anything administrative |
+| `moderator` | review reports, hide and restore listings, read the moderation queue and audit log | see accounts or claims, delete listings, suspend anyone |
+| `admin` | everything above, plus users, claims, suspensions, deleting listings, approving faculty | appoint or demote administrators |
+| `superadmin` | everything, including appointing administrators | — |
+
+Every route states the roles it accepts (`requireRole(...)` in
+`backend/src/routes/admin.routes.js`); the frontend only decides what to show.
+A moderator opening the admin page gets the moderation panels, and the account
+and claim tables say "not available for your role" instead of breaking.
+
+The first account created by `npm run create-admin` is a **superadmin**, because
+only a superadmin can appoint other administrators. Set `ADMIN_ROLE=admin` if you
+want a plain administrator instead.
+
+## 6. Setup from a fresh clone
 
 You need Node.js 18 or newer and a MongoDB database (Atlas free tier is fine).
 
@@ -198,7 +225,7 @@ exist. Run it locally and compare the host and database name with the
 "MongoDB Connected" line in your Render logs — if they differ, your local
 commands are changing a different database from the one the live site reads.
 
-## 6. Creating the first administrator
+## 7. Creating the first administrator
 
 **No administrator account ships with this project, and no password is stored in
 the source code.** You create the first admin yourself:
@@ -224,7 +251,7 @@ that account to admin and leaves its password unchanged.
 Every other account is created through the **Create account** form on the site
 and starts as a normal student.
 
-## 7. If you are upgrading from the old seeded version
+## 8. If you are upgrading from the old seeded version
 
 Earlier versions of this project shipped a `seed.js` that created three accounts
 with published passwords and twelve sample listings. That file is gone. If your
@@ -249,18 +276,25 @@ attached to them. Listings created by real users are never removed.
 demo addresses.** If you create your admin with `admin@saiuniversity.edu.in`,
 the cleanup will delete that account along with the rest of the demo data.
 
-## 8. Tests
+## 9. Tests
 
 ```bash
 cd backend
 node test/offline.test.js
+node test/routes.test.js
 ```
+
+`test/routes.test.js` needs **no database at all**: every case is decided before
+the first Mongoose query — the domain rule, input validation, the authentication
+gate, id validation and the JSON error shape. It is the suite to run when you
+want to know quickly whether the API is still sane.
 
 No database needed. Proves the app loads, all 24 routes are registered, the
 schemas reject bad input, bcrypt and JWT round-trip, no fallback secret exists,
 no demo password appears anywhere in the repository, and the old seed script is
 gone, plus unit tests for the email-domain rule and the verification tokens.
-Expected last line: `56 passed, 0 failed`.
+Expected last lines: `72 passed, 0 failed` for the offline suite and
+`30 passed, 0 failed` for the route suite.
 
 ```bash
 npm test
@@ -283,7 +317,7 @@ to accounts you created, and select **No Environment** so a stale environment
 variable cannot shadow them. Two different students are needed because the API
 refuses a claim on your own listing.
 
-## 9. API
+## 10. API
 
 All responses are JSON, including errors. Every protected route requires
 `Authorization: Bearer <token>`.
@@ -320,17 +354,18 @@ All responses are JSON, including errors. Every protected route requires
 | GET | `/api/admin/users` | admin |
 | GET | `/api/admin/reports` | admin — moderation queue (`?status=open|resolved|dismissed|all`) |
 | PATCH | `/api/admin/reports/:id` | admin — resolve or dismiss a report |
-| PATCH | `/api/admin/users/:id/suspend` | admin — suspend or reinstate a student |
+| PATCH | `/api/admin/users/:id/suspend` | admin — suspend (optionally for N days) or reinstate |
+| PATCH | `/api/admin/users/:id/approve` | admin — approve or reject a pending faculty account |
 | GET | `/api/admin/audit` | admin — the last 50 administrative actions |
 | PATCH | `/api/admin/items/:id/status` | admin |
 | DELETE | `/api/admin/items/:id` | admin |
-| PATCH | `/api/admin/users/:id/role` | admin |
+| PATCH | `/api/admin/users/:id/role` | superadmin only — appoint moderators and administrators |
 | GET | `/api/leaderboard` | public |
 | GET | `/api/notifications` | logged in — your newest notifications + unread count |
 | PATCH | `/api/notifications/:id/read` | logged in — mark one as read |
 | PATCH | `/api/notifications/read-all` | logged in — mark all as read |
 
-## 10. Moderation
+## 11. Moderation
 
 Students can flag a listing from the item dialog: spam, inappropriate,
 suspicious, incorrect or other, with an optional note. One report per student
@@ -344,7 +379,15 @@ listing is a separate action (`DELETE /api/admin/items/:id`), so a moderator
 cannot accidentally delete evidence while triaging.
 
 **Suspending an account** blocks login and every protected route with a clear
-message. Two guard rails: an administrator cannot suspend themselves, and cannot
+message. A suspension can be temporary (`durationDays`: 3, 7, 15, 30 or any
+value up to 365) or permanent; a temporary one lifts itself when it expires, and
+an administrator can reinstate at any time. A reason is required and is kept in
+the audit log.
+
+**Faculty registration** creates a `faculty` account in a pending state. It can
+log in and browse, but every protected action is refused with a clear message
+until an administrator approves it via `PATCH /api/admin/users/:id/approve`. A
+rejection must include a reason, which is stored and which blocks the account. Two guard rails: an administrator cannot suspend themselves, and cannot
 suspend another administrator — otherwise one compromised admin could lock out
 the rest. Suspended students are marked in the accounts table and can be
 reinstated at any time.
@@ -355,7 +398,7 @@ suspended or reinstated, report resolved or dismissed. The actor's email is
 stored with each entry so the log still reads correctly if an account is later
 removed.
 
-## 11. Email verification (implemented, off by default)
+## 12. Email verification (implemented, off by default)
 
 The full flow exists: a random 32-byte token is created on registration, only
 its SHA-256 hash is stored, it expires in 24 hours, it is consumed once, and
@@ -386,7 +429,7 @@ SMTP_FROM=Foundry <no-reply@saiuniversity.edu.in>
 Any standard SMTP account works; a Gmail account with an app password is
 enough for a demo. No paid service is required or recommended.
 
-## 12. Security
+## 13. Security
 
 - Passwords are hashed with bcrypt and never returned by any endpoint.
 - Authorisation is enforced on the server in each route, never in the UI. A
@@ -405,7 +448,7 @@ enough for a demo. No paid service is required or recommended.
   login/registration are rate limited.
 - `.env` is git-ignored; `.env.example` contains placeholders only.
 
-## 13. Deploying to Render
+## 14. Deploying to Render
 
 - Root Directory: `backend`
 - Build Command: `npm install`
@@ -419,7 +462,7 @@ locally against the same `MONGO_URI`.
 The free tier sleeps when idle, so the first request after a pause can take
 30–50 seconds. That is the host, not the application.
 
-## 14. Known limitations
+## 15. Known limitations
 
 - No email notifications; coordination happens inside the site through in-app
   notifications and the dashboard.
@@ -429,6 +472,13 @@ The free tier sleeps when idle, so the first request after a pause can take
   is a small addition, but it is not built and is not pretended to be.
 - **Moderation is deliberately manual.** Reports are queued for an
   administrator; nothing is auto-removed or auto-suspended by a threshold.
+- **Not built yet**, and deliberately not faked: in-app messaging between
+  users, QR codes per listing, dark mode, saved listings and saved searches,
+  listing expiry and archival, multi-image galleries (listings carry one
+  photo), configurable academic structures (school/department/programme),
+  scheduled database backups, maintenance mode, and email notifications. Each
+  needs its own model, migration and tests; they are the next milestones, not
+  half-finished stubs.
 - **No notifications to administrators** when a report arrives — the open-report
   count on the admin dashboard is the signal.
 - **No QR codes, listing expiry or account deletion.** All three were
