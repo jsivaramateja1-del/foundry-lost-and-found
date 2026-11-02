@@ -7,13 +7,19 @@ const state = {
   q: '',
   type: 'all',
   category: 'all',
+  subcategory: 'all',
   location: 'all',
   from: '',
   to: '',
   sort: 'newest',
   items: [],
   activeItemId: null,
-  pendingImage: '' // data URL of the photo chosen in the report form
+  pendingImage: '', // data URL of the photo chosen in the report form
+  meta: { categories: [], subcategories: {}, locations: [] },
+  // Every list request gets a number; only the newest one may paint. Without
+  // this, a slow reply from an earlier search can overwrite a newer one and
+  // the count and the grid disagree.
+  requestId: 0
 };
 
 const el = {
@@ -25,6 +31,7 @@ const el = {
   search: document.getElementById('search'),
   type: document.getElementById('filter-type'),
   category: document.getElementById('filter-category'),
+  subcategory: document.getElementById('filter-subcategory'),
   location: document.getElementById('filter-location'),
   from: document.getElementById('filter-from'),
   to: document.getElementById('filter-to'),
@@ -64,10 +71,15 @@ function paintAuthState() {
 async function loadMeta() {
   try {
     const meta = await api('/items/meta');
-    meta.categories.forEach((c) => {
+    state.meta = {
+      categories: meta.categories || [],
+      subcategories: meta.subcategories || {},
+      locations: meta.locations || []
+    };
+    state.meta.categories.forEach((c) => {
       el.category.insertAdjacentHTML('beforeend', `<option value="${ui.esc(c)}">${ui.esc(c)}</option>`);
     });
-    meta.locations.forEach((l) => {
+    state.meta.locations.forEach((l) => {
       el.location.insertAdjacentHTML('beforeend', `<option value="${ui.esc(l)}">${ui.esc(l)}</option>`);
     });
     return meta;
@@ -122,9 +134,19 @@ function shrinkImage(file) {
 function cardMarkup(item) {
   const place = item.location === 'Other' && item.customLocation ? item.customLocation : item.location;
   const category = item.category === 'Other' && item.customCategory ? item.customCategory : item.category;
+  const subcategory = item.subcategory || '';
+  // A listing without a photo gets a small, deliberate placeholder rather than
+  // a large empty grey block
   const photo = item.imageUrl
     ? `<div class="card__media"><img src="${ui.esc(item.imageUrl)}" alt="" loading="lazy" /></div>`
-    : '';
+    : `<div class="card__media card__media--empty" aria-hidden="true">
+         <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.5">
+           <rect x="3" y="4" width="18" height="16" rx="2" />
+           <circle cx="8.5" cy="9.5" r="1.5" />
+           <path d="M21 16l-5-5-4 4-2-2-5 5" />
+         </svg>
+         <span>No photo</span>
+       </div>`;
   return `
     <button class="card" data-item-id="${item.id}" aria-label="View ${ui.esc(item.title)}">
       ${photo}
@@ -133,6 +155,7 @@ function cardMarkup(item) {
         <span class="tag">${ui.esc(category)}</span>
       </div>
       <h3 class="card__title">${ui.esc(item.title)}</h3>
+      ${subcategory ? `<p class="card__sub">${ui.esc(category)} · ${ui.esc(subcategory)}</p>` : ''}
       <p class="card__desc">${ui.esc(item.description)}</p>
       <div class="card__meta">
         <span>${ui.esc(place)}</span>
@@ -147,11 +170,13 @@ function hasActiveFilters() {
 }
 
 async function loadItems({ page = 1, append = false } = {}) {
+  const requestId = ++state.requestId;
   el.count.textContent = 'Loading listings…';
   const params = new URLSearchParams();
   if (state.q) params.set('q', state.q);
   if (state.type !== 'all') params.set('type', state.type);
   if (state.category !== 'all') params.set('category', state.category);
+  if (state.subcategory !== 'all') params.set('subcategory', state.subcategory);
   if (state.location !== 'all') params.set('location', state.location);
   if (state.from) params.set('from', state.from);
   if (state.to) params.set('to', state.to);
@@ -161,11 +186,14 @@ async function loadItems({ page = 1, append = false } = {}) {
 
   try {
     const data = await api(`/items?${params.toString()}`);
+    // A newer request has already been sent: this reply is stale, drop it
+    if (requestId !== state.requestId) return;
     state.items = append ? state.items.concat(data.items) : data.items;
     state.page = data.page;
     state.pages = data.pages;
     renderGrid(data, { append });
   } catch (err) {
+    if (requestId !== state.requestId) return;
     el.count.textContent = 'Could not load listings';
     el.grid.innerHTML = '';
     showEmpty('The server is not responding', err.message, { firstRun: false });
@@ -194,6 +222,7 @@ function renderGrid(data, { append = false } = {}) {
 
   if (!data.items.length) {
     el.grid.innerHTML = '';
+    paintPagination(data);
     if (filtered) {
       showEmpty('Nothing matches that yet',
         'Try a different keyword, or widen the filters. You can also report the item yourself.',
@@ -213,17 +242,20 @@ function renderGrid(data, { append = false } = {}) {
   } else {
     el.grid.innerHTML = markup;
   }
-  paintPagination();
+  paintPagination(data);
 }
 
-/** Show "Load more" only while there is another page to fetch. */
-function paintPagination() {
+/**
+ * Show "Load more" and the page line from the response that was just painted,
+ * never from leftover state — that mismatch is what once showed
+ * "No listings match" next to "Showing 1 listing".
+ */
+function paintPagination(data) {
   if (!el.loadMore) return;
-  const more = state.page < state.pages;
-  el.loadMore.hidden = !more;
+  el.loadMore.hidden = !(data.page < data.pages);
   if (el.pageStatus) {
-    el.pageStatus.textContent = state.items.length
-      ? `Showing ${state.items.length} listing${state.items.length === 1 ? '' : 's'} — page ${state.page} of ${state.pages}`
+    el.pageStatus.textContent = data.items.length
+      ? `Showing ${state.items.length} listing${state.items.length === 1 ? '' : 's'} — page ${data.page} of ${data.pages}`
       : '';
   }
 }
@@ -232,10 +264,23 @@ function applyFilters() {
   loadItems();
 }
 
+/** Fill a subcategory select for one category, keeping a valid selection. */
+function fillSubcategories(select, category, selected = '') {
+  if (!select) return;
+  const list = (state.meta.subcategories && state.meta.subcategories[category]) || [];
+  const first = select.id === 'filter-subcategory'
+    ? '<option value="all">All subcategories</option>'
+    : '<option value="">Choose a subcategory</option>';
+  select.innerHTML = first + list.map((v) => `<option value="${ui.esc(v)}">${ui.esc(v)}</option>`).join('');
+  const wanted = selected || (select.id === 'filter-subcategory' ? 'all' : '');
+  if (wanted && [...select.options].some((o) => o.value === wanted)) select.value = wanted;
+}
+
 function resetFilters() {
   state.q = '';
   state.type = 'all';
   state.category = 'all';
+  state.subcategory = 'all';
   state.location = 'all';
   state.from = '';
   state.to = '';
@@ -243,6 +288,7 @@ function resetFilters() {
   el.search.value = '';
   el.type.value = 'all';
   el.category.value = 'all';
+  fillSubcategories(el.subcategory, 'all');
   el.location.value = 'all';
   el.from.value = '';
   el.to.value = '';
@@ -330,6 +376,7 @@ async function openItem(id) {
 
     const place = item.location === 'Other' && item.customLocation ? item.customLocation : item.location;
     const category = item.category === 'Other' && item.customCategory ? item.customCategory : item.category;
+    const categoryLine = item.subcategory ? `${category} · ${item.subcategory}` : category;
 
     document.getElementById('modal-item-tag').textContent =
       `${item.type === 'lost' ? 'Lost' : 'Found'} · ${item.status}`;
@@ -342,7 +389,7 @@ async function openItem(id) {
     document.getElementById('modal-item-body').innerHTML = `
       ${photo}
       <div><dt>Description</dt><dd>${ui.esc(item.description)}</dd></div>
-      <div><dt>Category</dt><dd>${ui.esc(category)}</dd></div>
+      <div><dt>Category</dt><dd>${ui.esc(categoryLine)}</dd></div>
       <div><dt>Location</dt><dd>${ui.esc(place)}</dd></div>
       <div><dt>Date reported</dt><dd>${ui.date(item.date)}</dd></div>
       <div><dt>Status</dt><dd>${ui.esc(item.status)}</dd></div>
@@ -403,11 +450,18 @@ function prepareReportForm(meta) {
 
   const customCategoryField = document.getElementById('rf-custom-category-field');
   const customLocationField = document.getElementById('rf-custom-location-field');
+  const subcategoryField = document.getElementById('rf-subcategory');
+
+  // Choosing a category immediately offers that category's subcategories
+  const syncSubcategories = () => fillSubcategories(subcategoryField, category.value);
+  syncSubcategories();
 
   category.addEventListener('change', () => {
     const isOther = category.value === 'Other';
     customCategoryField.hidden = !isOther;
     if (!isOther) document.getElementById('rf-custom-category').value = '';
+    // Reset the subcategory: the old one belongs to the old category
+    syncSubcategories();
   });
   location.addEventListener('change', () => {
     const isOther = location.value === 'Other';
@@ -463,6 +517,7 @@ async function submitReport(event) {
     type: document.getElementById('rf-type').value,
     title: document.getElementById('rf-title').value.trim(),
     category: document.getElementById('rf-category').value,
+    subcategory: document.getElementById('rf-subcategory').value || undefined,
     location: document.getElementById('rf-location').value,
     date: document.getElementById('rf-date').value,
     description: document.getElementById('rf-description').value.trim()
@@ -494,6 +549,7 @@ async function submitReport(event) {
     document.getElementById('rf-date').value = new Date().toISOString().slice(0, 10);
     document.getElementById('rf-custom-category-field').hidden = true;
     document.getElementById('rf-custom-location-field').hidden = true;
+    fillSubcategories(document.getElementById('rf-subcategory'), document.getElementById('rf-category').value);
     showFormMessage('report-success', 'Listing posted. It now appears on the board.');
     ui.toast('Listing posted');
     closeAllModals();
@@ -543,7 +599,7 @@ async function submitClaim(event) {
       auth: true
     });
     closeAllModals();
-    ui.toast('Claim sent. The person who posted this listing can approve it from their dashboard.');
+    ui.toast('Claim submitted successfully. The listing owner has been notified. You can track your claim from your dashboard.');
   } catch (err) {
     box.textContent = err.message;
     box.dataset.show = 'true';
@@ -565,6 +621,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initMobileNav();
   initScrollReveal();
   initNotifications();
+  initTheme();
 
   // Log out from the header
   const headerLogout = document.getElementById('header-logout');
@@ -586,7 +643,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, 300);
   });
   el.type.addEventListener('change', () => { state.type = el.type.value; applyFilters(); });
-  el.category.addEventListener('change', () => { state.category = el.category.value; applyFilters(); });
+  el.category.addEventListener('change', () => {
+    state.category = el.category.value;
+    // A subcategory from the previous category is meaningless now
+    state.subcategory = 'all';
+    fillSubcategories(el.subcategory, state.category);
+    applyFilters();
+  });
+  if (el.subcategory) {
+    el.subcategory.addEventListener('change', () => {
+      state.subcategory = el.subcategory.value;
+      applyFilters();
+    });
+  }
   el.location.addEventListener('change', () => { state.location = el.location.value; applyFilters(); });
   el.from.addEventListener('change', () => { state.from = el.from.value; applyFilters(); });
   el.to.addEventListener('change', () => { state.to = el.to.value; applyFilters(); });

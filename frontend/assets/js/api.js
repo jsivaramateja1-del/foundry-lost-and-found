@@ -155,6 +155,47 @@ function logoutAndGo(target = 'index.html') {
   }
 }
 
+/* ---------------- colour theme ---------------- */
+
+const THEME_KEY = 'foundry.theme';
+
+/**
+ * Dark is the default. The choice is stored locally and applied to <html>
+ * before paint on every page, so there is no flash of the wrong theme.
+ */
+function applyTheme(theme) {
+  const value = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = value;
+  document.querySelectorAll('[data-theme-icon]').forEach((node) => {
+    node.textContent = value === 'light' ? '☀' : '☾';
+  });
+  document.querySelectorAll('[data-theme-toggle]').forEach((node) => {
+    node.setAttribute('aria-label', value === 'light' ? 'Switch to dark theme' : 'Switch to light theme');
+  });
+}
+
+function initTheme() {
+  let stored = 'dark';
+  try {
+    stored = localStorage.getItem(THEME_KEY) || 'dark';
+  } catch {
+    /* private mode: just use the default */
+  }
+  applyTheme(stored);
+
+  document.querySelectorAll('[data-theme-toggle]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+      try {
+        localStorage.setItem(THEME_KEY, next);
+      } catch {
+        /* the theme simply will not persist */
+      }
+      applyTheme(next);
+    });
+  });
+}
+
 /** Reveal elements as they scroll into view. */
 function initScrollReveal() {
   const targets = document.querySelectorAll('[data-reveal]');

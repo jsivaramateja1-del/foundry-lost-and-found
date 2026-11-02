@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const Item = require('../models/Item');
 const { CATEGORIES, LOCATIONS } = require('../models/Item');
+const { CATEGORY_TREE, isValidSubcategory } = require('../utils/categories');
 const { protect, requireVerified } = require('../middleware/auth');
 const { notify } = require('../utils/notify');
 const Report = require('../models/Report');
@@ -42,6 +43,7 @@ const publicItem = (doc) => {
     title: obj.title,
     description: obj.description,
     category: obj.category,
+    subcategory: obj.subcategory || '',
     customCategory: obj.customCategory || '',
     location: obj.location,
     customLocation: obj.customLocation || '',
@@ -83,6 +85,10 @@ const validateItemBody = (body, { partial = false } = {}) => {
   }
   if (body.location === 'Other' && !String(body.customLocation || '').trim()) {
     errors.push('Please describe the location when you select Other');
+  }
+  // A subcategory has to belong to the category it was chosen under
+  if (body.category !== undefined && !isValidSubcategory(body.category, body.subcategory)) {
+    errors.push(`subcategory must be one of: ${(CATEGORY_TREE[body.category] || []).join(', ')}`);
   }
   if (body.date !== undefined && Number.isNaN(new Date(body.date).getTime())) {
     errors.push('date must be a valid date');
@@ -129,12 +135,17 @@ router.get('/', async (req, res, next) => {
       filter.$or = [
         { title: rx },
         { description: rx },
+        { category: rx },
+        { subcategory: rx },
         { customCategory: rx },
         { location: rx },
         { customLocation: rx }
       ];
     }
     if (category && category !== 'all') filter.category = category;
+    if (req.query.subcategory && req.query.subcategory !== 'all') {
+      filter.subcategory = req.query.subcategory;
+    }
     if (location && location !== 'all') filter.location = location;
     if (type && type !== 'all') filter.type = type;
     if (status && status !== 'all') filter.status = status;
@@ -173,6 +184,7 @@ router.get('/', async (req, res, next) => {
 router.get('/meta', (req, res) => {
   res.status(200).json({
     categories: CATEGORIES,
+    subcategories: CATEGORY_TREE,
     locations: LOCATIONS,
     types: ['lost', 'found'],
     statuses: ['open', 'claimed', 'returned', 'closed']
@@ -324,6 +336,7 @@ router.post('/', protect, requireVerified, async (req, res, next) => {
       title: req.body.title,
       description: req.body.description,
       category: req.body.category,
+      subcategory: req.body.subcategory,
       customCategory: req.body.customCategory,
       location: req.body.location,
       customLocation: req.body.customLocation,
@@ -360,7 +373,7 @@ router.put('/:id', protect, async (req, res, next) => {
     const errors = validateItemBody(req.body, { partial: true });
     if (errors.length) return res.status(400).json({ message: errors[0], errors });
 
-    ['title', 'description', 'category', 'customCategory', 'location', 'customLocation', 'date', 'type', 'imageUrl', 'status']
+    ['title', 'description', 'category', 'subcategory', 'customCategory', 'location', 'customLocation', 'date', 'type', 'imageUrl', 'status']
       .forEach((field) => {
         if (req.body[field] !== undefined) item[field] = req.body[field];
       });

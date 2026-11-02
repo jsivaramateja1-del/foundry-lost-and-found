@@ -89,6 +89,37 @@ router.get('/mine', protect, async (req, res, next) => {
 });
 
 /**
+ * GET /api/claims/received
+ * Protected. Every claim made on any of your listings, in one query.
+ *
+ * The dashboard used to call /claims/item/:id once per listing and swallow
+ * any error, which meant a failure looked like "no claims". One query cannot
+ * fail per item, and the dashboard now shows the error if it does fail.
+ */
+router.get('/received', protect, async (req, res, next) => {
+  try {
+    const items = await Item.find({ reportedBy: req.user._id }).select('_id title');
+    const byId = new Map(items.map((i) => [String(i._id), i.title]));
+
+    const claims = items.length
+      ? await Claim.find({ item: { $in: items.map((i) => i._id) } })
+          .populate('claimant', 'name')
+          .sort({ createdAt: -1 })
+      : [];
+
+    res.status(200).json({
+      count: claims.length,
+      claims: claims.map((c) => ({
+        ...publicClaim(c),
+        itemTitle: byId.get(String(c.item)) || 'Listing removed'
+      }))
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * GET /api/claims/item/:itemId
  * Protected. Claims received on one of your listings (owner or admin).
  */

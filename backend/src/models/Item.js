@@ -1,27 +1,6 @@
 const mongoose = require('mongoose');
 
-const CATEGORIES = [
-  'Electronics',
-  'IDs & Cards',
-  'Bags',
-  'Books & Notes',
-  'Bottles',
-  'Keys & Accessories',
-  'Clothing',
-  'Other'
-];
-
-const LOCATIONS = [
-  'Library',
-  'Main Block',
-  'Canteen',
-  'Hostel A',
-  'Hostel B',
-  'Sports Complex',
-  'Auditorium',
-  'Parking',
-  'Other'
-];
+const { CATEGORIES, LOCATIONS } = require('../utils/categories');
 
 const itemSchema = new mongoose.Schema(
   {
@@ -42,6 +21,8 @@ const itemSchema = new mongoose.Schema(
       required: [true, 'Category is required'],
       enum: { values: CATEGORIES, message: 'Invalid category' }
     },
+    // One level below category, e.g. Electronics -> Earphones
+    subcategory: { type: String, trim: true, maxlength: 60 },
     // When category is "Other" the user must describe it here
     customCategory: {
       type: String,

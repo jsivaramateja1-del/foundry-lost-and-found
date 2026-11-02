@@ -883,3 +883,112 @@ input[type="file"].input { padding: 0.55rem; cursor: pointer; }
 /* "Report this listing" block inside the item modal */
 .report-listing { margin-top: 1.25rem; border-top: 1px solid var(--line); padding-top: 1rem; }
 .report-listing .form-grid { margin-top: 1rem; }
+
+/* ============================================================
+   Colour themes
+   Dark is the default and lives in :root. Light only redefines the
+   variables and the handful of rules that used literal colours.
+   ============================================================ */
+[data-theme="light"] {
+  --ink: #f6f5f0;
+  --ink-2: #ffffff;
+  --ink-3: #ecebe4;
+  --line: rgba(18, 18, 14, 0.14);
+  --line-strong: rgba(18, 18, 14, 0.3);
+  --paper: #16160f;
+  --muted: #5f5d55;
+  /* Lime is invisible on white, so light mode uses a deep olive that keeps
+     the same family without losing contrast */
+  --accent: #4a6f00;
+  --accent-ink: #ffffff;
+  --danger: #a8241c;
+}
+
+[data-theme="light"] .site-header { background: rgba(246, 245, 240, 0.86); }
+[data-theme="light"] .nav[data-open="true"] { background: var(--ink-2); }
+[data-theme="light"] .btn--solid:hover { background: #5b8700; border-color: #5b8700; }
+[data-theme="light"] .tag--lost { border-color: rgba(168, 36, 28, 0.45); color: var(--danger); }
+[data-theme="light"] .status--rejected { border-color: rgba(168, 36, 28, 0.45); color: var(--danger); }
+[data-theme="light"] .status--approved { border-color: rgba(74, 111, 0, 0.45); color: var(--accent); }
+[data-theme="light"] .tag--found { border-color: rgba(74, 111, 0, 0.4); }
+[data-theme="light"] .form-error { background: rgba(168, 36, 28, 0.07); border-color: rgba(168, 36, 28, 0.4); }
+[data-theme="light"] .form-success { background: rgba(74, 111, 0, 0.08); border-color: rgba(74, 111, 0, 0.4); }
+[data-theme="light"] .modal__panel { box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22); }
+
+.theme-toggle { line-height: 1; padding-inline: 0.6rem; }
+.theme-toggle span { font-size: 1rem; }
+
+/* ============================================================
+   Report form: sections, spacing, no nested scrolling
+   ============================================================ */
+.report-form { gap: 1.25rem; }
+
+.form-section {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1.1rem 0 0;
+  border-top: 1px solid var(--line);
+}
+.form-section:first-of-type { border-top: 0; padding-top: 0; }
+
+.form-section__title {
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0;
+}
+
+.form-section--actions { gap: 0.9rem; }
+.form-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+
+/* One scroll container for the whole dialog, never a nested one */
+.modal__panel { max-height: min(92vh, 940px); overflow-y: auto; }
+.report-form .textarea { min-height: 120px; }
+.report-form .two { align-items: start; }
+
+/* ============================================================
+   Listing card: a deliberate placeholder instead of a grey slab
+   ============================================================ */
+.card__media--empty {
+  display: grid;
+  place-items: center;
+  gap: 0.4rem;
+  border-style: dashed;
+  background: transparent;
+  color: var(--muted);
+}
+.card__media--empty span {
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.card__sub {
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: -0.35rem 0 0.5rem;
+}
+
+/* ============================================================
+   Password fields: eye icons, one per field
+   ============================================================ */
+.password-field__toggle { display: inline-flex; align-items: center; gap: 0.3rem; }
+.password-field__toggle .eye { display: block; }
+.password-field__toggle .eye--closed { display: none; }
+.password-field__toggle.is-revealed .eye--open { display: none; }
+.password-field__toggle.is-revealed .eye--closed { display: block; }
+.password-field .input { padding-right: 2.75rem; }
+
+/* ============================================================
+   Auth page: consistent vertical rhythm
+   ============================================================ */
+.auth-form { display: grid; gap: 0.95rem; }
+.auth-form .field { margin: 0; }
+.auth-tabs { margin-bottom: 1.25rem; }
+.auth-panel__inner { display: grid; gap: 1rem; }
+.auth-form .form-note { margin: 0; line-height: 1.5; }
+.password-field { width: 100%; }

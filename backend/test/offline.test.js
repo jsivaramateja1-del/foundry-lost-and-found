@@ -334,6 +334,31 @@ const mountPrefix = (src) => {
   const suspended = await callGuard((req, res, next) => next(), {});
   check('the guard chain completes for an ordinary user', suspended.blocked === false);
 
+  // 9c. Category tree
+  const categories = require('../src/utils/categories');
+
+  check('there are eight main categories', categories.CATEGORIES.length === 8, categories.CATEGORIES.join(', '));
+  check('Electronics offers the documented subcategories',
+    JSON.stringify(categories.subcategoriesFor('Electronics')) ===
+    JSON.stringify(['Mobile Phones', 'Earphones', 'Headphones', 'Chargers', 'Laptops', 'Tablets', 'Smartwatches', 'Other Electronics']));
+  check('every category except Other has subcategories',
+    categories.CATEGORIES.filter((c) => c !== 'Other').every((c) => categories.subcategoriesFor(c).length > 0));
+  check('Other has no fixed subcategories', categories.subcategoriesFor('Other').length === 0);
+  check('a valid category/subcategory pair is accepted',
+    categories.isValidSubcategory('Electronics', 'Earphones'));
+  check('a subcategory from another category is refused',
+    !categories.isValidSubcategory('Electronics', 'Backpack'));
+  check('an omitted subcategory is allowed',
+    categories.isValidSubcategory('Electronics', undefined) && categories.isValidSubcategory('Electronics', ''));
+  check('an unknown category yields no subcategories',
+    categories.subcategoriesFor('Nonsense').length === 0);
+
+  check('the Item model accepts a subcategory',
+    new Item({
+      title: 'Earbuds', description: 'Black earbuds', category: 'Electronics', subcategory: 'Earphones',
+      location: 'Library', type: 'found', date: new Date(), reportedBy: '64d2f1f1f1f1f1f1f1f1f1f1'
+    }).validateSync() === undefined);
+
   // 10. Moderation models
   const Report = require('../src/models/Report');
   const AuditLog = require('../src/models/AuditLog');

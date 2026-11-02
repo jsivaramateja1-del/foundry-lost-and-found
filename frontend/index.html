@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="assets/js/theme-init.js"></script>
   <link rel="stylesheet" href="assets/css/styles.css" />
 </head>
 <body>
@@ -41,6 +42,9 @@
           </div>
         </div>
         <button class="btn btn--solid" data-open-report="lost">Report an item</button>
+        <button class="btn btn--ghost theme-toggle" data-theme-toggle aria-label="Switch colour theme" title="Switch colour theme">
+          <span data-theme-icon>☾</span>
+        </button>
         <button class="menu-toggle" aria-expanded="false" aria-controls="primary-nav">Menu</button>
       </div>
     </div>
@@ -146,6 +150,10 @@
           <div class="field">
             <label for="filter-category">Category</label>
             <select class="select" id="filter-category"><option value="all">All categories</option></select>
+          </div>
+          <div class="field">
+            <label for="filter-subcategory">Subcategory</label>
+            <select class="select" id="filter-subcategory"><option value="all">All subcategories</option></select>
           </div>
           <div class="field">
             <label for="filter-location">Location</label>
@@ -345,74 +353,94 @@
         <button class="modal__close" data-close-modal aria-label="Close">✕</button>
       </div>
 
-      <form class="form-grid" id="report-form" novalidate>
+      <form class="form-grid report-form" id="report-form" novalidate>
         <div class="form-error" id="report-error" role="alert"></div>
         <div class="form-success" id="report-success" role="status"></div>
 
-        <div class="field">
-          <label for="rf-type">Is it lost or found?</label>
-          <select class="select" id="rf-type" name="type" required>
-            <option value="lost">I lost this item</option>
-            <option value="found">I found this item</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label for="rf-title">Item name</label>
-          <input class="input" id="rf-title" name="title" required maxlength="120" placeholder="Blue steel water bottle" />
-        </div>
-
-        <div class="two">
+        <section class="form-section">
+          <h3 class="form-section__title">1. Item information</h3>
           <div class="field">
-            <label for="rf-category">Category</label>
-            <select class="select" id="rf-category" name="category" required></select>
+            <label for="rf-type">Is it lost or found?</label>
+            <select class="select" id="rf-type" name="type" required>
+              <option value="lost">I lost this item</option>
+              <option value="found">I found this item</option>
+            </select>
           </div>
           <div class="field">
-            <label for="rf-location">Campus location</label>
-            <select class="select" id="rf-location" name="location" required></select>
+            <label for="rf-title">Item name</label>
+            <input class="input" id="rf-title" name="title" required maxlength="120" placeholder="Blue steel water bottle" />
           </div>
-        </div>
+        </section>
 
-        <div class="two">
+        <section class="form-section">
+          <h3 class="form-section__title">2. Category</h3>
+          <div class="two">
+            <div class="field">
+              <label for="rf-category">Category</label>
+              <select class="select" id="rf-category" name="category" required></select>
+            </div>
+            <div class="field">
+              <label for="rf-subcategory">Subcategory</label>
+              <select class="select" id="rf-subcategory" name="subcategory">
+                <option value="">Choose a subcategory</option>
+              </select>
+            </div>
+          </div>
           <div class="field" id="rf-custom-category-field" hidden>
             <label for="rf-custom-category">Describe the category</label>
             <input class="input" id="rf-custom-category" name="customCategory" maxlength="60" placeholder="Umbrella, spectacles…" />
+          </div>
+        </section>
+
+        <section class="form-section">
+          <h3 class="form-section__title">3. Where and when</h3>
+          <div class="two">
+            <div class="field">
+              <label for="rf-location">Campus location</label>
+              <select class="select" id="rf-location" name="location" required></select>
+            </div>
+            <div class="field">
+              <label for="rf-date">Date</label>
+              <input class="input" type="date" id="rf-date" name="date" required />
+            </div>
           </div>
           <div class="field" id="rf-custom-location-field" hidden>
             <label for="rf-custom-location">Describe the location</label>
             <input class="input" id="rf-custom-location" name="customLocation" maxlength="60" placeholder="Behind the sports shed" />
           </div>
+        </section>
+
+        <section class="form-section">
+          <h3 class="form-section__title">4. Description</h3>
           <div class="field">
-            <label for="rf-date">Date</label>
-            <input class="input" type="date" id="rf-date" name="date" required />
+            <label for="rf-description">What should someone look for?</label>
+            <textarea class="textarea" id="rf-description" name="description" required maxlength="1000"
+              placeholder="Colour, marks, what it was near — anything that would help someone recognise it."></textarea>
           </div>
-        </div>
+        </section>
 
-        <div class="field">
-          <label for="rf-description">Description</label>
-          <textarea class="textarea" id="rf-description" name="description" required maxlength="1000"
-            placeholder="Colour, marks, what it was near — anything that would help someone recognise it."></textarea>
-        </div>
+        <section class="form-section">
+          <h3 class="form-section__title">5. Photo (optional)</h3>
+          <div class="field">
+            <label for="rf-image">Add a photo</label>
+            <input class="input" type="file" id="rf-image" name="image" accept="image/png,image/jpeg,image/webp" />
+            <p class="form-note">
+              One photo, shrunk in your browser before it is sent, and under 400 KB once shrunk.
+            </p>
+            <div class="image-preview" id="rf-image-preview" hidden></div>
+          </div>
+        </section>
 
-        <div class="field">
-          <label for="rf-image">Photo (optional)</label>
-          <input class="input" type="file" id="rf-image" name="image" accept="image/png,image/jpeg,image/webp" />
-          <p class="form-note" id="rf-image-note">
-            A photo makes an item far easier to recognise. It is shrunk in your browser
-            before it is sent, and must be under 400 KB once shrunk.
+        <section class="form-section form-section--actions">
+          <p class="form-note">
+            Your name will show on the listing so people can tell who to contact. Don't include phone
+            numbers, ID numbers or anything private.
           </p>
-          <div class="image-preview" id="rf-image-preview" hidden></div>
-        </div>
-
-        <p class="form-note">
-          Your name will show on the listing so people can tell who to contact. Don't include phone
-          numbers, ID numbers or anything private.
-        </p>
-
-        <div style="display:flex;gap:.75rem;flex-wrap:wrap;">
-          <button type="submit" class="btn btn--solid" id="rf-submit">Post listing</button>
-          <button type="button" class="btn" data-close-modal>Cancel</button>
-        </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn--solid" id="rf-submit">Post listing</button>
+            <button type="button" class="btn" data-close-modal>Cancel</button>
+          </div>
+        </section>
       </form>
     </div>
   </div>

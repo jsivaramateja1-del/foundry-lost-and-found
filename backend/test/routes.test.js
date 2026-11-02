@@ -127,6 +127,22 @@ const check = (name, cond, detail = '') => {
     .set('Content-Type', 'application/json').send('{"email": ');
   check('malformed JSON returns 400 as JSON', badJson.status === 400, `got ${badJson.status}`);
 
+  // ---------- 7. Pages must not rely on inline scripts ----------
+  // The app sends `script-src 'self'` (helmet's default), so an inline <script>
+  // is silently blocked by the browser. That is exactly what stopped the
+  // dashboard from ever running its own code.
+  for (const page of ['index.html', 'auth.html', 'dashboard.html', 'admin.html']) {
+    const res = await request(app).get(`/${page}`);
+    check(`GET /${page} returns 200`, res.status === 200, `got ${res.status}`);
+
+    const csp = res.headers['content-security-policy'] || '';
+    check(`/${page} is served with a Content-Security-Policy`, csp.includes("script-src 'self'"), csp || '(none)');
+
+    const inline = (res.text.match(/<script(?![^>]*\bsrc=)[^>]*>/g) || []);
+    check(`/${page} has no inline <script> that the CSP would block`,
+      inline.length === 0, `found ${inline.length}`);
+  }
+
   console.log('\n' + results.join('\n'));
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);

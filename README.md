@@ -15,8 +15,11 @@ Live demo: <https://foundry-lost-and-found.onrender.com>
 - **Register with your Sai University address only** — the `@scds.saiuniversity.edu.in`
   domain is enforced on the server, not just in the browser.
 - **Report** a lost or found item, with an optional photo.
-- **Search and filter** by keyword, category, location, type, status and a date range,
-  with pagination so the board never silently stops at a fixed number.
+- **Search and filter** by keyword, category, subcategory, location, type, status
+  and a date range, with pagination so the board never silently stops at a fixed number.
+- **Category and subcategory** — a dependent pair, so "Electronics" then "Earphones",
+  available in the form, the filters and the listing details.
+- **Dark and light themes** — a toggle on every page, remembered in the browser.
 - **Claim** an item by describing a detail only the owner would know, then
   confirm the handover once the item actually changes hands.
 - **Review claims** on your own listings from your dashboard: approve or reject.
@@ -65,13 +68,16 @@ foundry/
 │   ├── src/
 │   │   ├── app.js                 express app, middleware, routes, static serving
 │   │   ├── config/db.js           mongoose connection
-│   │   ├── models/                User.js, Item.js, Claim.js, Notification.js
+│   │   ├── models/                User.js, Item.js, Claim.js, Notification.js,
+│   │   │                          Report.js, AuditLog.js
 │   │   ├── middleware/            auth.js (JWT + roles), error.js (404 + handler)
 │   │   ├── routes/                auth, item, claim, dashboard, admin, leaderboard,
 │   │   │                          notifications
 │   │   └── utils/
 │   │       ├── notify.js          writes a notification without breaking the request
 │   │       ├── email.js           the university domain rule + verification tokens
+│   │       ├── categories.js      the category/subcategory tree and locations
+│   │       ├── audit.js           records administrative actions
 │   │       └── mailer.js          sends the verification email (only when enabled)
 │   ├── scripts/
 │   │   ├── create-admin.js        creates the first administrator from env vars
@@ -90,7 +96,8 @@ foundry/
     ├── admin.html                 statistics, charts, listings, accounts, claims
     └── assets/
         ├── css/styles.css
-        └── js/  api.js (shared helpers), app.js (homepage), auth.js (login)
+        └── js/  api.js (shared helpers), theme-init.js (theme before paint),
+                 app.js (homepage), auth.js (login), dashboard.js, admin.js
 ```
 
 ## 4. Who can register
@@ -293,8 +300,8 @@ No database needed. Proves the app loads, all 24 routes are registered, the
 schemas reject bad input, bcrypt and JWT round-trip, no fallback secret exists,
 no demo password appears anywhere in the repository, and the old seed script is
 gone, plus unit tests for the email-domain rule and the verification tokens.
-Expected last lines: `72 passed, 0 failed` for the offline suite and
-`30 passed, 0 failed` for the route suite.
+Expected last lines: `81 passed, 0 failed` for the offline suite and
+`42 passed, 0 failed` for the route suite.
 
 ```bash
 npm test
@@ -333,7 +340,7 @@ All responses are JSON, including errors. Every protected route requires
 | GET | `/api/auth/me` | logged in |
 | POST | `/api/auth/logout` | logged in |
 | GET | `/api/items` | public — `q`, `category`, `location`, `type`, `status`, `from`, `to`, `sort`, `page`, `limit` |
-| GET | `/api/items/meta` | public — dropdown values |
+| GET | `/api/items/meta` | public — categories, subcategories and locations |
 | GET | `/api/items/stats` | public — genuine counters for the homepage tiles |
 | GET | `/api/items/:id` | public |
 | GET | `/api/items/:id/similar` | public — duplicate-item alert |
@@ -344,6 +351,7 @@ All responses are JSON, including errors. Every protected route requires
 | DELETE | `/api/items/:id` | owner or admin |
 | POST | `/api/claims` | logged in |
 | GET | `/api/claims/mine` | logged in |
+| GET | `/api/claims/received` | logged in — every claim on your listings, one query |
 | GET | `/api/claims/item/:itemId` | item owner or admin |
 | PATCH | `/api/claims/:id` | item owner or admin — approve or reject |
 | POST | `/api/claims/:id/handover` | item owner or admin — confirm the item changed hands |
@@ -436,6 +444,10 @@ enough for a demo. No paid service is required or recommended.
   student cannot edit, delete or change the status of someone else's listing, and
   cannot read claims on it.
 - Every error, including a 404 and an uncaught exception, returns JSON.
+- **The Content-Security-Policy is `script-src 'self'`, so no page may use an
+  inline `<script>`.** All page logic lives in `frontend/assets/js/`. A test
+  fails the build if an inline script reappears — that mistake once stopped the
+  dashboard and admin pages from running any of their code in the browser.
 - Everything that reaches the DOM is escaped through the shared `ui.esc()` helper,
   so a listing title cannot inject script.
 - Photos are shrunk in the browser and validated on the server: only PNG, JPEG or
@@ -472,8 +484,9 @@ The free tier sleeps when idle, so the first request after a pause can take
   is a small addition, but it is not built and is not pretended to be.
 - **Moderation is deliberately manual.** Reports are queued for an
   administrator; nothing is auto-removed or auto-suspended by a threshold.
-- **Not built yet**, and deliberately not faked: in-app messaging between
-  users, QR codes per listing, dark mode, saved listings and saved searches,
+- **Not built yet**, and deliberately not faked: password reset, in-app messaging between
+  users, QR codes per listing, saved listings and saved searches,
+  multiple images per listing (one photo each),
   listing expiry and archival, multi-image galleries (listings carry one
   photo), configurable academic structures (school/department/programme),
   scheduled database backups, maintenance mode, and email notifications. Each
