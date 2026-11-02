@@ -83,6 +83,10 @@ const mountPrefix = (src) => {
     'PATCH /api/admin/users/:id/role',
     'GET /api/leaderboard',
     'GET /api/items/stats',
+    'GET /api/auth/config',
+    'POST /api/auth/verify-email',
+    'POST /api/auth/resend-verification',
+    'POST /api/claims/:id/handover',
     'GET /api/notifications',
     'PATCH /api/notifications/read-all',
     'PATCH /api/notifications/:id/read',
@@ -205,6 +209,67 @@ const mountPrefix = (src) => {
   const statsSource = fs.readFileSync(path.join(backendDir, 'src/routes/dashboard.routes.js'), 'utf8');
   check('dashboard stats report claimed listings',
     /claimed: items\.filter/.test(statsSource));
+
+  // 8. The university email rule, tested as plain functions
+  const emailUtils = require('../src/utils/email');
+
+  const accepted = [
+    'audisiva.i-29@scds.saiuniversity.edu.in',
+    'student@scds.saiuniversity.edu.in',
+    'example123@scds.saiuniversity.edu.in',
+    'STUDENT@SCDS.SAIUNIVERSITY.EDU.IN',
+    '  student@scds.saiuniversity.edu.in  '
+  ];
+  const rejected = [
+    'student@gmail.com',
+    'student@yahoo.com',
+    'student@outlook.com',
+    'student@saiuniversity.edu.in',
+    'student@otheruniversity.edu.in',
+    'student@scds.saiuniversity.edu.in.evil.com',
+    'student@sub.scds.saiuniversity.edu.in',
+    'student@evilscds.saiuniversity.edu.in',
+    'student',
+    'student@',
+    '@scds.saiuniversity.edu.in',
+    ''
+  ];
+
+  accepted.forEach((address) => {
+    check(`accepts ${address.trim()}`, emailUtils.isAllowedEmail(address));
+  });
+  rejected.forEach((address) => {
+    check(`refuses "${address}"`, !emailUtils.isAllowedEmail(address));
+  });
+
+  check('normaliseEmail lowercases and trims',
+    emailUtils.normaliseEmail('  SomeOne@SCDS.SaiUniversity.EDU.IN ') === 'someone@scds.saiuniversity.edu.in');
+
+  check('the default domain is the Sai University student domain',
+    emailUtils.DEFAULT_DOMAIN === 'scds.saiuniversity.edu.in');
+
+  // The domain is configurable, but only when an administrator sets it
+  const savedDomain = process.env.ALLOWED_EMAIL_DOMAIN;
+  process.env.ALLOWED_EMAIL_DOMAIN = 'Example.EDU';
+  check('the allowed domain can be overridden by an environment variable',
+    emailUtils.allowedDomain() === 'example.edu' && emailUtils.isAllowedEmail('a@example.edu'));
+  check('an override does not open the original domain',
+    !emailUtils.isAllowedEmail('a@scds.saiuniversity.edu.in'));
+  if (savedDomain === undefined) delete process.env.ALLOWED_EMAIL_DOMAIN;
+  else process.env.ALLOWED_EMAIL_DOMAIN = savedDomain;
+
+  // 9. Verification tokens are random, hashed and expiring
+  const tokenA = emailUtils.createVerificationToken();
+  const tokenB = emailUtils.createVerificationToken();
+  check('verification tokens are 64 hex characters', /^[a-f0-9]{64}$/.test(tokenA));
+  check('two tokens are never the same', tokenA !== tokenB);
+  check('a token hash is stable', emailUtils.hashVerificationToken(tokenA) === emailUtils.hashVerificationToken(tokenA));
+  check('the hash is not the token itself', emailUtils.hashVerificationToken(tokenA) !== tokenA);
+  check('different tokens hash differently', emailUtils.hashVerificationToken(tokenA) !== emailUtils.hashVerificationToken(tokenB));
+  check('verification expires in the future',
+    emailUtils.verificationExpiry().getTime() > Date.now());
+  check('email verification is off by default',
+    emailUtils.emailVerificationEnabled() === false);
 
   console.log('\n' + results.join('\n'));
   console.log(`\n${passed} passed, ${failed} failed`);

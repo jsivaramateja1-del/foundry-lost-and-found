@@ -2,7 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const Item = require('../models/Item');
 const { CATEGORIES, LOCATIONS } = require('../models/Item');
-const { protect } = require('../middleware/auth');
+const { protect, requireVerified } = require('../middleware/auth');
 const { notify } = require('../utils/notify');
 
 const router = express.Router();
@@ -264,7 +264,7 @@ router.get('/:id/similar', async (req, res, next) => {
  * POST /api/items
  * Protected. Creates a lost or found report.
  */
-router.post('/', protect, async (req, res, next) => {
+router.post('/', protect, requireVerified, async (req, res, next) => {
   try {
     const errors = validateItemBody(req.body);
     if (errors.length) return res.status(400).json({ message: errors[0], errors });

@@ -30,7 +30,14 @@ const userSchema = new mongoose.Schema(
     },
     // Simple gamification: points are awarded when a return is completed
     points: { type: Number, default: 0, min: 0 },
-    returns: { type: Number, default: 0, min: 0 }
+    returns: { type: Number, default: 0, min: 0 },
+    // Email verification. Only used when EMAIL_VERIFICATION=enabled; accounts
+    // created while it is disabled are verified immediately.
+    emailVerified: { type: Boolean, default: false },
+    // Only the hash of the token is stored, so a database leak cannot be used
+    // to verify somebody else's address
+    verificationTokenHash: { type: String, select: false },
+    verificationTokenExpires: { type: Date, select: false }
   },
   { timestamps: true }
 );
@@ -56,6 +63,7 @@ userSchema.methods.toSafeObject = function () {
     role: this.role,
     points: this.points,
     returns: this.returns,
+    emailVerified: Boolean(this.emailVerified),
     createdAt: this.createdAt
   };
 };

@@ -24,7 +24,11 @@ const claimSchema = new mongoose.Schema(
       default: 'pending'
     },
     reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    reviewedAt: { type: Date }
+    reviewedAt: { type: Date },
+    // Approving a claim only reserves the item. The handover is a separate,
+    // deliberate step: that is what turns an item into "returned".
+    handoverConfirmedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    handoverConfirmedAt: { type: Date }
   },
   { timestamps: true }
 );

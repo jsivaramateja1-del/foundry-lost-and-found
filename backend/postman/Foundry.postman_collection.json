@@ -102,6 +102,38 @@
       "name": "Auth",
       "item": [
         {
+          "name": "Auth config (200)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/config",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "config"
+              ]
+            },
+            "description": "The allowed student email domain and whether email verification is on."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('reports the allowed domain', () => pm.expect(b.allowedEmailDomain).to.eql('scds.saiuniversity.edu.in'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Register (201)",
           "event": [
             {
@@ -109,7 +141,7 @@
               "script": {
                 "exec": [
                   "// A new email each run so repeated runs still return 201",
-                  "const unique = 'postman' + Date.now() + '@saiuniversity.edu.in';",
+                  "const unique = 'postman' + Date.now() + '@scds.saiuniversity.edu.in';",
                   "pm.collectionVariables.set('regEmail', unique);"
                 ]
               }
@@ -407,6 +439,83 @@
               ]
             }
           }
+        },
+        {
+          "name": "Register with a non-university email (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Wrong Domain\",\n  \"email\": \"student@gmail.com\",\n  \"password\": \"secret123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                  "pm.test('explains the domain rule', () => pm.expect(pm.response.json().message).to.include('@scds.saiuniversity.edu.in'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify email with a bad token (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"not-a-real-token\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "verify-email"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -1057,6 +1166,43 @@
               ]
             }
           }
+        },
+        {
+          "name": "Confirm handover (200)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/claims/{{claimId}}/handover",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "claims",
+                "{{claimId}}",
+                "handover"
+              ]
+            },
+            "description": "Approve the claim first. This is the step that marks the listing returned and awards points."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('the listing is returned', () => pm.expect(pm.response.json().claim.handoverConfirmedAt).to.not.be.null);"
+                ]
+              }
+            }
+          ]
         }
       ]
     },

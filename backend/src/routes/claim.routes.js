@@ -2,7 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const Claim = require('../models/Claim');
 const Item = require('../models/Item');
-const { protect } = require('../middleware/auth');
+const { protect, requireVerified } = require('../middleware/auth');
 const { notify } = require('../utils/notify');
 
 const router = express.Router();
@@ -18,6 +18,7 @@ const publicClaim = (doc) => {
     message: obj.message,
     status: obj.status,
     reviewedAt: obj.reviewedAt,
+    handoverConfirmedAt: obj.handoverConfirmedAt || null,
     createdAt: obj.createdAt
   };
 };
@@ -27,7 +28,7 @@ const publicClaim = (doc) => {
  * Protected. Submit a claim for an item.
  * Body: { itemId, message }
  */
-router.post('/', protect, async (req, res, next) => {
+router.post('/', protect, requireVerified, async (req, res, next) => {
   try {
     const { itemId, message } = req.body;
 
@@ -156,6 +157,65 @@ router.patch('/:id', protect, async (req, res, next) => {
 
     const populated = await claim.populate('claimant', 'name');
     res.status(200).json({ message: `Claim ${status}`, claim: publicClaim(populated) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/claims/:id/handover
+ * Protected. The item owner (or an admin) confirms the item actually changed
+ * hands. Only then does the listing become "returned" and the points are paid.
+ *
+ * Approving a claim deliberately does NOT do this: approving only reserves the
+ * item so nobody else can claim it.
+ */
+router.post('/:id/handover', protect, async (req, res, next) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid claim id' });
+    }
+
+    const claim = await Claim.findById(req.params.id).populate('item');
+    if (!claim) return res.status(404).json({ message: 'Claim not found' });
+    if (!claim.item) return res.status(404).json({ message: 'The listing for this claim no longer exists' });
+
+    const item = claim.item;
+    const isOwner = item.reportedBy.toString() === req.user._id.toString();
+    if (!isOwner && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Only the item owner or an admin can confirm a handover' });
+    }
+    if (claim.status !== 'approved') {
+      return res.status(400).json({ message: 'Approve the claim before confirming the handover' });
+    }
+    if (claim.handoverConfirmedAt) {
+      return res.status(400).json({ message: 'This handover has already been confirmed' });
+    }
+    if (item.status === 'returned') {
+      return res.status(400).json({ message: 'This listing is already marked as returned' });
+    }
+
+    claim.handoverConfirmedBy = req.user._id;
+    claim.handoverConfirmedAt = new Date();
+    await claim.save();
+
+    item.status = 'returned';
+    await item.save();
+
+    // Both sides of a completed return earn the points, once
+    const User = require('../models/User');
+    await User.findByIdAndUpdate(item.reportedBy, { $inc: { points: 10, returns: 1 } });
+    await User.findByIdAndUpdate(claim.claimant, { $inc: { points: 10, returns: 1 } });
+
+    await notify(item.reportedBy, 'item_returned',
+      `Handover confirmed for "${item.title}". The listing is now marked returned.`, 'dashboard.html');
+    await notify(claim.claimant, 'item_returned',
+      `The handover for "${item.title}" is confirmed. Thanks for closing the loop.`, 'dashboard.html');
+
+    res.status(200).json({
+      message: 'Handover confirmed. The listing is now marked as returned.',
+      claim: publicClaim(claim)
+    });
   } catch (err) {
     next(err);
   }

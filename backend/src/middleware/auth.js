@@ -34,6 +34,21 @@ const protect = async (req, res, next) => {
   }
 };
 
+/**
+ * Require a verified email address, but only when the deployment has email
+ * verification switched on. With it off (the default) this is a no-op, so
+ * existing accounts keep working exactly as before.
+ */
+const requireVerified = (req, res, next) => {
+  const enabled = String(process.env.EMAIL_VERIFICATION || '').toLowerCase() === 'enabled';
+  if (enabled && !req.user.emailVerified) {
+    return res.status(403).json({
+      message: 'Confirm your email address before doing that. Check your inbox, or request a new link.'
+    });
+  }
+  next();
+};
+
 /** Require the authenticated user to be an admin */
 const adminOnly = (req, res, next) => {
   if (!req.user || req.user.role !== 'admin') {
@@ -45,4 +60,4 @@ const adminOnly = (req, res, next) => {
 const signToken = (userId) =>
   jwt.sign({ id: userId }, secret(), { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 
-module.exports = { protect, adminOnly, signToken };
+module.exports = { protect, adminOnly, requireVerified, signToken };

@@ -31,6 +31,8 @@
 
     <section class="auth-panel">
       <div class="auth-panel__inner">
+        <div class="form-success" id="auth-notice" role="status"></div>
+
         <div class="auth-tabs" role="tablist">
           <button class="auth-tab" role="tab" id="tab-login" aria-selected="true" aria-controls="form-login">Log in</button>
           <button class="auth-tab" role="tab" id="tab-register" aria-selected="false" aria-controls="form-register">Create account</button>
@@ -40,7 +42,7 @@
           <div class="form-error" id="login-error" role="alert"></div>
           <div class="field">
             <label for="login-email">Email</label>
-            <input class="input" type="email" id="login-email" autocomplete="email" required placeholder="you@saiuniversity.edu.in" />
+            <input class="input" type="email" id="login-email" autocomplete="email" required placeholder="you@scds.saiuniversity.edu.in" />
           </div>
           <div class="field">
             <label for="login-password">Password</label>
@@ -61,7 +63,11 @@
           </div>
           <div class="field">
             <label for="register-email">Email</label>
-            <input class="input" type="email" id="register-email" autocomplete="email" required placeholder="you@saiuniversity.edu.in" />
+            <input class="input" type="email" id="register-email" autocomplete="email" required placeholder="you@scds.saiuniversity.edu.in" />
+            <p class="form-note">
+              Only Sai University addresses ending in
+              <strong data-allowed-domain>@scds.saiuniversity.edu.in</strong> can register.
+            </p>
           </div>
           <div class="field">
             <label for="register-password">Password</label>

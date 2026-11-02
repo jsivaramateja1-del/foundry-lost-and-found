@@ -251,7 +251,9 @@
             c.status === 'pending'
               ? `<button class="btn btn--ghost" data-approve="${c.id}">Approve</button>
                  <button class="btn btn--ghost" data-reject="${c.id}">Reject</button>`
-              : '<span class="form-note">Reviewed</span>'
+              : c.status === 'approved' && !c.handoverConfirmedAt
+                ? `<button class="btn btn--ghost" data-handover="${c.id}">Confirm handover</button>`
+                : '<span class="form-note">Reviewed</span>'
           ])).join('')
         : '<tr><td colspan="5" style="color:var(--muted)">Nobody has claimed any of your items yet.</td></tr>';
     }
@@ -374,7 +376,8 @@
       const markReturned = event.target.closest('[data-return]');
       const edit = event.target.closest('[data-edit]');
       const remove = event.target.closest('[data-delete]');
-      const button = approve || reject || markReturned || edit || remove;
+      const handover = event.target.closest('[data-handover]');
+      const button = approve || reject || markReturned || edit || remove || handover;
       if (!button) return;
 
       if (edit) return openEdit(edit.dataset.edit);
@@ -393,6 +396,9 @@
         } else if (reject) {
           await api(`/claims/${reject.dataset.reject}`, { method: 'PATCH', body: { status: 'rejected' }, auth: true });
           ui.toast('Claim rejected');
+        } else if (handover) {
+          await api(`/claims/${handover.dataset.handover}/handover`, { method: 'POST', auth: true });
+          ui.toast('Handover confirmed — the listing is now marked returned');
         } else if (remove) {
           await api(`/items/${remove.dataset.delete}`, { method: 'DELETE', auth: true });
           ui.toast('Listing deleted');

@@ -30,6 +30,8 @@ const el = {
   to: document.getElementById('filter-to'),
   sort: document.getElementById('filter-sort'),
   reset: document.getElementById('reset-filters'),
+  loadMore: document.getElementById('load-more'),
+  pageStatus: document.getElementById('page-status'),
   clearFromEmpty: document.getElementById('clear-from-empty'),
   statLost: document.getElementById('stat-lost'),
   statFound: document.getElementById('stat-found'),
@@ -43,6 +45,12 @@ let lastFocused = null;
 
 // Matches IMAGE_LIMIT_BYTES in backend/src/routes/item.routes.js
 const MAX_IMAGE_BYTES = 400 * 1024;
+
+// How many listings arrive per request. The API paginates, so the board is
+// never silently cut off at a fixed number.
+const PAGE_SIZE = 12;
+state.page = 1;
+state.pages = 1;
 
 /* ---------------- header state ---------------- */
 function paintAuthState() {
@@ -138,7 +146,7 @@ function hasActiveFilters() {
     || state.location !== 'all' || Boolean(state.from) || Boolean(state.to);
 }
 
-async function loadItems() {
+async function loadItems({ page = 1, append = false } = {}) {
   el.count.textContent = 'Loading listings…';
   const params = new URLSearchParams();
   if (state.q) params.set('q', state.q);
@@ -148,12 +156,15 @@ async function loadItems() {
   if (state.from) params.set('from', state.from);
   if (state.to) params.set('to', state.to);
   params.set('sort', state.sort);
-  params.set('limit', '100');
+  params.set('limit', String(PAGE_SIZE));
+  params.set('page', String(page));
 
   try {
     const data = await api(`/items?${params.toString()}`);
-    state.items = data.items;
-    renderGrid(data);
+    state.items = append ? state.items.concat(data.items) : data.items;
+    state.page = data.page;
+    state.pages = data.pages;
+    renderGrid(data, { append });
   } catch (err) {
     el.count.textContent = 'Could not load listings';
     el.grid.innerHTML = '';
@@ -173,7 +184,7 @@ function showEmpty(title, message, { firstRun }) {
   el.clearFromEmpty.hidden = firstRun;
 }
 
-function renderGrid(data) {
+function renderGrid(data, { append = false } = {}) {
   const total = data.total;
   const filtered = hasActiveFilters();
 
@@ -196,7 +207,25 @@ function renderGrid(data) {
   }
 
   el.empty.hidden = true;
-  el.grid.innerHTML = data.items.map(cardMarkup).join('');
+  const markup = data.items.map(cardMarkup).join('');
+  if (append) {
+    el.grid.insertAdjacentHTML('beforeend', markup);
+  } else {
+    el.grid.innerHTML = markup;
+  }
+  paintPagination();
+}
+
+/** Show "Load more" only while there is another page to fetch. */
+function paintPagination() {
+  if (!el.loadMore) return;
+  const more = state.page < state.pages;
+  el.loadMore.hidden = !more;
+  if (el.pageStatus) {
+    el.pageStatus.textContent = state.items.length
+      ? `Showing ${state.items.length} listing${state.items.length === 1 ? '' : 's'} — page ${state.page} of ${state.pages}`
+      : '';
+  }
 }
 
 function applyFilters() {
@@ -556,6 +585,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   el.to.addEventListener('change', () => { state.to = el.to.value; applyFilters(); });
   el.sort.addEventListener('change', () => { state.sort = el.sort.value; applyFilters(); });
   el.reset.addEventListener('click', resetFilters);
+  if (el.loadMore) {
+    el.loadMore.addEventListener('click', () => loadItems({ page: state.page + 1, append: true }));
+  }
   el.clearFromEmpty.addEventListener('click', resetFilters);
 
   // grid clicks

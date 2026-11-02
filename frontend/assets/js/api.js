@@ -203,7 +203,7 @@ async function initNotifications() {
     badge.hidden = data.unread === 0;
     list.innerHTML = data.notifications.length
       ? data.notifications.map((n) => `
-          <li class="notifications__item${n.read ? '' : ' is-unread'}">
+          <li class="notifications__item${n.read ? '' : ' is-unread'}" data-notif-id="${n.id}">
             <p>${ui.esc(n.message)}</p>
             <time>${ui.date(n.createdAt)}</time>
           </li>`).join('')
@@ -236,6 +236,19 @@ async function initNotifications() {
       }
     });
   }
+
+  // Clicking a notification marks it read
+  list.addEventListener('click', async (event) => {
+    const item = event.target.closest('[data-notif-id]');
+    if (!item) return;
+    try {
+      await api(`/notifications/${item.dataset.notifId}/read`, { method: 'PATCH', auth: true });
+      item.classList.remove('is-unread');
+      await load();
+    } catch (err) {
+      ui.toast(err.message);
+    }
+  });
 
   document.addEventListener('click', (event) => {
     if (!panel.hidden && !root.contains(event.target)) {

@@ -27,6 +27,31 @@ tabs.register.tab.addEventListener('click', () => selectTab('register'));
 // Open straight onto the register form with ?mode=register
 if (params.get('mode') === 'register') selectTab('register');
 
+/* ---------------- allowed email domain ---------------- */
+
+// Filled from GET /api/auth/config so the browser and the server can never
+// disagree about which domain is accepted. The default matches the backend.
+let authConfig = { allowedEmailDomain: 'scds.saiuniversity.edu.in', emailVerification: false };
+
+(async () => {
+  try {
+    authConfig = { ...authConfig, ...(await api('/auth/config')) };
+  } catch {
+    /* fall back to the built-in default; the server still enforces its own rule */
+  }
+  document.querySelectorAll('[data-allowed-domain]').forEach((node) => {
+    node.textContent = `@${authConfig.allowedEmailDomain}`;
+  });
+})();
+
+/** Same rule as the server: the domain must match exactly. */
+function isAllowedEmail(email) {
+  const value = String(email || '').trim().toLowerCase();
+  const at = value.lastIndexOf('@');
+  if (at <= 0) return false;
+  return value.slice(at + 1) === authConfig.allowedEmailDomain.toLowerCase();
+}
+
 function showError(id, message) {
   const box = document.getElementById(id);
   box.textContent = message || '';
@@ -81,6 +106,24 @@ registerPassword.addEventListener('input', () => {
   strengthLabel.textContent = label;
 });
 
+/* ---------------- email verification link ---------------- */
+
+const verifyToken = params.get('verify');
+if (verifyToken) {
+  const notice = document.getElementById('auth-notice');
+  (async () => {
+    try {
+      const result = await api('/auth/verify-email', { method: 'POST', body: { token: verifyToken } });
+      notice.textContent = result.message || 'Email verified. You can log in now.';
+      notice.dataset.show = 'true';
+    } catch (err) {
+      notice.className = 'form-error';
+      notice.textContent = err.message;
+      notice.dataset.show = 'true';
+    }
+  })();
+}
+
 /* ---------------- login ---------------- */
 
 document.getElementById('form-login').addEventListener('submit', async (event) => {
@@ -118,6 +161,10 @@ document.getElementById('form-register').addEventListener('submit', async (event
 
   if (!name) return showError('register-error', 'Please enter your name.');
   if (!email) return showError('register-error', 'Please enter your email.');
+  if (!isAllowedEmail(email)) {
+    return showError('register-error',
+      `Only Sai University addresses ending in @${authConfig.allowedEmailDomain} can register.`);
+  }
   if (password.length < 6) return showError('register-error', 'Password must be at least 6 characters.');
   if (password !== confirm) return showError('register-error', 'The two passwords do not match.');
 

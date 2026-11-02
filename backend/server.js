@@ -11,6 +11,11 @@ const PORT = process.env.PORT || 5000;
     if (!process.env.JWT_SECRET) {
       throw new Error('JWT_SECRET is not set. Add it to backend/.env (see .env.example).');
     }
+    // Verification without a mail server would silently lock people out, so
+    // the combination is refused at startup rather than discovered later.
+    if (String(process.env.EMAIL_VERIFICATION || '').toLowerCase() === 'enabled' && !process.env.SMTP_HOST) {
+      throw new Error('EMAIL_VERIFICATION is enabled but SMTP_HOST is not set. Configure SMTP or set EMAIL_VERIFICATION=disabled.');
+    }
     await connectDB();
     app.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
