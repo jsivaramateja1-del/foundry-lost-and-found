@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Environment files — never commit real secrets
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Test and build output
+coverage/

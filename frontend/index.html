@@ -28,7 +28,7 @@
         <a href="admin.html" class="btn btn--ghost" data-admin-only hidden>Admin</a>
         <button class="btn btn--ghost" data-auth-only id="header-logout" hidden>Log out</button>
         <a href="auth.html" class="btn btn--ghost" data-guest-only>Log in</a>
-        <button class="btn btn--solid" data-open-report>Report an item</button>
+        <button class="btn btn--solid" data-open-report="lost">Report an item</button>
         <button class="menu-toggle" aria-expanded="false" aria-controls="primary-nav">Menu</button>
       </div>
     </div>
@@ -50,7 +50,7 @@
           </p>
           <div class="hero__actions">
             <a href="#browse" class="btn btn--solid">Find an item</a>
-            <button class="btn" data-open-report>I found something</button>
+            <button class="btn" data-open-report="found">I found something</button>
           </div>
         </div>
 
@@ -136,6 +136,14 @@
             <select class="select" id="filter-location"><option value="all">All locations</option></select>
           </div>
           <div class="field">
+            <label for="filter-from">Lost / found after</label>
+            <input class="input" type="date" id="filter-from" />
+          </div>
+          <div class="field">
+            <label for="filter-to">Lost / found before</label>
+            <input class="input" type="date" id="filter-to" />
+          </div>
+          <div class="field">
             <label for="filter-sort">Sort</label>
             <select class="select" id="filter-sort">
               <option value="newest">Newest first</option>
@@ -155,11 +163,12 @@
         <div class="grid" id="item-grid"></div>
 
         <div class="empty" id="empty-state" hidden>
-          <h3>Nothing matches that yet</h3>
-          <p>Try a different keyword, or widen the filters. You can also report the item yourself.</p>
-          <div style="display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap;">
-            <button class="btn" id="clear-from-empty">Clear filters</button>
-            <button class="btn btn--solid" data-open-report>Report an item</button>
+          <h3 id="empty-title">Nothing matches that yet</h3>
+          <p id="empty-text">Try a different keyword, or widen the filters. You can also report the item yourself.</p>
+          <div class="empty__actions">
+            <button class="btn btn--solid" data-open-report="lost">Report a lost item</button>
+            <button class="btn" data-open-report="found">Report a found item</button>
+            <button class="btn btn--ghost" id="clear-from-empty">Clear filters</button>
           </div>
         </div>
       </div>
@@ -335,6 +344,16 @@
           <label for="rf-description">Description</label>
           <textarea class="textarea" id="rf-description" name="description" required maxlength="1000"
             placeholder="Colour, marks, what it was near — anything that would help someone recognise it."></textarea>
+        </div>
+
+        <div class="field">
+          <label for="rf-image">Photo (optional)</label>
+          <input class="input" type="file" id="rf-image" name="image" accept="image/png,image/jpeg,image/webp" />
+          <p class="form-note" id="rf-image-note">
+            A photo makes an item far easier to recognise. It is shrunk in your browser
+            before it is sent, and must be under 400 KB once shrunk.
+          </p>
+          <div class="image-preview" id="rf-image-preview" hidden></div>
         </div>
 
         <p class="form-note">

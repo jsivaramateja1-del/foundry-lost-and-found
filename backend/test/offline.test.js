@@ -78,6 +78,9 @@ const mountPrefix = (src) => {
     'GET /api/admin/stats',
     'GET /api/admin/items',
     'GET /api/admin/claims',
+    'GET /api/admin/users',
+    'DELETE /api/admin/items/:id',
+    'PATCH /api/admin/users/:id/role',
     'GET /api/leaderboard',
     'GET /api/health'
   ];
@@ -127,6 +130,54 @@ const mountPrefix = (src) => {
   const token = signToken('64d2f1f1f1f1f1f1f1f1f1f1');
   const decoded = jwt.verify(token, process.env.JWT_SECRET);
   check('signToken produces a verifiable JWT', decoded.id === '64d2f1f1f1f1f1f1f1f1f1f1');
+
+  // 6. No default credentials and no fallback secret anywhere in the source
+  const fs = require('fs');
+  const path = require('path');
+  const backendDir = path.join(__dirname, '..');
+  const authSource = fs.readFileSync(path.join(backendDir, 'src/middleware/auth.js'), 'utf8');
+
+  check('auth.js contains no fallback JWT secret',
+    !authSource.includes('dev_only_secret') && !/\|\|\s*'[^']*secret/i.test(authSource));
+
+  const savedSecret = process.env.JWT_SECRET;
+  delete process.env.JWT_SECRET;
+  let threwWithoutSecret = false;
+  try {
+    signToken('64d2f1f1f1f1f1f1f1f1f1f1');
+  } catch (err) {
+    threwWithoutSecret = true;
+  }
+  process.env.JWT_SECRET = savedSecret;
+  check('signToken refuses to run without JWT_SECRET', threwWithoutSecret);
+
+  const pkg = JSON.parse(fs.readFileSync(path.join(backendDir, 'package.json'), 'utf8'));
+  check('no npm script seeds demo data',
+    !pkg.scripts.seed && !fs.existsSync(path.join(backendDir, 'seed.js')));
+  check('create-admin and cleanup:demo scripts exist',
+    !!pkg.scripts['create-admin'] && !!pkg.scripts['cleanup:demo'] &&
+    fs.existsSync(path.join(backendDir, 'scripts/create-admin.js')) &&
+    fs.existsSync(path.join(backendDir, 'scripts/cleanup-demo.js')));
+
+  // No known demo password may appear anywhere in the tracked source
+  // Built at runtime so this file does not itself contain the strings it bans
+  const demoPasswords = ['admin' + '123', 'student' + '123', 'priya' + '123'];
+  const walkDir = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    if (entry.name === 'node_modules' || entry.name === '.git') return [];
+    const full = path.join(dir, entry.name);
+    return entry.isDirectory() ? walkDir(full) : [full];
+  });
+  const projectRoot = path.join(backendDir, '..');
+  const offenders = [];
+  walkDir(projectRoot).forEach((file) => {
+    if (!/\.(js|html|json|md)$/.test(file) || file.endsWith('package-lock.json')) return;
+    const body = fs.readFileSync(file, 'utf8');
+    demoPasswords.forEach((pw) => {
+      if (body.includes(pw)) offenders.push(`${path.relative(projectRoot, file)} -> ${pw}`);
+    });
+  });
+  check('no demo password appears in the repository',
+    offenders.length === 0, offenders.join('; '));
 
   console.log('\n' + results.join('\n'));
   console.log(`\n${passed} passed, ${failed} failed`);

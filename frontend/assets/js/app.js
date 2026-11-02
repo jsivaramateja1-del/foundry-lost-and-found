@@ -8,19 +8,26 @@ const state = {
   type: 'all',
   category: 'all',
   location: 'all',
+  from: '',
+  to: '',
   sort: 'newest',
   items: [],
-  activeItemId: null
+  activeItemId: null,
+  pendingImage: '' // data URL of the photo chosen in the report form
 };
 
 const el = {
   grid: document.getElementById('item-grid'),
   empty: document.getElementById('empty-state'),
+  emptyTitle: document.getElementById('empty-title'),
+  emptyText: document.getElementById('empty-text'),
   count: document.getElementById('result-count'),
   search: document.getElementById('search'),
   type: document.getElementById('filter-type'),
   category: document.getElementById('filter-category'),
   location: document.getElementById('filter-location'),
+  from: document.getElementById('filter-from'),
+  to: document.getElementById('filter-to'),
   sort: document.getElementById('filter-sort'),
   reset: document.getElementById('reset-filters'),
   clearFromEmpty: document.getElementById('clear-from-empty'),
@@ -28,6 +35,9 @@ const el = {
   statFound: document.getElementById('stat-found'),
   statReturned: document.getElementById('stat-returned')
 };
+
+// Matches IMAGE_LIMIT_BYTES in backend/src/routes/item.routes.js
+const MAX_IMAGE_BYTES = 400 * 1024;
 
 /* ---------------- header state ---------------- */
 function paintAuthState() {
@@ -54,12 +64,57 @@ async function loadMeta() {
   }
 }
 
+/* ---------------- photos ---------------- */
+
+/**
+ * Shrink a chosen photo in the browser before it is sent.
+ * The longest side is capped at 900px and the JPEG quality is stepped down
+ * until the encoded string fits the server's 400 KB limit.
+ */
+function shrinkImage(file) {
+  return new Promise((resolve, reject) => {
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
+      reject(new Error('Choose a PNG, JPEG or WebP image.'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('That file could not be read.'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('That file is not a readable image.'));
+      img.onload = () => {
+        const scale = Math.min(1, 900 / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        for (const quality of [0.82, 0.7, 0.55, 0.4]) {
+          const dataUrl = canvas.toDataURL('image/jpeg', quality);
+          const bytes = Math.floor(((dataUrl.split(',')[1] || '').length * 3) / 4);
+          if (bytes <= MAX_IMAGE_BYTES) {
+            resolve(dataUrl);
+            return;
+          }
+        }
+        reject(new Error('That photo is still too large after shrinking. Try a smaller one.'));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 /* ---------------- listings ---------------- */
 function cardMarkup(item) {
   const place = item.location === 'Other' && item.customLocation ? item.customLocation : item.location;
   const category = item.category === 'Other' && item.customCategory ? item.customCategory : item.category;
+  const photo = item.imageUrl
+    ? `<div class="card__media"><img src="${ui.esc(item.imageUrl)}" alt="" loading="lazy" /></div>`
+    : '';
   return `
     <button class="card" data-item-id="${item.id}" aria-label="View ${ui.esc(item.title)}">
+      ${photo}
       <div class="card__top">
         <span class="tag tag--${item.type}">${item.type === 'lost' ? 'Lost' : 'Found'}</span>
         <span class="tag">${ui.esc(category)}</span>
@@ -73,6 +128,11 @@ function cardMarkup(item) {
     </button>`;
 }
 
+function hasActiveFilters() {
+  return Boolean(state.q) || state.type !== 'all' || state.category !== 'all'
+    || state.location !== 'all' || Boolean(state.from) || Boolean(state.to);
+}
+
 async function loadItems() {
   el.count.textContent = 'Loading listings…';
   const params = new URLSearchParams();
@@ -80,6 +140,8 @@ async function loadItems() {
   if (state.type !== 'all') params.set('type', state.type);
   if (state.category !== 'all') params.set('category', state.category);
   if (state.location !== 'all') params.set('location', state.location);
+  if (state.from) params.set('from', state.from);
+  if (state.to) params.set('to', state.to);
   params.set('sort', state.sort);
   params.set('limit', '100');
 
@@ -90,15 +152,25 @@ async function loadItems() {
   } catch (err) {
     el.count.textContent = 'Could not load listings';
     el.grid.innerHTML = '';
-    el.empty.hidden = false;
-    el.empty.querySelector('h3').textContent = 'The server is not responding';
-    el.empty.querySelector('p').textContent = err.message;
+    showEmpty('The server is not responding', err.message, { firstRun: false });
   }
+}
+
+/**
+ * Paint the empty state. Two different situations share one element:
+ * a brand-new board with nothing on it, and filters that match nothing.
+ */
+function showEmpty(title, message, { firstRun }) {
+  el.empty.hidden = false;
+  el.emptyTitle.textContent = title;
+  el.emptyText.textContent = message;
+  // "Clear filters" is pointless on an empty board
+  el.clearFromEmpty.hidden = firstRun;
 }
 
 function renderGrid(data) {
   const total = data.total;
-  const filtered = state.q || state.type !== 'all' || state.category !== 'all' || state.location !== 'all';
+  const filtered = hasActiveFilters();
 
   el.count.textContent = total === 0
     ? 'No listings match'
@@ -106,9 +178,15 @@ function renderGrid(data) {
 
   if (!data.items.length) {
     el.grid.innerHTML = '';
-    el.empty.hidden = false;
-    el.empty.querySelector('h3').textContent = 'Nothing matches that yet';
-    el.empty.querySelector('p').textContent = 'Try a different keyword, or widen the filters. You can also report the item yourself.';
+    if (filtered) {
+      showEmpty('Nothing matches that yet',
+        'Try a different keyword, or widen the filters. You can also report the item yourself.',
+        { firstRun: false });
+    } else {
+      showEmpty('No items reported yet',
+        'Be the first to report a lost or found item on campus.',
+        { firstRun: true });
+    }
     return;
   }
 
@@ -125,11 +203,15 @@ function resetFilters() {
   state.type = 'all';
   state.category = 'all';
   state.location = 'all';
+  state.from = '';
+  state.to = '';
   state.sort = 'newest';
   el.search.value = '';
   el.type.value = 'all';
   el.category.value = 'all';
   el.location.value = 'all';
+  el.from.value = '';
+  el.to.value = '';
   el.sort.value = 'newest';
   loadItems();
 }
@@ -182,7 +264,12 @@ async function openItem(id) {
       `${item.type === 'lost' ? 'Lost' : 'Found'} · ${item.status}`;
     document.getElementById('modal-item-title').textContent = item.title;
 
+    const photo = item.imageUrl
+      ? `<div class="detail-media"><img src="${ui.esc(item.imageUrl)}" alt="Photo of ${ui.esc(item.title)}" /></div>`
+      : '';
+
     document.getElementById('modal-item-body').innerHTML = `
+      ${photo}
       <div><dt>Description</dt><dd>${ui.esc(item.description)}</dd></div>
       <div><dt>Category</dt><dd>${ui.esc(category)}</dd></div>
       <div><dt>Location</dt><dd>${ui.esc(place)}</dd></div>
@@ -251,6 +338,28 @@ function prepareReportForm(meta) {
   });
 
   document.getElementById('rf-date').value = new Date().toISOString().slice(0, 10);
+
+  // Photo picker: shrink the image as soon as it is chosen, so the submit
+  // handler only has to send a ready-made data URL.
+  const fileInput = document.getElementById('rf-image');
+  const preview = document.getElementById('rf-image-preview');
+
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files && fileInput.files[0];
+    state.pendingImage = '';
+    preview.hidden = true;
+    preview.innerHTML = '';
+    if (!file) return;
+
+    try {
+      state.pendingImage = await shrinkImage(file);
+      preview.innerHTML = `<img src="${ui.esc(state.pendingImage)}" alt="Photo preview" />`;
+      preview.hidden = false;
+    } catch (err) {
+      fileInput.value = '';
+      showFormMessage('report-error', err.message);
+    }
+  });
 }
 
 function showFormMessage(id, message) {
@@ -280,6 +389,7 @@ async function submitReport(event) {
     date: document.getElementById('rf-date').value,
     description: document.getElementById('rf-description').value.trim()
   };
+  if (state.pendingImage) payload.imageUrl = state.pendingImage;
 
   if (payload.category === 'Other') {
     payload.customCategory = document.getElementById('rf-custom-category').value.trim();
@@ -300,6 +410,9 @@ async function submitReport(event) {
   try {
     await api('/items', { method: 'POST', body: payload, auth: true });
     form.reset();
+    state.pendingImage = '';
+    document.getElementById('rf-image-preview').hidden = true;
+    document.getElementById('rf-image-preview').innerHTML = '';
     document.getElementById('rf-date').value = new Date().toISOString().slice(0, 10);
     document.getElementById('rf-custom-category-field').hidden = true;
     document.getElementById('rf-custom-location-field').hidden = true;
@@ -396,6 +509,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   el.type.addEventListener('change', () => { state.type = el.type.value; applyFilters(); });
   el.category.addEventListener('change', () => { state.category = el.category.value; applyFilters(); });
   el.location.addEventListener('change', () => { state.location = el.location.value; applyFilters(); });
+  el.from.addEventListener('change', () => { state.from = el.from.value; applyFilters(); });
+  el.to.addEventListener('change', () => { state.to = el.to.value; applyFilters(); });
   el.sort.addEventListener('change', () => { state.sort = el.sort.value; applyFilters(); });
   el.reset.addEventListener('click', resetFilters);
   el.clearFromEmpty.addEventListener('click', resetFilters);
@@ -406,7 +521,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (card) openItem(card.dataset.itemId);
   });
 
-  // open report modal from anywhere
+  // open report modal from anywhere; the button decides lost or found
   document.querySelectorAll('[data-open-report]').forEach((btn) => {
     btn.addEventListener('click', () => {
       if (!Auth.isLoggedIn) {
@@ -415,6 +530,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
       }
       showFormMessage('report-error', '');
+      showFormMessage('report-success', '');
+      const wanted = btn.dataset.openReport;
+      if (wanted === 'lost' || wanted === 'found') {
+        document.getElementById('rf-type').value = wanted;
+      }
       openModal('modal-report');
     });
   });

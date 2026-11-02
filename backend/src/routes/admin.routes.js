@@ -148,4 +148,52 @@ router.patch('/items/:id/status', async (req, res, next) => {
   }
 });
 
+/**
+ * DELETE /api/admin/items/:id
+ * Admin only. Removes a listing and every claim attached to it.
+ */
+router.delete('/items/:id', async (req, res, next) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid item id' });
+    }
+    const item = await Item.findById(req.params.id);
+    if (!item) return res.status(404).json({ message: 'Item not found' });
+
+    await Claim.deleteMany({ item: item._id });
+    await item.deleteOne();
+    res.status(200).json({ message: 'Listing removed' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PATCH /api/admin/users/:id/role
+ * Admin only. Promotes a student to admin, or demotes an admin back to student.
+ * An admin cannot change their own role, so the last admin cannot lock
+ * themselves out of the dashboard by accident.
+ */
+router.patch('/users/:id/role', async (req, res, next) => {
+  try {
+    const { role } = req.body;
+    if (!['student', 'admin'].includes(role)) {
+      return res.status(400).json({ message: 'role must be either student or admin' });
+    }
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid user id' });
+    }
+    if (String(req.user._id) === String(req.params.id)) {
+      return res.status(400).json({ message: 'You cannot change your own role' });
+    }
+
+    const user = await User.findByIdAndUpdate(req.params.id, { role }, { new: true });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    res.status(200).json({ message: `Role updated to ${role}`, user: user.toSafeObject() });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

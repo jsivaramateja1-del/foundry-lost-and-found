@@ -62,8 +62,21 @@
         </div>
         <div class="panel__body" style="overflow-x:auto;">
           <table class="table">
-            <thead><tr><th>Item</th><th>Type</th><th>Category</th><th>Reported by</th><th>Date</th><th>Status</th></tr></thead>
+            <thead><tr><th>Item</th><th>Type</th><th>Category</th><th>Reported by</th><th>Date</th><th>Status</th><th>Action</th></tr></thead>
             <tbody id="admin-items"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel__head">
+          <h2>All accounts</h2>
+          <span class="form-note" id="users-count"></span>
+        </div>
+        <div class="panel__body" style="overflow-x:auto;">
+          <table class="table">
+            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Points</th><th>Joined</th><th>Action</th></tr></thead>
+            <tbody id="admin-users"></tbody>
           </table>
         </div>
       </section>
@@ -111,7 +124,7 @@
         : '<p class="form-note">No data yet.</p>';
     }
 
-    (async () => {
+    async function loadAdmin() {
       if (!Auth.isAdmin) {
         document.getElementById('guard').hidden = false;
         return;
@@ -136,9 +149,27 @@
               ui.esc(i.category),
               ui.esc(i.reportedBy?.name || '—'),
               ui.date(i.date),
-              `<span class="status">${ui.esc(i.status)}</span>`
+              `<select class="select" data-admin-status="${i.id}" aria-label="Status for ${ui.esc(i.title)}">
+                 ${['open', 'claimed', 'returned', 'closed'].map((s) => `<option value="${s}"${s === i.status ? ' selected' : ''}>${s}</option>`).join('')}
+               </select>`,
+              `<button class="btn btn--ghost" data-admin-delete="${i.id}">Delete</button>`
             ])).join('')
-          : '<tr><td colspan="6" style="color:var(--muted)">No listings.</td></tr>';
+          : '<tr><td colspan="7" style="color:var(--muted)">No listings.</td></tr>';
+
+        const users = await api('/admin/users', { auth: true });
+        document.getElementById('users-count').textContent = `${users.count} accounts`;
+        document.getElementById('admin-users').innerHTML = users.users.length
+          ? users.users.map((u) => row([
+              ui.esc(u.name),
+              ui.esc(u.email),
+              `<span class="status">${ui.esc(u.role)}</span>`,
+              u.points,
+              ui.date(u.createdAt),
+              u.role === 'admin'
+                ? `<button class="btn btn--ghost" data-user="${u.id}" data-role="student">Make student</button>`
+                : `<button class="btn btn--ghost" data-user="${u.id}" data-role="admin">Make admin</button>`
+            ])).join('')
+          : '<tr><td colspan="6" style="color:var(--muted)">No accounts.</td></tr>';
 
         const claims = await api('/admin/claims', { auth: true });
         document.getElementById('claims-count').textContent = `${claims.count} claims`;
@@ -161,7 +192,67 @@
           ui.toast(err.message);
         }
       }
-    })();
+    }
+
+    /* ---------------- admin actions ---------------- */
+
+    // Changing the status dropdown on a listing saves immediately
+    document.addEventListener('change', async (event) => {
+      const select = event.target.closest('[data-admin-status]');
+      if (!select) return;
+      select.disabled = true;
+      try {
+        await api(`/admin/items/${select.dataset.adminStatus}/status`, {
+          method: 'PATCH',
+          body: { status: select.value },
+          auth: true
+        });
+        ui.toast(`Status set to ${select.value}`);
+      } catch (err) {
+        ui.toast(err.message);
+        await loadAdmin();
+      } finally {
+        select.disabled = false;
+      }
+    });
+
+    // Delete a listing, or promote / demote an account
+    document.addEventListener('click', async (event) => {
+      const remove = event.target.closest('[data-admin-delete]');
+      const role = event.target.closest('[data-role]');
+      const button = remove || role;
+      if (!button) return;
+
+      if (remove) {
+        const title = remove.closest('tr')?.querySelector('td')?.textContent?.trim() || 'this listing';
+        if (!window.confirm(`Delete "${title}"? Its claims are deleted too. This cannot be undone.`)) return;
+      }
+      if (role) {
+        const who = role.closest('tr')?.querySelector('td')?.textContent?.trim() || 'this account';
+        if (!window.confirm(`Change the role of "${who}" to ${role.dataset.role}?`)) return;
+      }
+
+      button.disabled = true;
+      try {
+        if (remove) {
+          await api(`/admin/items/${remove.dataset.adminDelete}`, { method: 'DELETE', auth: true });
+          ui.toast('Listing removed');
+        } else {
+          await api(`/admin/users/${role.dataset.user}/role`, {
+            method: 'PATCH',
+            body: { role: role.dataset.role },
+            auth: true
+          });
+          ui.toast(`Role changed to ${role.dataset.role}`);
+        }
+        await loadAdmin();
+      } catch (err) {
+        ui.toast(err.message);
+        button.disabled = false;
+      }
+    });
+
+    loadAdmin();
   </script>
 </body>
 </html>

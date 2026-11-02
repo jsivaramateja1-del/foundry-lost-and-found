@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Foundry - Campus Lost and Found API",
-    "description": "API testing evidence for the Sai University Web Technology project. Run 'Auth / Login (student)' and 'Auth / Login (admin)' first so the tokens are saved into collection variables. All other requests then work in order.",
+    "description": "Campus Lost and Found Portal - API collection.\n\nThis collection contains NO default credentials. Before running it, set these collection variables to accounts you created yourself:\n  studentEmail / studentPassword  - a normal student account\n  otherEmail / otherPassword      - a SECOND student account (a user cannot claim their own listing)\n  adminEmail / adminPassword      - an admin created with `npm run create-admin`\n\nSelect 'No Environment' in Postman so a stale environment variable cannot shadow these.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -32,6 +32,36 @@
     {
       "key": "regEmail",
       "value": ""
+    },
+    {
+      "key": "studentEmail",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "studentPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminEmail",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "otherEmail",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "otherPassword",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -184,7 +214,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"student@saiuniversity.edu.in\",\n  \"password\": \"student123\"\n}"
+              "raw": "{\n  \"email\": \"{{studentEmail}}\",\n  \"password\": \"{{studentPassword}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/login",
@@ -222,7 +252,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"admin@saiuniversity.edu.in\",\n  \"password\": \"admin123\"\n}"
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/login",
@@ -238,7 +268,7 @@
           }
         },
         {
-          "name": "Login (priya) - saves priyaToken",
+          "name": "Login (second student) - saves otherToken",
           "event": [
             {
               "listen": "test",
@@ -264,7 +294,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"priya@saiuniversity.edu.in\",\n  \"password\": \"priya123\"\n}"
+              "raw": "{\n  \"email\": \"{{otherEmail}}\",\n  \"password\": \"{{otherPassword}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/login",
@@ -301,7 +331,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"student@saiuniversity.edu.in\",\n  \"password\": \"definitely-wrong\"\n}"
+              "raw": "{\n  \"email\": \"{{studentEmail}}\",\n  \"password\": \"definitely-wrong\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/login",

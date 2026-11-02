@@ -8,6 +8,30 @@ const router = express.Router();
 
 const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// Largest image we store: 400 KB once decoded. The frontend shrinks a photo
+// before sending it, so this is a backstop, not the normal path.
+const IMAGE_LIMIT_BYTES = 400 * 1024;
+const IMAGE_DATA_URL = /^data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$/;
+
+/**
+ * Accept either an https link or a small base64 image; refuse anything else.
+ * Returns an error message, or null when the value is fine.
+ */
+const validateImage = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const str = String(value);
+  if (/^https:\/\/[^\s]+$/.test(str)) return null;
+  if (!IMAGE_DATA_URL.test(str)) {
+    return 'image must be an https link or a PNG, JPEG or WebP data URL';
+  }
+  const base64 = str.split(',')[1] || '';
+  const bytes = Math.floor((base64.length * 3) / 4);
+  if (bytes > IMAGE_LIMIT_BYTES) {
+    return `image must be smaller than ${Math.round(IMAGE_LIMIT_BYTES / 1024)} KB`;
+  }
+  return null;
+};
+
 /** Shape an item for the API, exposing only the reporter's display name */
 const publicItem = (doc) => {
   const obj = doc.toObject ? doc.toObject() : doc;
@@ -61,6 +85,8 @@ const validateItemBody = (body, { partial = false } = {}) => {
   if (body.date !== undefined && Number.isNaN(new Date(body.date).getTime())) {
     errors.push('date must be a valid date');
   }
+  const imageError = validateImage(body.imageUrl);
+  if (imageError) errors.push(imageError);
   return errors;
 };
 
@@ -71,11 +97,29 @@ const validateItemBody = (body, { partial = false } = {}) => {
  */
 router.get('/', async (req, res, next) => {
   try {
-    const { q, category, location, type, status, sort = 'newest' } = req.query;
+    const { q, category, location, type, status, sort = 'newest', from, to } = req.query;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
 
+    // Optional date range on the date the item was lost or found
+    if (from && Number.isNaN(new Date(from).getTime())) {
+      return res.status(400).json({ message: 'from must be a valid date' });
+    }
+    if (to && Number.isNaN(new Date(to).getTime())) {
+      return res.status(400).json({ message: 'to must be a valid date' });
+    }
+
     const filter = {};
+    if (from || to) {
+      filter.date = {};
+      if (from) filter.date.$gte = new Date(from);
+      if (to) {
+        // A date-only value such as 2026-10-31 should include that whole day
+        const end = new Date(to);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(String(to))) end.setHours(23, 59, 59, 999);
+        filter.date.$lte = end;
+      }
+    }
     if (q && String(q).trim()) {
       const rx = new RegExp(escapeRegex(String(q).trim()), 'i');
       filter.$or = [{ title: rx }, { description: rx }, { customCategory: rx }];

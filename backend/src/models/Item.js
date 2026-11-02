@@ -68,8 +68,10 @@ const itemSchema = new mongoose.Schema(
       enum: ['open', 'claimed', 'returned', 'closed'],
       default: 'open'
     },
-    // Optional image: a URL or a small base64 data URL
-    imageUrl: { type: String, trim: true, maxlength: 500000, default: '' },
+    // Optional image: an https URL or a small base64 data URL.
+    // The route caps the decoded image at 400 KB; base64 adds about a third,
+    // so this limit sits above 400 KB on purpose.
+    imageUrl: { type: String, trim: true, maxlength: 700000, default: '' },
     reportedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
