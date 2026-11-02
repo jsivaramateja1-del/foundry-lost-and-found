@@ -4,6 +4,7 @@ const Item = require('../models/Item');
 const { CATEGORIES, LOCATIONS } = require('../models/Item');
 const { protect, requireVerified } = require('../middleware/auth');
 const { notify } = require('../utils/notify');
+const Report = require('../models/Report');
 
 const router = express.Router();
 
@@ -256,6 +257,56 @@ router.get('/:id/similar', async (req, res, next) => {
 
     res.status(200).json({ count: candidates.length, items: candidates.map(publicItem) });
   } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/items/:id/report
+ * Protected. Flag a listing as spam, inappropriate, suspicious, incorrect or
+ * "other". One report per student per listing. Only an admin reads these.
+ */
+router.post('/:id/report', protect, async (req, res, next) => {
+  try {
+    const { reason, details } = req.body;
+
+    if (!Report.REPORT_REASONS.includes(reason)) {
+      return res.status(400).json({
+        message: `reason must be one of: ${Report.REPORT_REASONS.join(', ')}`
+      });
+    }
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid item id' });
+    }
+
+    const item = await Item.findById(req.params.id);
+    if (!item) return res.status(404).json({ message: 'Item not found' });
+
+    if (item.reportedBy.toString() === req.user._id.toString()) {
+      return res.status(400).json({ message: 'You cannot report your own listing' });
+    }
+
+    const existing = await Report.findOne({ item: item._id, reportedBy: req.user._id });
+    if (existing) {
+      return res.status(409).json({ message: 'You have already reported this listing' });
+    }
+
+    const report = await Report.create({
+      item: item._id,
+      reportedBy: req.user._id,
+      reason,
+      details: String(details || '').trim()
+    });
+
+    res.status(201).json({
+      message: 'Thank you. An administrator will review this listing.',
+      report: { id: report._id, reason: report.reason, status: report.status, createdAt: report.createdAt }
+    });
+  } catch (err) {
+    // The unique index is the real guard against a double submit
+    if (err.code === 11000) {
+      return res.status(409).json({ message: 'You have already reported this listing' });
+    }
     next(err);
   }
 });

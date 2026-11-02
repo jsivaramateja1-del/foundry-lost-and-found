@@ -304,6 +304,33 @@
       <p class="form-note" style="margin-top:1rem;">
         Claims are sent to whoever posted this listing. No email or message leaves this prototype.
       </p>
+
+      <div class="report-listing">
+        <button type="button" class="btn btn--ghost" id="btn-report-item" aria-expanded="false" aria-controls="report-item-form">
+          Report this listing
+        </button>
+        <form class="form-grid" id="report-item-form" hidden>
+          <div class="form-error" id="report-item-error" role="alert"></div>
+          <div class="form-success" id="report-item-success" role="status"></div>
+          <div class="field">
+            <label for="ri-reason">Why are you reporting it?</label>
+            <select class="select" id="ri-reason">
+              <option value="spam">Spam or advertising</option>
+              <option value="inappropriate">Inappropriate content</option>
+              <option value="suspicious">Looks suspicious or fake</option>
+              <option value="incorrect">Wrong or misleading information</option>
+              <option value="other">Something else</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="ri-details">Anything else (optional)</label>
+            <textarea class="textarea" id="ri-details" maxlength="500" placeholder="A sentence is enough."></textarea>
+          </div>
+          <div>
+            <button type="submit" class="btn btn--solid" id="ri-submit">Send report</button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 

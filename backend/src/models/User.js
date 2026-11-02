@@ -34,6 +34,11 @@ const userSchema = new mongoose.Schema(
     // Email verification. Only used when EMAIL_VERIFICATION=enabled; accounts
     // created while it is disabled are verified immediately.
     emailVerified: { type: Boolean, default: false },
+    // Set by an administrator when an account is misused. A suspended account
+    // cannot log in or use any protected route.
+    suspended: { type: Boolean, default: false },
+    suspendedReason: { type: String, trim: true, maxlength: 200 },
+    suspendedAt: { type: Date },
     // Only the hash of the token is stored, so a database leak cannot be used
     // to verify somebody else's address
     verificationTokenHash: { type: String, select: false },
@@ -64,6 +69,7 @@ userSchema.methods.toSafeObject = function () {
     points: this.points,
     returns: this.returns,
     emailVerified: Boolean(this.emailVerified),
+    suspended: Boolean(this.suspended),
     createdAt: this.createdAt
   };
 };

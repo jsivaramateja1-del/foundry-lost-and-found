@@ -22,6 +22,8 @@ Live demo: <https://foundry-lost-and-found.onrender.com>
 - **Review claims** on your own listings from your dashboard: approve or reject.
 - **Administer** the site: statistics, charts, every listing, every claim, every
   account, plus the ability to remove a listing or change someone's role.
+- **Report a listing** that looks like spam, abuse or a fake, and an
+  administrator reviews it from a moderation queue.
 - **Get notified** in the app when someone claims your item, when a claim is
   decided, and when an item is marked returned.
 - **Earn points** when a return is completed; a public leaderboard ranks students.
@@ -258,7 +260,7 @@ No database needed. Proves the app loads, all 24 routes are registered, the
 schemas reject bad input, bcrypt and JWT round-trip, no fallback secret exists,
 no demo password appears anywhere in the repository, and the old seed script is
 gone, plus unit tests for the email-domain rule and the verification tokens.
-Expected last line: `48 passed, 0 failed`.
+Expected last line: `56 passed, 0 failed`.
 
 ```bash
 npm test
@@ -272,7 +274,7 @@ set MONGO_URI=mongodb://localhost:27017/foundry-test
 npm test
 ```
 
-The Postman collection in `backend/postman/` has 40 requests with assertions,
+The Postman collection in `backend/postman/` has 48 requests with assertions,
 across Health, Auth, Items, Claims, Dashboards, Cleanup and Notifications. It
 includes the domain-refusal case, email verification and the handover step.
 It contains **no credentials** — set the collection variables `studentEmail`,
@@ -301,6 +303,7 @@ All responses are JSON, including errors. Every protected route requires
 | GET | `/api/items/stats` | public — genuine counters for the homepage tiles |
 | GET | `/api/items/:id` | public |
 | GET | `/api/items/:id/similar` | public — duplicate-item alert |
+| POST | `/api/items/:id/report` | logged in — flag a listing, once per student |
 | POST | `/api/items` | logged in |
 | PUT | `/api/items/:id` | owner or admin |
 | PATCH | `/api/items/:id/status` | owner or admin |
@@ -315,6 +318,10 @@ All responses are JSON, including errors. Every protected route requires
 | GET | `/api/admin/items` | admin |
 | GET | `/api/admin/claims` | admin |
 | GET | `/api/admin/users` | admin |
+| GET | `/api/admin/reports` | admin — moderation queue (`?status=open|resolved|dismissed|all`) |
+| PATCH | `/api/admin/reports/:id` | admin — resolve or dismiss a report |
+| PATCH | `/api/admin/users/:id/suspend` | admin — suspend or reinstate a student |
+| GET | `/api/admin/audit` | admin — the last 50 administrative actions |
 | PATCH | `/api/admin/items/:id/status` | admin |
 | DELETE | `/api/admin/items/:id` | admin |
 | PATCH | `/api/admin/users/:id/role` | admin |
@@ -323,7 +330,32 @@ All responses are JSON, including errors. Every protected route requires
 | PATCH | `/api/notifications/:id/read` | logged in — mark one as read |
 | PATCH | `/api/notifications/read-all` | logged in — mark all as read |
 
-## 10. Email verification (implemented, off by default)
+## 10. Moderation
+
+Students can flag a listing from the item dialog: spam, inappropriate,
+suspicious, incorrect or other, with an optional note. One report per student
+per listing — a second attempt returns `409`, and the unique index on
+`{ item, reportedBy }` enforces that in the database too. You cannot report your
+own listing.
+
+Administrators get a **Reported listings** queue on the admin page, with Resolve
+and Dismiss. Resolving a report is a judgement recorded against it; removing the
+listing is a separate action (`DELETE /api/admin/items/:id`), so a moderator
+cannot accidentally delete evidence while triaging.
+
+**Suspending an account** blocks login and every protected route with a clear
+message. Two guard rails: an administrator cannot suspend themselves, and cannot
+suspend another administrator — otherwise one compromised admin could lock out
+the rest. Suspended students are marked in the accounts table and can be
+reinstated at any time.
+
+**Every administrative action is recorded** in an audit log shown at the bottom
+of the admin page: listing deleted, listing status changed, role changed, user
+suspended or reinstated, report resolved or dismissed. The actor's email is
+stored with each entry so the log still reads correctly if an account is later
+removed.
+
+## 11. Email verification (implemented, off by default)
 
 The full flow exists: a random 32-byte token is created on registration, only
 its SHA-256 hash is stored, it expires in 24 hours, it is consumed once, and
@@ -354,7 +386,7 @@ SMTP_FROM=Foundry <no-reply@saiuniversity.edu.in>
 Any standard SMTP account works; a Gmail account with an app password is
 enough for a demo. No paid service is required or recommended.
 
-## 11. Security
+## 12. Security
 
 - Passwords are hashed with bcrypt and never returned by any endpoint.
 - Authorisation is enforced on the server in each route, never in the UI. A
@@ -373,7 +405,7 @@ enough for a demo. No paid service is required or recommended.
   login/registration are rate limited.
 - `.env` is git-ignored; `.env.example` contains placeholders only.
 
-## 12. Deploying to Render
+## 13. Deploying to Render
 
 - Root Directory: `backend`
 - Build Command: `npm install`
@@ -387,7 +419,7 @@ locally against the same `MONGO_URI`.
 The free tier sleeps when idle, so the first request after a pause can take
 30–50 seconds. That is the host, not the application.
 
-## 13. Known limitations
+## 14. Known limitations
 
 - No email notifications; coordination happens inside the site through in-app
   notifications and the dashboard.
@@ -395,8 +427,10 @@ The free tier sleeps when idle, so the first request after a pause can take
   SMTP (see section 10). Until then every account is treated as verified.
 - **No password reset.** It needs working SMTP; once section 10 is configured it
   is a small addition, but it is not built and is not pretended to be.
-- **No listing moderation queue.** Students cannot report a listing, and there
-  is no admin audit log. Administrators can delete a listing directly.
+- **Moderation is deliberately manual.** Reports are queued for an
+  administrator; nothing is auto-removed or auto-suspended by a threshold.
+- **No notifications to administrators** when a report arrives — the open-report
+  count on the admin dashboard is the signal.
 - **No QR codes, listing expiry or account deletion.** All three were
   considered and left out: QR needs an extra dependency, and expiry and account
   deletion need a data-retention policy this project does not have.

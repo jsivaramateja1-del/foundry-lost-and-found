@@ -879,3 +879,7 @@ input[type="file"].input { padding: 0.55rem; cursor: pointer; }
 /* Pagination footer under the browse grid */
 .load-more { display: grid; gap: 0.6rem; justify-items: center; padding: 2rem 0 0; }
 .load-more .form-note { margin: 0; }
+
+/* "Report this listing" block inside the item modal */
+.report-listing { margin-top: 1.25rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+.report-listing .form-grid { margin-top: 1rem; }

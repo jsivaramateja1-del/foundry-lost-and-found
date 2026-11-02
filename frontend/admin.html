@@ -55,6 +55,8 @@
         <div class="metric"><div class="metric__value" data-total="returned">—</div><div class="metric__label">Returned</div></div>
         <div class="metric"><div class="metric__value" data-total="claims">—</div><div class="metric__label">Claims</div></div>
         <div class="metric"><div class="metric__value" data-total="pendingClaims">—</div><div class="metric__label">Pending claims</div></div>
+        <div class="metric"><div class="metric__value" data-total="openReports">—</div><div class="metric__label">Open reports</div></div>
+        <div class="metric"><div class="metric__value" data-total="suspendedUsers">—</div><div class="metric__label">Suspended</div></div>
         <div class="metric"><div class="metric__value" data-total="users">—</div><div class="metric__label">Users</div></div>
       </div>
 
@@ -96,6 +98,19 @@
 
       <section class="panel">
         <div class="panel__head">
+          <h2>Reported listings</h2>
+          <span class="form-note" id="reports-count"></span>
+        </div>
+        <div class="panel__body" style="overflow-x:auto;">
+          <table class="table">
+            <thead><tr><th>Listing</th><th>Reported by</th><th>Reason</th><th>Details</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody id="admin-reports"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel__head">
           <h2>All claims</h2>
           <span class="form-note" id="claims-count"></span>
         </div>
@@ -103,6 +118,19 @@
           <table class="table">
             <thead><tr><th>Item</th><th>Claimed by</th><th>Message</th><th>Status</th><th>Sent</th></tr></thead>
             <tbody id="admin-claims"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel__head">
+          <h2>Recent administrative actions</h2>
+          <span class="form-note" id="audit-count"></span>
+        </div>
+        <div class="panel__body" style="overflow-x:auto;">
+          <table class="table">
+            <thead><tr><th>Action</th><th>Administrator</th><th>Detail</th><th>When</th></tr></thead>
+            <tbody id="admin-audit"></tbody>
           </table>
         </div>
       </section>
@@ -175,14 +203,48 @@
           ? users.users.map((u) => row([
               ui.esc(u.name),
               ui.esc(u.email),
-              `<span class="status">${ui.esc(u.role)}</span>`,
+              `<span class="status">${ui.esc(u.role)}</span>${u.suspended ? ' <span class="status status--rejected">suspended</span>' : ''}`,
               u.points,
               ui.date(u.createdAt),
-              u.role === 'admin'
-                ? `<button class="btn btn--ghost" data-user="${u.id}" data-role="student">Make student</button>`
-                : `<button class="btn btn--ghost" data-user="${u.id}" data-role="admin">Make admin</button>`
+              [
+                u.role === 'admin'
+                  ? `<button class="btn btn--ghost" data-user="${u.id}" data-role="student">Make student</button>`
+                  : `<button class="btn btn--ghost" data-user="${u.id}" data-role="admin">Make admin</button>`,
+                u.role === 'admin'
+                  ? ''
+                  : u.suspended
+                    ? `<button class="btn btn--ghost" data-unsuspend="${u.id}">Reinstate</button>`
+                    : `<button class="btn btn--ghost" data-suspend="${u.id}">Suspend</button>`
+              ].join(' ')
             ])).join('')
           : '<tr><td colspan="6" style="color:var(--muted)">No accounts.</td></tr>';
+
+        const reports = await api('/admin/reports', { auth: true });
+        document.getElementById('reports-count').textContent = `${reports.count} open`;
+        document.getElementById('admin-reports').innerHTML = reports.reports.length
+          ? reports.reports.map((r) => row([
+              r.item ? ui.esc(r.item.title) : '<span class="form-note">Listing removed</span>',
+              ui.esc(r.reportedBy?.name || '—'),
+              ui.esc(r.reason),
+              ui.esc(r.details || '—'),
+              `<span class="status ${r.status === 'open' ? 'status--pending' : 'status--approved'}">${ui.esc(r.status)}</span>`,
+              r.status === 'open'
+                ? `<button class="btn btn--ghost" data-resolve="${r.id}">Resolve</button>
+                   <button class="btn btn--ghost" data-dismiss="${r.id}">Dismiss</button>`
+                : '<span class="form-note">Closed</span>'
+            ])).join('')
+          : '<tr><td colspan="6" style="color:var(--muted)">Nothing has been reported.</td></tr>';
+
+        const auditTrail = await api('/admin/audit', { auth: true });
+        document.getElementById('audit-count').textContent = `${auditTrail.count} recent`;
+        document.getElementById('admin-audit').innerHTML = auditTrail.entries.length
+          ? auditTrail.entries.map((e) => row([
+              ui.esc(e.action.replace(/_/g, ' ')),
+              ui.esc(e.actor || '—'),
+              ui.esc(e.note || '—'),
+              ui.date(e.createdAt)
+            ])).join('')
+          : '<tr><td colspan="4" style="color:var(--muted)">No administrative actions recorded yet.</td></tr>';
 
         const claims = await api('/admin/claims', { auth: true });
         document.getElementById('claims-count').textContent = `${claims.count} claims`;
@@ -229,11 +291,15 @@
       }
     });
 
-    // Delete a listing, or promote / demote an account
+    // Delete a listing, promote / demote an account, resolve a report, suspend
     document.addEventListener('click', async (event) => {
       const remove = event.target.closest('[data-admin-delete]');
       const role = event.target.closest('[data-role]');
-      const button = remove || role;
+      const resolve = event.target.closest('[data-resolve]');
+      const dismiss = event.target.closest('[data-dismiss]');
+      const suspend = event.target.closest('[data-suspend]');
+      const reinstate = event.target.closest('[data-unsuspend]');
+      const button = remove || role || resolve || dismiss || suspend || reinstate;
       if (!button) return;
 
       if (remove) {
@@ -245,9 +311,37 @@
         if (!window.confirm(`Change the role of "${who}" to ${role.dataset.role}?`)) return;
       }
 
+      if (suspend) {
+        const who = suspend.closest('tr')?.querySelector('td')?.textContent?.trim() || 'this account';
+        const reason = window.prompt(`Suspend "${who}"? Give a short reason (the student will see it in the logs).`, 'Misuse of the portal');
+        if (reason === null) return;
+        button.disabled = true;
+        try {
+          await api(`/admin/users/${suspend.dataset.suspend}/suspend`, {
+            method: 'PATCH', body: { suspended: true, reason }, auth: true
+          });
+          ui.toast('Account suspended');
+          await loadAdmin();
+        } catch (err) {
+          ui.toast(err.message);
+          button.disabled = false;
+        }
+        return;
+      }
+
       button.disabled = true;
       try {
-        if (remove) {
+        if (resolve || dismiss) {
+          const id = (resolve || dismiss).dataset.resolve || (resolve || dismiss).dataset.dismiss;
+          const status = resolve ? 'resolved' : 'dismissed';
+          await api(`/admin/reports/${id}`, { method: 'PATCH', body: { status }, auth: true });
+          ui.toast(`Report ${status}`);
+        } else if (reinstate) {
+          await api(`/admin/users/${reinstate.dataset.unsuspend}/suspend`, {
+            method: 'PATCH', body: { suspended: false }, auth: true
+          });
+          ui.toast('Account reinstated');
+        } else if (remove) {
           await api(`/admin/items/${remove.dataset.adminDelete}`, { method: 'DELETE', auth: true });
           ui.toast('Listing removed');
         } else {

@@ -361,6 +361,13 @@ async function openItem(id) {
       claimBtn.textContent = 'Claim this item';
     }
 
+    // The report form belongs to one listing only, so reset it every time
+    const reportFormEl = document.getElementById('report-item-form');
+    reportFormEl.hidden = true;
+    document.getElementById('btn-report-item').setAttribute('aria-expanded', 'false');
+    showFormMessage('report-item-error', '');
+    showFormMessage('report-item-success', '');
+
     openModal('modal-item');
 
     // Duplicate-item alert: show similar listings if any exist
@@ -617,6 +624,48 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('report-form').addEventListener('submit', submitReport);
   document.getElementById('claim-form').addEventListener('submit', submitClaim);
   document.getElementById('btn-claim').addEventListener('click', openClaim);
+
+  /* ---------------- report a listing ---------------- */
+  const reportToggle = document.getElementById('btn-report-item');
+  const reportForm = document.getElementById('report-item-form');
+
+  reportToggle.addEventListener('click', () => {
+    if (!Auth.isLoggedIn) {
+      ui.toast('Please log in to report a listing');
+      Auth.requireLogin('index.html');
+      return;
+    }
+    const willOpen = reportForm.hidden;
+    reportForm.hidden = !willOpen;
+    reportToggle.setAttribute('aria-expanded', String(willOpen));
+  });
+
+  reportForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    showFormMessage('report-item-error', '');
+    showFormMessage('report-item-success', '');
+
+    const btn = document.getElementById('ri-submit');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+    try {
+      await api(`/items/${state.activeItemId}/report`, {
+        method: 'POST',
+        body: {
+          reason: document.getElementById('ri-reason').value,
+          details: document.getElementById('ri-details').value.trim()
+        },
+        auth: true
+      });
+      reportForm.reset();
+      showFormMessage('report-item-success', 'Thank you. An administrator will review this listing.');
+    } catch (err) {
+      showFormMessage('report-item-error', err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Send report';
+    }
+  });
 
   // close buttons, backdrop click, Escape
   document.querySelectorAll('[data-close-modal]').forEach((btn) => {

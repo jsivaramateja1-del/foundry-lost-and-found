@@ -79,6 +79,11 @@ const mountPrefix = (src) => {
     'GET /api/admin/items',
     'GET /api/admin/claims',
     'GET /api/admin/users',
+    'GET /api/admin/reports',
+    'PATCH /api/admin/reports/:id',
+    'PATCH /api/admin/users/:id/suspend',
+    'GET /api/admin/audit',
+    'POST /api/items/:id/report',
     'DELETE /api/admin/items/:id',
     'PATCH /api/admin/users/:id/role',
     'GET /api/leaderboard',
@@ -270,6 +275,49 @@ const mountPrefix = (src) => {
     emailUtils.verificationExpiry().getTime() > Date.now());
   check('email verification is off by default',
     emailUtils.emailVerificationEnabled() === false);
+
+  // 10. Moderation models
+  const Report = require('../src/models/Report');
+  const AuditLog = require('../src/models/AuditLog');
+
+  const emptyReport = new Report({});
+  const reportErr = emptyReport.validateSync();
+  check('Report schema requires an item, a reporter and a reason',
+    !!reportErr && !!reportErr.errors.item && !!reportErr.errors.reportedBy && !!reportErr.errors.reason);
+
+  const badReason = new Report({
+    item: '64d2f1f1f1f1f1f1f1f1f1f1',
+    reportedBy: '64d2f1f1f1f1f1f1f1f1f1f1',
+    reason: 'not-a-reason'
+  });
+  check('Report schema refuses an unknown reason',
+    !!badReason.validateSync() && !!badReason.validateSync().errors.reason);
+
+  check('the five report reasons are the ones the UI offers',
+    JSON.stringify(Report.REPORT_REASONS) === JSON.stringify(['spam', 'inappropriate', 'suspicious', 'incorrect', 'other']));
+
+  const goodReport = new Report({
+    item: '64d2f1f1f1f1f1f1f1f1f1f1',
+    reportedBy: '64d2f1f1f1f1f1f1f1f1f1f1',
+    reason: 'spam'
+  });
+  check('a valid report passes validation and starts open',
+    goodReport.validateSync() === undefined && goodReport.status === 'open');
+
+  check('AuditLog requires an actor and a known action',
+    !!new AuditLog({}).validateSync() && !!new AuditLog({ actor: '64d2f1f1f1f1f1f1f1f1f1f1', action: 'nonsense' }).validateSync());
+
+  check('AuditLog accepts a real action',
+    new AuditLog({ actor: '64d2f1f1f1f1f1f1f1f1f1f1', action: 'user_suspended' }).validateSync() === undefined);
+
+  // 11. Suspension is off by default, so no existing account changes behaviour
+  const freshUser = new User({ name: 'Suspended Check', email: 'a@scds.saiuniversity.edu.in', password: 'secret123' });
+  check('a new account is not suspended', freshUser.suspended === false);
+  check('toSafeObject exposes the suspension flag, never the password hash',
+    (() => {
+      const safe = freshUser.toSafeObject();
+      return safe.suspended === false && safe.password === undefined;
+    })());
 
   console.log('\n' + results.join('\n'));
   console.log(`\n${passed} passed, ${failed} failed`);

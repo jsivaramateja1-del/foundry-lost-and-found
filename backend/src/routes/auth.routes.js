@@ -195,6 +195,11 @@ router.post('/login', authLimiter, async (req, res, next) => {
     if (!user || !(await user.matchPassword(password))) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
+    if (user.suspended) {
+      return res.status(403).json({
+        message: 'This account has been suspended. Contact the administrator if you think this is a mistake.'
+      });
+    }
 
     res.status(200).json({ token: signToken(user._id), user: user.toSafeObject() });
   } catch (err) {
