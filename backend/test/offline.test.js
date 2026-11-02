@@ -82,6 +82,10 @@ const mountPrefix = (src) => {
     'DELETE /api/admin/items/:id',
     'PATCH /api/admin/users/:id/role',
     'GET /api/leaderboard',
+    'GET /api/items/stats',
+    'GET /api/notifications',
+    'PATCH /api/notifications/read-all',
+    'PATCH /api/notifications/:id/read',
     'GET /api/health'
   ];
   const missing = required.filter((r) => !routes.includes(r));
@@ -178,6 +182,29 @@ const mountPrefix = (src) => {
   });
   check('no demo password appears in the repository',
     offenders.length === 0, offenders.join('; '));
+
+  // 7. The promises the UI makes have to match the code
+  const itemSource = fs.readFileSync(path.join(backendDir, 'src/routes/item.routes.js'), 'utf8');
+  check('keyword search covers the location fields',
+    /location: rx/.test(itemSource) && /customLocation: rx/.test(itemSource));
+
+  const frontendDir = path.join(projectRoot, 'frontend');
+  const misleading = [];
+  ['index.html', 'auth.html'].forEach((page) => {
+    const body = fs.readFileSync(path.join(frontendDir, page), 'utf8');
+    ['seeded sample listings', 'Demo deployment', 'demo accounts'].forEach((phrase) => {
+      if (body.toLowerCase().includes(phrase.toLowerCase())) misleading.push(`${page}: "${phrase}"`);
+    });
+  });
+  check('no misleading demo wording is left in the UI', misleading.length === 0, misleading.join('; '));
+
+  const Notification = require('../src/models/Notification');
+  check('Notification schema requires a user, type and message',
+    !!new Notification({}).validateSync());
+
+  const statsSource = fs.readFileSync(path.join(backendDir, 'src/routes/dashboard.routes.js'), 'utf8');
+  check('dashboard stats report claimed listings',
+    /claimed: items\.filter/.test(statsSource));
 
   console.log('\n' + results.join('\n'));
   console.log(`\n${passed} passed, ${failed} failed`);

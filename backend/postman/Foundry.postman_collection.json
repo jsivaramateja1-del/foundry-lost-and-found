@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Foundry - Campus Lost and Found API",
-    "description": "Campus Lost and Found Portal - API collection.\n\nThis collection contains NO default credentials. Before running it, set these collection variables to accounts you created yourself:\n  studentEmail / studentPassword  - a normal student account\n  otherEmail / otherPassword      - a SECOND student account (a user cannot claim their own listing)\n  adminEmail / adminPassword      - an admin created with `npm run create-admin`\n\nSelect 'No Environment' in Postman so a stale environment variable cannot shadow these.",
+    "description": "Campus Lost and Found Portal - API collection.\n\nCovers: registration, login, auth, listings (create/read/update/delete), search and filters, stats, claims (submit/approve), dashboards, admin listing and user management, notifications, and the unauthorised and invalid-input cases.\n\nNo credentials are stored in this collection. Set studentEmail, studentPassword, otherEmail, otherPassword, adminEmail and adminPassword to accounts you created, and choose 'No Environment'.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -489,6 +489,40 @@
               ]
             }
           }
+        },
+        {
+          "name": "Item stats (200)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/items/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "items",
+                "stats"
+              ]
+            },
+            "description": "Genuine counts for the homepage tiles: total, lost, found, returned, claimed, active."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('has the six counters', () => {",
+                  "  ['total','lost','found','returned','claimed','active'].forEach((k) => pm.expect(b).to.have.property(k));",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Create item invalid category (400)",
@@ -1233,6 +1267,107 @@
               ]
             }
           }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "My notifications (200)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "notifications"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('has an unread count', () => pm.expect(pm.response.json()).to.have.property('unread'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Notifications without token (401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "notifications"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark all notifications read (200)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications/read-all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "notifications",
+                "read-all"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
         }
       ]
     }

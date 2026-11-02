@@ -26,7 +26,7 @@
         <h2 class="display">A little less searching.<br /><em>A little more finding.</em></h2>
         <p>Log in to report items, claim what's yours, and keep track of everything you've posted.</p>
       </div>
-      <p class="form-note">Demo deployment — seeded sample listings, real accounts and a real database.</p>
+      <p class="form-note">Create an account to report items, claim what is yours, and track everything you have posted.</p>
     </section>
 
     <section class="auth-panel">
@@ -44,7 +44,10 @@
           </div>
           <div class="field">
             <label for="login-password">Password</label>
-            <input class="input" type="password" id="login-password" autocomplete="current-password" required placeholder="••••••••" />
+            <div class="password-field">
+              <input class="input" type="password" id="login-password" autocomplete="current-password" required placeholder="••••••••" />
+              <button type="button" class="password-field__toggle" data-toggle-password="login-password" aria-label="Show password">Show</button>
+            </div>
           </div>
           <button type="submit" class="btn btn--solid btn--block" id="login-submit">Log in</button>
           <p class="form-note">There is no password reset flow in this build.</p>
@@ -62,13 +65,24 @@
           </div>
           <div class="field">
             <label for="register-password">Password</label>
-            <input class="input" type="password" id="register-password" autocomplete="new-password" required minlength="6" placeholder="At least 6 characters" />
+            <div class="password-field">
+              <input class="input" type="password" id="register-password" autocomplete="new-password" required minlength="6" placeholder="At least 6 characters" />
+              <button type="button" class="password-field__toggle" data-toggle-password="register-password" aria-label="Show password">Show</button>
+            </div>
+            <div class="strength" id="password-strength" data-strength="0" aria-live="polite">
+              <div class="strength__bar"><span></span></div>
+              <span class="strength__label" id="password-strength-label">Use at least 6 characters</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="register-confirm">Confirm password</label>
+            <input class="input" type="password" id="register-confirm" autocomplete="new-password" required placeholder="Type it again" />
           </div>
           <button type="submit" class="btn btn--solid btn--block" id="register-submit">Create account</button>
         </form>
 
         <div class="demo-creds">
-          <strong style="color:var(--paper);">No demo accounts</strong><br />
+          <strong style="color:var(--paper);">No default accounts</strong><br />
           Create your own account above. An administrator account is created
           separately by the site owner, using <code>npm run create-admin</code>.
         </div>

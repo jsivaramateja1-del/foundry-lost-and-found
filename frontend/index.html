@@ -28,6 +28,18 @@
         <a href="admin.html" class="btn btn--ghost" data-admin-only hidden>Admin</a>
         <button class="btn btn--ghost" data-auth-only id="header-logout" hidden>Log out</button>
         <a href="auth.html" class="btn btn--ghost" data-guest-only>Log in</a>
+        <div class="notifications" data-notifications data-auth-only hidden>
+          <button class="btn btn--ghost" data-notif-toggle aria-expanded="false" aria-controls="notif-panel">
+            Alerts <span class="notifications__badge" data-notif-badge hidden>0</span>
+          </button>
+          <div class="notifications__panel" id="notif-panel" data-notif-panel hidden>
+            <div class="notifications__head">
+              <strong>Notifications</strong>
+              <button class="btn btn--ghost" data-notif-read-all>Mark all read</button>
+            </div>
+            <ul class="notifications__list" data-notif-list></ul>
+          </div>
+        </div>
         <button class="btn btn--solid" data-open-report="lost">Report an item</button>
         <button class="menu-toggle" aria-expanded="false" aria-controls="primary-nav">Menu</button>
       </div>
@@ -94,8 +106,12 @@
           <div class="stat__value" id="stat-returned">—</div>
           <div class="stat__label">Successful returns</div>
         </div>
+        <div class="stat">
+          <div class="stat__value" id="stat-active">—</div>
+          <div class="stat__label">Active listings</div>
+        </div>
       </div>
-      <p class="form-note" style="padding: 1rem 0 0;">Figures are calculated live from the listings currently in the database.</p>
+      <p class="form-note" style="padding: 1rem 0 0;">Every figure above is counted by the database and refreshed each time this page loads.</p>
     </section>
 
     <!-- ============ BROWSE ============ -->
@@ -107,7 +123,7 @@
             <h2 class="display">What's been reported</h2>
           </div>
           <p class="form-note" style="max-width: 34ch;">
-            This deployment ships with seeded sample listings. Post your own and it appears here straight away.
+            Everything here is posted by students. Report an item and it appears on the board immediately.
           </p>
         </div>
       </div>
@@ -259,7 +275,7 @@
         </div>
       </div>
       <div class="footer__bottom">
-        <span class="disclaimer">Demo deployment — seeded sample listings. Accounts and reports are stored in a real database.</span>
+        <span class="disclaimer">Every listing on this site was posted by a student of Sai University.</span>
         <span>Built for Sai University · 2026</span>
       </div>
     </div>

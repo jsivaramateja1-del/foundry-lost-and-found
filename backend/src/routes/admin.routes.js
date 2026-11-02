@@ -15,14 +15,15 @@ router.use(protect, adminOnly);
  */
 router.get('/stats', async (req, res, next) => {
   try {
-    const [totalItems, totalLost, totalFound, totalReturned, totalClaims, totalUsers] =
+    const [totalItems, totalLost, totalFound, totalReturned, totalClaims, totalUsers, pendingClaims] =
       await Promise.all([
         Item.countDocuments(),
         Item.countDocuments({ type: 'lost' }),
         Item.countDocuments({ type: 'found' }),
         Item.countDocuments({ status: 'returned' }),
         Claim.countDocuments(),
-        User.countDocuments()
+        User.countDocuments(),
+        Claim.countDocuments({ status: 'pending' })
       ]);
 
     const byCategory = await Item.aggregate([
@@ -56,6 +57,7 @@ router.get('/stats', async (req, res, next) => {
         found: totalFound,
         returned: totalReturned,
         claims: totalClaims,
+        pendingClaims,
         users: totalUsers,
         open: totalItems - totalReturned
       },

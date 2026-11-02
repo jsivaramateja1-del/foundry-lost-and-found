@@ -20,6 +20,18 @@
       </nav>
       <div class="header-actions">
         <span class="form-note" id="who"></span>
+        <div class="notifications" data-notifications>
+          <button class="btn btn--ghost" data-notif-toggle aria-expanded="false" aria-controls="notif-panel">
+            Alerts <span class="notifications__badge" data-notif-badge hidden>0</span>
+          </button>
+          <div class="notifications__panel" id="notif-panel" data-notif-panel hidden>
+            <div class="notifications__head">
+              <strong>Notifications</strong>
+              <button class="btn btn--ghost" data-notif-read-all>Mark all read</button>
+            </div>
+            <ul class="notifications__list" data-notif-list></ul>
+          </div>
+        </div>
         <a class="btn" id="logout" href="index.html?loggedout=1">Log out</a>
       </div>
     </div>
@@ -33,7 +45,10 @@
 
     <div class="cards-row">
       <div class="metric"><div class="metric__value" data-metric="listings">—</div><div class="metric__label">Your listings</div></div>
+      <div class="metric"><div class="metric__value" data-metric="lost">—</div><div class="metric__label">Lost</div></div>
+      <div class="metric"><div class="metric__value" data-metric="found">—</div><div class="metric__label">Found</div></div>
       <div class="metric"><div class="metric__value" data-metric="open">—</div><div class="metric__label">Still open</div></div>
+      <div class="metric"><div class="metric__value" data-metric="claimed">—</div><div class="metric__label">Claimed</div></div>
       <div class="metric"><div class="metric__value" data-metric="returned">—</div><div class="metric__label">Returned</div></div>
       <div class="metric"><div class="metric__value" data-metric="claimsMade">—</div><div class="metric__label">Claims you made</div></div>
       <div class="metric"><div class="metric__value" data-metric="points">—</div><div class="metric__label">Points</div></div>
@@ -393,6 +408,7 @@
     });
 
     refresh();
+    initNotifications();
   </script>
 </body>
 </html>

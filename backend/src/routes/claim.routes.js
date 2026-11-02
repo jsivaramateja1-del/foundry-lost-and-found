@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const Claim = require('../models/Claim');
 const Item = require('../models/Item');
 const { protect } = require('../middleware/auth');
+const { notify } = require('../utils/notify');
 
 const router = express.Router();
 
@@ -58,6 +59,11 @@ router.post('/', protect, async (req, res, next) => {
       claimant: req.user._id,
       message: String(message).trim()
     });
+
+    // Tell the person who posted the listing that somebody is claiming it
+    await notify(item.reportedBy, 'claim_received',
+      `${req.user.name} has claimed "${item.title}". Review the claim from your dashboard.`,
+      'dashboard.html');
 
     const populated = await claim.populate('claimant', 'name');
     res.status(201).json({ message: 'Claim submitted', claim: publicClaim(populated) });
@@ -140,6 +146,13 @@ router.patch('/:id', protect, async (req, res, next) => {
     if (status === 'approved') {
       await Item.findByIdAndUpdate(item._id, { status: 'claimed' });
     }
+
+    // Tell the claimant what was decided
+    await notify(claim.claimant, `claim_${status}`,
+      status === 'approved'
+        ? `Your claim on "${item.title}" was approved. Arrange the handover with the person who posted it.`
+        : `Your claim on "${item.title}" was rejected.`,
+      'dashboard.html');
 
     const populated = await claim.populate('claimant', 'name');
     res.status(200).json({ message: `Claim ${status}`, claim: publicClaim(populated) });

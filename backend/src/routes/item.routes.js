@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const Item = require('../models/Item');
 const { CATEGORIES, LOCATIONS } = require('../models/Item');
 const { protect } = require('../middleware/auth');
+const { notify } = require('../utils/notify');
 
 const router = express.Router();
 
@@ -122,7 +123,15 @@ router.get('/', async (req, res, next) => {
     }
     if (q && String(q).trim()) {
       const rx = new RegExp(escapeRegex(String(q).trim()), 'i');
-      filter.$or = [{ title: rx }, { description: rx }, { customCategory: rx }];
+      // Keyword search covers the location too, so typing "Library" finds
+      // items left in the library without reaching for the dropdown
+      filter.$or = [
+        { title: rx },
+        { description: rx },
+        { customCategory: rx },
+        { location: rx },
+        { customLocation: rx }
+      ];
     }
     if (category && category !== 'all') filter.category = category;
     if (location && location !== 'all') filter.location = location;
@@ -167,6 +176,28 @@ router.get('/meta', (req, res) => {
     types: ['lost', 'found'],
     statuses: ['open', 'claimed', 'returned', 'closed']
   });
+});
+
+/**
+ * GET /api/items/stats
+ * Public. Genuine counts for the homepage tiles. The database counts them,
+ * so the numbers stay right however many listings exist.
+ */
+router.get('/stats', async (req, res, next) => {
+  try {
+    const [total, lost, found, returned, claimed, open] = await Promise.all([
+      Item.countDocuments(),
+      Item.countDocuments({ type: 'lost' }),
+      Item.countDocuments({ type: 'found' }),
+      Item.countDocuments({ status: 'returned' }),
+      Item.countDocuments({ status: 'claimed' }),
+      Item.countDocuments({ status: 'open' })
+    ]);
+    // "Active" means still in play: open or claimed, not yet returned or closed
+    res.status(200).json({ total, lost, found, returned, claimed, active: open + claimed });
+  } catch (err) {
+    next(err);
+  }
 });
 
 /**
@@ -317,6 +348,18 @@ router.patch('/:id/status', protect, async (req, res, next) => {
 
     // Remember the old status so points cannot be farmed by clicking twice
     const previousStatus = item.status;
+
+    if (previousStatus === status) {
+      return res.status(400).json({ message: `This listing is already ${status}` });
+    }
+    // Returned and closed are terminal states: reopening them is an
+    // administrative correction, not something the owner does by accident
+    if (['returned', 'closed'].includes(previousStatus) && req.user.role !== 'admin') {
+      return res.status(400).json({
+        message: `A ${previousStatus} listing can only be reopened by an administrator`
+      });
+    }
+
     item.status = status;
     await item.save();
 
@@ -328,6 +371,13 @@ router.patch('/:id/status', protect, async (req, res, next) => {
       const approved = await Claim.findOne({ item: item._id, status: 'approved' });
       if (approved) {
         await User.findByIdAndUpdate(approved.claimant, { $inc: { points: 10, returns: 1 } });
+      }
+
+      await notify(item.reportedBy, 'item_returned',
+        `Your listing "${item.title}" was marked as returned.`, 'dashboard.html');
+      if (approved) {
+        await notify(approved.claimant, 'item_returned',
+          `"${item.title}" has been marked as returned. Thanks for closing the loop.`, 'dashboard.html');
       }
     }
 

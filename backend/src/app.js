@@ -9,6 +9,7 @@ const claimRoutes = require('./routes/claim.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const adminRoutes = require('./routes/admin.routes');
 const leaderboardRoutes = require('./routes/leaderboard.routes');
+const notificationRoutes = require('./routes/notification.routes');
 const { notFound, errorHandler } = require('./middleware/error');
 
 const app = express();
@@ -50,6 +51,7 @@ app.use('/api/claims', claimRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Serve the frontend from ../frontend when it exists (single-service deploy)
 const frontendDir = path.join(__dirname, '..', '..', 'frontend');

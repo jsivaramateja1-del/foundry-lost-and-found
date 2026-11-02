@@ -8,6 +8,7 @@
     "dev": "nodemon server.js",
     "create-admin": "node scripts/create-admin.js",
     "cleanup:demo": "node scripts/cleanup-demo.js",
+    "db:info": "node scripts/db-info.js",
     "test": "node test/api.test.js",
     "test:offline": "node test/offline.test.js"
   },

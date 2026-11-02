@@ -20,6 +20,18 @@
       </nav>
       <div class="header-actions">
         <span class="form-note" id="who"></span>
+        <div class="notifications" data-notifications>
+          <button class="btn btn--ghost" data-notif-toggle aria-expanded="false" aria-controls="notif-panel">
+            Alerts <span class="notifications__badge" data-notif-badge hidden>0</span>
+          </button>
+          <div class="notifications__panel" id="notif-panel" data-notif-panel hidden>
+            <div class="notifications__head">
+              <strong>Notifications</strong>
+              <button class="btn btn--ghost" data-notif-read-all>Mark all read</button>
+            </div>
+            <ul class="notifications__list" data-notif-list></ul>
+          </div>
+        </div>
         <a class="btn" id="logout" href="index.html?loggedout=1">Log out</a>
       </div>
     </div>
@@ -42,6 +54,7 @@
         <div class="metric"><div class="metric__value" data-total="found">—</div><div class="metric__label">Found</div></div>
         <div class="metric"><div class="metric__value" data-total="returned">—</div><div class="metric__label">Returned</div></div>
         <div class="metric"><div class="metric__value" data-total="claims">—</div><div class="metric__label">Claims</div></div>
+        <div class="metric"><div class="metric__value" data-total="pendingClaims">—</div><div class="metric__label">Pending claims</div></div>
         <div class="metric"><div class="metric__value" data-total="users">—</div><div class="metric__label">Users</div></div>
       </div>
 
@@ -253,6 +266,7 @@
     });
 
     loadAdmin();
+    initNotifications();
   </script>
 </body>
 </html>

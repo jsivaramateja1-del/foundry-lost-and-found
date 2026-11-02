@@ -18,6 +18,8 @@ Live demo: <https://foundry-lost-and-found.onrender.com>
 - **Review claims** on your own listings from your dashboard: approve or reject.
 - **Administer** the site: statistics, charts, every listing, every claim, every
   account, plus the ability to remove a listing or change someone's role.
+- **Get notified** in the app when someone claims your item, when a claim is
+  decided, and when an item is marked returned.
 - **Earn points** when a return is completed; a public leaderboard ranks students.
 
 The application starts **completely empty**. There are no seeded listings and no
@@ -48,11 +50,14 @@ foundry/
 │   ├── src/
 │   │   ├── app.js                 express app, middleware, routes, static serving
 │   │   ├── config/db.js           mongoose connection
-│   │   ├── models/                User.js, Item.js, Claim.js
+│   │   ├── models/                User.js, Item.js, Claim.js, Notification.js
 │   │   ├── middleware/            auth.js (JWT + roles), error.js (404 + handler)
-│   │   └── routes/                auth, item, claim, dashboard, admin, leaderboard
+│   │   ├── routes/                auth, item, claim, dashboard, admin, leaderboard,
+│   │   │                          notifications
+│   │   └── utils/notify.js        writes a notification without breaking the request
 │   ├── scripts/
 │   │   ├── create-admin.js        creates the first administrator from env vars
+│   │   ├── db-info.js             read-only: which database am I connected to?
 │   │   └── cleanup-demo.js        removes the old seed data (dry run by default)
 │   ├── test/
 │   │   ├── offline.test.js        runs with no database
@@ -122,8 +127,27 @@ MongoDB Connected: <your cluster host>
 Server running on http://localhost:5000
 ```
 
+Expected output:
+
+```
+MongoDB Connected: host=<your cluster host> database=foundry
+Server running on http://localhost:5000
+```
+
 Open <http://localhost:5000>. Express serves the frontend from `../frontend`, so
 there is only one service to run.
+
+### Checking which database you are on
+
+```bash
+npm run db:info
+```
+
+Read-only. Prints the host, the database name, counts of users / listings /
+claims, who owns the existing listings, and whether any of the old demo accounts
+exist. Run it locally and compare the host and database name with the
+"MongoDB Connected" line in your Render logs — if they differ, your local
+commands are changing a different database from the one the live site reads.
 
 ## 5. Creating the first administrator
 
@@ -186,7 +210,7 @@ node test/offline.test.js
 No database needed. Proves the app loads, all 24 routes are registered, the
 schemas reject bad input, bcrypt and JWT round-trip, no fallback secret exists,
 no demo password appears anywhere in the repository, and the old seed script is
-gone. Expected last line: `16 passed, 0 failed`.
+gone. Expected last line: `20 passed, 0 failed`.
 
 ```bash
 npm test
@@ -200,7 +224,8 @@ set MONGO_URI=mongodb://localhost:27017/foundry-test
 npm test
 ```
 
-The Postman collection in `backend/postman/` has 30+ requests with assertions.
+The Postman collection in `backend/postman/` has 36 requests with assertions,
+across Health, Auth, Items, Claims, Dashboards, Cleanup and Notifications.
 It contains **no credentials** — set the collection variables `studentEmail`,
 `studentPassword`, `otherEmail`, `otherPassword`, `adminEmail` and `adminPassword`
 to accounts you created, and select **No Environment** so a stale environment
@@ -221,6 +246,7 @@ All responses are JSON, including errors. Every protected route requires
 | POST | `/api/auth/logout` | logged in |
 | GET | `/api/items` | public — `q`, `category`, `location`, `type`, `status`, `from`, `to`, `sort`, `page`, `limit` |
 | GET | `/api/items/meta` | public — dropdown values |
+| GET | `/api/items/stats` | public — genuine counters for the homepage tiles |
 | GET | `/api/items/:id` | public |
 | GET | `/api/items/:id/similar` | public — duplicate-item alert |
 | POST | `/api/items` | logged in |
@@ -240,6 +266,9 @@ All responses are JSON, including errors. Every protected route requires
 | DELETE | `/api/admin/items/:id` | admin |
 | PATCH | `/api/admin/users/:id/role` | admin |
 | GET | `/api/leaderboard` | public |
+| GET | `/api/notifications` | logged in — your newest notifications + unread count |
+| PATCH | `/api/notifications/:id/read` | logged in — mark one as read |
+| PATCH | `/api/notifications/read-all` | logged in — mark all as read |
 
 ## 9. Security
 
@@ -252,6 +281,10 @@ All responses are JSON, including errors. Every protected route requires
   so a listing title cannot inject script.
 - Photos are shrunk in the browser and validated on the server: only PNG, JPEG or
   WebP data URLs under 400 KB, or an https link, are accepted.
+- A listing in a terminal state (`returned`, `closed`) can only be reopened by an
+  administrator, and a status change to the current status is refused.
+- Notifications are written server-side only; the client can read them and mark
+  them read, and can never create one.
 - helmet sets security headers, CORS is restricted to configured origins, and
   login/registration are rate limited.
 - `.env` is git-ignored; `.env.example` contains placeholders only.
@@ -272,11 +305,17 @@ The free tier sleeps when idle, so the first request after a pause can take
 
 ## 11. Known limitations
 
-- No password reset flow.
-- No email notifications; all coordination happens inside the site.
-- Claims are reviewed by whoever posted the listing, not by university staff.
-- Photos are stored inline in the item document, which keeps deployment simple
-  but is not how you would store images in a larger system.
-- There is no focus trap in the item modal: Tab can leave the dialog.
-- Keyword search covers the title, description and custom category — not the
-  location. Use the Location filter for that.
+- No email notifications; coordination happens inside the site through in-app
+  notifications and the dashboard.
+- **No password reset.** It needs an email service, which is a paid dependency
+  and outside the scope of this project. Documented here rather than faked.
+- **No WhatsApp integration.** The site says so plainly on the homepage; wiring
+  it up would need the WhatsApp Business API and approval.
+- **No independent ownership verification.** A claim is checked by whoever
+  posted the listing, not by university staff. The UI does not pretend otherwise.
+- **Images are stored inline** in the item document rather than in object
+  storage. Fine at this scale; documented under image storage above.
+- An administrator can change a role but cannot delete a user account, on
+  purpose: account deletion needs a policy this project does not have.
+- There is no listing expiry or archival; old listings stay until someone
+  changes their status or deletes them.

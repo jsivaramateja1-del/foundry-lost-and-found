@@ -180,3 +180,69 @@ function initMobileNav() {
     toggle.setAttribute('aria-expanded', String(!open));
   });
 }
+
+/**
+ * In-app notifications.
+ * Any page with a [data-notifications] block gets the same bell. The list is
+ * real: the server writes a notification when a claim arrives, when a claim is
+ * reviewed, and when an item is marked returned. This only reads them.
+ */
+async function initNotifications() {
+  const root = document.querySelector('[data-notifications]');
+  if (!root || !Auth.isLoggedIn) return;
+
+  const toggle = root.querySelector('[data-notif-toggle]');
+  const panel = root.querySelector('[data-notif-panel]');
+  const badge = root.querySelector('[data-notif-badge]');
+  const list = root.querySelector('[data-notif-list]');
+  const readAll = root.querySelector('[data-notif-read-all]');
+  if (!toggle || !panel || !badge || !list) return;
+
+  const paint = (data) => {
+    badge.textContent = data.unread > 99 ? '99+' : String(data.unread);
+    badge.hidden = data.unread === 0;
+    list.innerHTML = data.notifications.length
+      ? data.notifications.map((n) => `
+          <li class="notifications__item${n.read ? '' : ' is-unread'}">
+            <p>${ui.esc(n.message)}</p>
+            <time>${ui.date(n.createdAt)}</time>
+          </li>`).join('')
+      : '<li class="notifications__empty">Nothing yet. Claims and returns show up here.</li>';
+  };
+
+  const load = async () => {
+    try {
+      paint(await api('/notifications', { auth: true }));
+    } catch {
+      // A failed notification fetch must never break the page it sits on
+      badge.hidden = true;
+    }
+  };
+
+  toggle.addEventListener('click', async () => {
+    const willOpen = panel.hidden;
+    panel.hidden = !willOpen;
+    toggle.setAttribute('aria-expanded', String(willOpen));
+    if (willOpen) await load();
+  });
+
+  if (readAll) {
+    readAll.addEventListener('click', async () => {
+      try {
+        await api('/notifications/read-all', { method: 'PATCH', auth: true });
+        await load();
+      } catch (err) {
+        ui.toast(err.message);
+      }
+    });
+  }
+
+  document.addEventListener('click', (event) => {
+    if (!panel.hidden && !root.contains(event.target)) {
+      panel.hidden = true;
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  await load();
+}

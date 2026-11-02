@@ -1,15 +1,23 @@
 /**
- * Removes the demo data that the old seed script created.
+ * Removes demo data left behind by the old seed script.
  *
- * The old seed.js created three accounts with published passwords and twelve
- * sample listings. This script removes exactly that data and nothing else:
- * only items reported by those three demo accounts are touched, plus the
- * claims attached to them.
+ * Two situations are handled separately, because they need different levels
+ * of trust:
  *
- * Safe by default — it is a DRY RUN and deletes nothing:
- *   npm run cleanup:demo
- * Add --apply to actually delete:
- *   npm run cleanup:demo -- --apply
+ *   1. Demo accounts still exist. Their listings and the claims on them are
+ *      unambiguous demo data.
+ *   2. The demo accounts are gone but their listings remain ("orphaned"
+ *      listings: the reporter id no longer resolves to any user). These are
+ *      probably demo data, but not certainly, so they are only removed when
+ *      you ask for them explicitly with --include-orphans.
+ *
+ * Dry run by default. Nothing is deleted until you pass --apply.
+ *
+ *   npm run cleanup:demo                          (report only)
+ *   npm run cleanup:demo -- --apply               (delete demo accounts + their data)
+ *   npm run cleanup:demo -- --apply --include-orphans
+ *                                                 (also delete listings whose
+ *                                                  reporter no longer exists)
  */
 require('dotenv').config();
 const mongoose = require('mongoose');
@@ -17,8 +25,8 @@ const connectDB = require('../src/config/db');
 const User = require('../src/models/User');
 const Item = require('../src/models/Item');
 const Claim = require('../src/models/Claim');
+const Notification = require('../src/models/Notification');
 
-// The exact accounts the old seed script created
 const DEMO_EMAILS = [
   'admin@saiuniversity.edu.in',
   'student@saiuniversity.edu.in',
@@ -26,47 +34,81 @@ const DEMO_EMAILS = [
 ];
 
 const APPLY = process.argv.includes('--apply');
+const INCLUDE_ORPHANS = process.argv.includes('--include-orphans');
 
 (async () => {
   try {
-    await connectDB();
+    const conn = await connectDB();
+    console.log(`\nConnected to host=${conn.connection.host} database=${conn.connection.name}`);
 
     const demoUsers = await User.find({ email: { $in: DEMO_EMAILS } }).select('_id email name');
-    if (!demoUsers.length) {
-      console.log('No demo accounts found. Nothing to clean up.');
+    const demoIds = demoUsers.map((u) => u._id);
+
+    const demoItems = demoIds.length
+      ? await Item.find({ reportedBy: { $in: demoIds } }).select('_id title')
+      : [];
+    const demoItemIds = demoItems.map((i) => i._id);
+
+    // Listings whose reporter no longer exists in this database
+    const existingUserIds = await User.distinct('_id');
+    const orphanItems = await Item.find({ reportedBy: { $nin: existingUserIds } }).select('_id title');
+
+    const claimsOnDemoItems = await Claim.find({
+      $or: [{ item: { $in: demoItemIds } }, { claimant: { $in: demoIds } }]
+    }).select('_id');
+
+    console.log('\n--- What I found ---');
+    if (demoUsers.length) {
+      console.log(`Demo accounts (${demoUsers.length}):`);
+      demoUsers.forEach((u) => console.log(`  ${u.email}  (${u.name})`));
+    } else {
+      console.log('Demo accounts: none of the three old demo emails exist in THIS database.');
+    }
+    console.log(`Listings owned by those demo accounts: ${demoItems.length}`);
+    demoItems.slice(0, 10).forEach((i) => console.log(`  ${i.title}`));
+    if (demoItems.length > 10) console.log(`  ... and ${demoItems.length - 10} more`);
+    console.log(`Claims attached to them: ${claimsOnDemoItems.length}`);
+    console.log(`Orphaned listings (reporter no longer exists): ${orphanItems.length}`);
+    orphanItems.slice(0, 10).forEach((i) => console.log(`  ${i.title}`));
+
+    if (!demoUsers.length && !orphanItems.length) {
+      console.log('\nNothing to clean up in this database.');
+      console.log('If the website still shows sample listings, you are looking at a');
+      console.log('different database. Compare the host and database name above with');
+      console.log('the "MongoDB Connected" line in the Render logs.');
       await mongoose.connection.close();
       process.exit(0);
     }
-
-    const ids = demoUsers.map((u) => u._id);
-    const demoItems = await Item.find({ reportedBy: { $in: ids } }).select('_id title');
-    const itemIds = demoItems.map((i) => i._id);
-
-    const claimsOnDemoItems = await Claim.find({ item: { $in: itemIds } }).select('_id');
-    const claimsByDemoUsers = await Claim.find({ claimant: { $in: ids } }).select('_id');
-    const claimIds = [...new Set([...claimsOnDemoItems, ...claimsByDemoUsers].map((c) => String(c._id)))];
-
-    console.log('Demo accounts found:');
-    demoUsers.forEach((u) => console.log(`  ${u.email}  (${u.name})`));
-    console.log(`Demo listings found: ${demoItems.length}`);
-    demoItems.slice(0, 5).forEach((i) => console.log(`  ${i.title}`));
-    if (demoItems.length > 5) console.log(`  ... and ${demoItems.length - 5} more`);
-    console.log(`Claims to remove: ${claimIds.length}`);
 
     if (!APPLY) {
       console.log('\nDRY RUN - nothing was deleted.');
-      console.log('Re-run with --apply to delete the records listed above:');
+      console.log('To delete the demo accounts and their listings:');
       console.log('  npm run cleanup:demo -- --apply');
+      if (orphanItems.length && !INCLUDE_ORPHANS) {
+        console.log('\nOrphaned listings are left alone by default. To remove them too:');
+        console.log('  npm run cleanup:demo -- --apply --include-orphans');
+      }
       await mongoose.connection.close();
       process.exit(0);
     }
 
-    // Delete in dependency order: claims first, then items, then accounts
-    const removedClaims = await Claim.deleteMany({ _id: { $in: claimIds } });
-    const removedItems = await Item.deleteMany({ _id: { $in: itemIds } });
-    const removedUsers = await User.deleteMany({ _id: { $in: ids } });
+    const itemIdsToDelete = [...demoItemIds, ...(INCLUDE_ORPHANS ? orphanItems.map((i) => i._id) : [])];
 
-    console.log(`\nDeleted ${removedClaims.deletedCount} claims, ${removedItems.deletedCount} listings, ${removedUsers.deletedCount} accounts.`);
+    const removedClaims = await Claim.deleteMany({
+      $or: [{ item: { $in: itemIdsToDelete } }, { claimant: { $in: demoIds } }]
+    });
+    const removedItems = await Item.deleteMany({ _id: { $in: itemIdsToDelete } });
+    const removedNotifications = demoIds.length
+      ? await Notification.deleteMany({ user: { $in: demoIds } })
+      : { deletedCount: 0 };
+    const removedUsers = demoIds.length
+      ? await User.deleteMany({ _id: { $in: demoIds } })
+      : { deletedCount: 0 };
+
+    console.log(`\nDeleted ${removedClaims.deletedCount} claims, ${removedItems.deletedCount} listings, ${removedNotifications.deletedCount} notifications, ${removedUsers.deletedCount} accounts.`);
+    if (orphanItems.length && !INCLUDE_ORPHANS) {
+      console.log(`${orphanItems.length} orphaned listing(s) were left in place.`);
+    }
 
     await mongoose.connection.close();
     process.exit(0);

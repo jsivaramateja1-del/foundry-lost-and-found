@@ -33,8 +33,13 @@ const el = {
   clearFromEmpty: document.getElementById('clear-from-empty'),
   statLost: document.getElementById('stat-lost'),
   statFound: document.getElementById('stat-found'),
-  statReturned: document.getElementById('stat-returned')
+  statReturned: document.getElementById('stat-returned'),
+  statActive: document.getElementById('stat-active')
 };
+
+// Everything focusable inside a modal, for the focus trap
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+let lastFocused = null;
 
 // Matches IMAGE_LIMIT_BYTES in backend/src/routes/item.routes.js
 const MAX_IMAGE_BYTES = 400 * 1024;
@@ -219,32 +224,69 @@ function resetFilters() {
 /* ---------------- stats ---------------- */
 async function loadStats() {
   try {
-    const data = await api('/items?limit=100');
-    const all = data.items;
-    el.statLost.textContent = all.filter((i) => i.type === 'lost').length;
-    el.statFound.textContent = all.filter((i) => i.type === 'found').length;
-    el.statReturned.textContent = all.filter((i) => i.status === 'returned').length;
+    // Counted by the database, so the tiles stay correct past the page limit
+    const stats = await api('/items/stats');
+    el.statLost.textContent = stats.lost;
+    el.statFound.textContent = stats.found;
+    el.statReturned.textContent = stats.returned;
+    el.statActive.textContent = stats.active;
   } catch {
     el.statLost.textContent = '—';
     el.statFound.textContent = '—';
     el.statReturned.textContent = '—';
+    el.statActive.textContent = '—';
   }
 }
 
 /* ---------------- modals ---------------- */
+
+/**
+ * Keep Tab inside an open dialog.
+ * Without this, Tab walks out of the modal and into the page behind it, which
+ * is disorienting for keyboard and screen-reader users.
+ */
+function trapFocus(modal) {
+  const nodes = [...modal.querySelectorAll(FOCUSABLE)].filter((n) => n.offsetParent !== null);
+  if (!nodes.length) return;
+  const first = nodes[0];
+  const last = nodes[nodes.length - 1];
+
+  const handler = (event) => {
+    if (event.key !== 'Tab') return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  modal.addEventListener('keydown', handler);
+  modal._trapHandler = handler;
+}
+
 function openModal(id) {
   const modal = document.getElementById(id);
   if (!modal) return;
+  lastFocused = document.activeElement;
   modal.dataset.open = 'true';
   document.body.style.overflow = 'hidden';
-  const focusable = modal.querySelector('input, select, textarea, button');
+  const focusable = modal.querySelector(FOCUSABLE);
   if (focusable) focusable.focus({ preventScroll: true });
+  trapFocus(modal);
 }
 
 function closeModal(modal) {
   if (!modal) return;
   modal.dataset.open = 'false';
   document.body.style.overflow = '';
+  if (modal._trapHandler) {
+    modal.removeEventListener('keydown', modal._trapHandler);
+    modal._trapHandler = null;
+  }
+  // Send focus back where it came from
+  if (lastFocused && lastFocused.isConnected) lastFocused.focus({ preventScroll: true });
 }
 
 function closeAllModals() {
@@ -486,6 +528,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   paintAuthState();
   initMobileNav();
   initScrollReveal();
+  initNotifications();
 
   // Log out from the header
   const headerLogout = document.getElementById('header-logout');

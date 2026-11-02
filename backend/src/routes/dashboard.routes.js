@@ -26,6 +26,7 @@ router.get('/me', protect, async (req, res, next) => {
         lost: items.filter((i) => i.type === 'lost').length,
         found: items.filter((i) => i.type === 'found').length,
         open: items.filter((i) => i.status === 'open').length,
+        claimed: items.filter((i) => i.status === 'claimed').length,
         returned,
         claimsMade: claims.length,
         points: req.user.points,
