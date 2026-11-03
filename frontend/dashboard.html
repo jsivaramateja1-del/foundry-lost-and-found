@@ -27,7 +27,7 @@
           </button>
           <div class="notifications__panel" id="notif-panel" data-notif-panel hidden>
             <div class="notifications__head">
-              <strong>Notifications</strong>
+              <strong>Notifications <span class="notifications__count" data-notif-count></span></strong>
               <button class="btn btn--ghost" data-notif-read-all>Mark all read</button>
             </div>
             <ul class="notifications__list" data-notif-list></ul>
@@ -55,11 +55,13 @@
       <div class="metric"><div class="metric__value" data-metric="claimed">—</div><div class="metric__label">Claimed</div></div>
       <div class="metric"><div class="metric__value" data-metric="returned">—</div><div class="metric__label">Returned</div></div>
       <div class="metric"><div class="metric__value" data-metric="claimsMade">—</div><div class="metric__label">Claims you made</div></div>
+      <div class="metric"><div class="metric__value" data-metric="claimsReceived">—</div><div class="metric__label">Claims received</div></div>
+      <div class="metric"><div class="metric__value" data-metric="pendingClaims">—</div><div class="metric__label">Pending claims</div></div>
       <div class="metric"><div class="metric__value" data-metric="points">—</div><div class="metric__label">Points</div></div>
     </div>
 
     <!-- Claims received on your listings -->
-    <section class="panel">
+    <section class="panel" id="claims-received">
       <div class="panel__head">
         <h2>Claims on your listings</h2>
         <span class="form-note" id="received-count"></span>
@@ -73,7 +75,7 @@
     </section>
 
     <!-- Your listings -->
-    <section class="panel">
+    <section class="panel" id="listings">
       <div class="panel__head">
         <h2>Your listings</h2>
         <a href="index.html#browse" class="btn btn--ghost">Browse all</a>
@@ -87,7 +89,7 @@
     </section>
 
     <!-- Claims you made -->
-    <section class="panel">
+    <section class="panel" id="claims-made">
       <div class="panel__head"><h2>Claims you have made</h2></div>
       <div class="panel__body" style="overflow-x:auto;">
         <table class="table">

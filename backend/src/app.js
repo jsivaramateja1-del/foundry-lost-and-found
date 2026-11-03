@@ -2,6 +2,7 @@ const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const mongoose = require('mongoose');
 
 const authRoutes = require('./routes/auth.routes');
 const itemRoutes = require('./routes/item.routes');
@@ -41,8 +42,43 @@ if (process.env.NODE_ENV !== 'test') {
   });
 }
 
+// Mongoose readyState: 0 disconnected, 1 connected, 2 connecting, 3 disconnecting
+const DB_STATES = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+
+const databaseStatus = () => {
+  const state = mongoose.connection.readyState;
+  return { state: DB_STATES[state] || 'unknown', ok: state === 1 };
+};
+
+/**
+ * GET /api/health
+ * Liveness. Always 200 while the process is running, so a host restarting the
+ * service on a database outage cannot turn a recoverable blip into a crash
+ * loop. The database state is reported alongside, not folded into the code.
+ */
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', service: 'foundry-api', time: new Date().toISOString() });
+  res.status(200).json({
+    status: 'ok',
+    service: 'foundry-api',
+    time: new Date().toISOString(),
+    db: databaseStatus()
+  });
+});
+
+/**
+ * GET /api/health/ready
+ * Readiness. 200 only when the database is connected, 503 otherwise. This is
+ * the endpoint a monitor should watch: it answers "can this instance serve
+ * requests", which liveness cannot.
+ */
+app.get('/api/health/ready', (req, res) => {
+  const db = databaseStatus();
+  res.status(db.ok ? 200 : 503).json({
+    status: db.ok ? 'ready' : 'not-ready',
+    service: 'foundry-api',
+    time: new Date().toISOString(),
+    db
+  });
 });
 
 app.use('/api/auth', authRoutes);

@@ -27,6 +27,26 @@
         : '<p class="form-note">No data yet.</p>';
     }
 
+    /* Which page of each long table is showing. 25 rows is a comfortable
+       screenful and keeps the admin response small. */
+    const paging = { items: 1, claims: 1, limit: 25 };
+
+    /** Draw a "Page x of y" control. Renders nothing when there is one page. */
+    function renderPager(id, data, key) {
+      const node = document.getElementById(id);
+      if (!node) return;
+      if (!data.pages || data.pages <= 1) {
+        node.innerHTML = '';
+        return;
+      }
+      node.innerHTML = `
+        <button class="btn btn--ghost" data-page-key="${key}" data-page-to="${data.page - 1}"
+          ${data.page <= 1 ? 'disabled' : ''}>Previous</button>
+        <span class="pager__label">Page ${data.page} of ${data.pages} · ${data.total} total</span>
+        <button class="btn btn--ghost" data-page-key="${key}" data-page-to="${data.page + 1}"
+          ${data.page >= data.pages ? 'disabled' : ''}>Next</button>`;
+    }
+
     async function loadAdmin() {
       if (!Auth.isAdmin) {
         document.getElementById('guard').hidden = false;
@@ -43,8 +63,11 @@
         drawBars(document.getElementById('chart-category'), stats.byCategory, 'category', 'count');
         drawBars(document.getElementById('chart-perday'), stats.perDay, 'date', 'count');
 
-        const items = await api('/admin/items', { auth: true });
-        document.getElementById('items-count').textContent = `${items.count} listings`;
+        const items = await api(`/admin/items?page=${paging.items}&limit=${paging.limit}`, { auth: true });
+        paging.items = items.page;
+        document.getElementById('items-count').textContent =
+          `${items.total} listing${items.total === 1 ? '' : 's'}`;
+        renderPager('items-pager', items, 'items');
         document.getElementById('admin-items').innerHTML = items.items.length
           ? items.items.map((i) => row([
               ui.esc(i.title),
@@ -117,11 +140,16 @@
 
         let claims = { count: 0, claims: [] };
         try {
-          claims = await api('/admin/claims', { auth: true });
+          claims = await api(`/admin/claims?page=${paging.claims}&limit=${paging.limit}`, { auth: true });
         } catch (err) {
           document.getElementById('claims-count').textContent = 'not available for your role';
         }
-        document.getElementById('claims-count').textContent = claims.count ? `${claims.count} claims` : document.getElementById('claims-count').textContent;
+        if (claims.total !== undefined) {
+          paging.claims = claims.page;
+          document.getElementById('claims-count').textContent =
+            `${claims.total} claim${claims.total === 1 ? '' : 's'}`;
+          renderPager('claims-pager', claims, 'claims');
+        }
         document.getElementById('admin-claims').innerHTML = claims.claims.length
           ? claims.claims.map((c) => row([
               ui.esc(c.item?.title || 'Item removed'),
@@ -144,6 +172,18 @@
     }
 
     /* ---------------- admin actions ---------------- */
+
+    // Pager buttons for the two long tables
+    document.addEventListener('click', async (event) => {
+      const button = event.target.closest('[data-page-key]');
+      if (!button) return;
+      const key = button.dataset.pageKey;
+      const to = Number(button.dataset.pageTo);
+      if (!Number.isFinite(to) || to < 1) return;
+      paging[key] = to;
+      button.disabled = true;
+      await loadAdmin();
+    });
 
     // Changing the status dropdown on a listing saves immediately
     document.addEventListener('change', async (event) => {

@@ -393,6 +393,77 @@ const mountPrefix = (src) => {
   check('AuditLog accepts a real action',
     new AuditLog({ actor: '64d2f1f1f1f1f1f1f1f1f1f1', action: 'user_suspended' }).validateSync() === undefined);
 
+  // 10b. Phase 1 additions: notification targets, claim notes, transactions
+  const goodNotification = new Notification({
+    user: '64d2f1f1f1f1f1f1f1f1f1f1',
+    type: 'claim_received',
+    message: 'Someone claimed your item.',
+    link: 'dashboard.html#claims-received',
+    relatedType: 'claim',
+    relatedId: '64d2f1f1f1f1f1f1f1f1f1f1'
+  });
+  check('a notification can point at the record it is about',
+    goodNotification.validateSync() === undefined);
+
+  check('a notification refuses an unknown relatedType',
+    !!new Notification({
+      user: '64d2f1f1f1f1f1f1f1f1f1f1', type: 'claim_received',
+      message: 'x', relatedType: 'nonsense'
+    }).validateSync());
+
+  check('a notification without a related record is still valid',
+    new Notification({ user: '64d2f1f1f1f1f1f1f1f1f1f1', type: 'claim_received', message: 'x' }).validateSync() === undefined);
+
+  const claimIndexes = Claim.schema.indexes().map(([fields]) => JSON.stringify(fields));
+  check('claims are indexed by item and status for the conflict check',
+    claimIndexes.includes(JSON.stringify({ item: 1, status: 1 })), claimIndexes.join(' '));
+
+  check('a claim can record why it was decided',
+    new Claim({
+      item: '64d2f1f1f1f1f1f1f1f1f1f1', claimant: '64d2f1f1f1f1f1f1f1f1f1f1',
+      message: 'Mine', reviewNote: 'Another claim was approved for this listing.'
+    }).validateSync() === undefined);
+
+  const { supportsTransactions } = require('../src/utils/transactions');
+  check('transaction support is detected without a connection (and says no)',
+    (await supportsTransactions()) === false);
+
+  // 10c. The auth page must show exactly one form at a time.
+  // `.auth-form { display: none }` hides both, `.auth-form[data-active="true"]`
+  // reveals the active one. A later unqualified `.auth-form` rule that sets
+  // `display` ties on specificity and wins on source order, which silently
+  // shows both forms. That regression shipped once; this stops it returning.
+  const cssSource = fs.readFileSync(path.join(projectRoot, 'frontend/assets/css/styles.css'), 'utf8');
+
+  const findDisplayOverrides = (css) => {
+    // Comments removed first, and the rule pattern must NOT consume the closing
+    // brace: doing so makes the scanner skip every other rule.
+    const source = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const offenders = [];
+    const rulePattern = /([^{}]+)\{([^{}]*)\}/g;
+    let match;
+    while ((match = rulePattern.exec(source)) !== null) {
+      const selectors = match[1].split(',').map((part) => part.trim());
+      const onlyAuthForm = selectors.length > 0 && selectors.every((sel) => sel === '.auth-form');
+      if (!onlyAuthForm) continue;
+      // `display: none` is the intended hide. Any other value is the bug.
+      const declaration = match[2].match(/(?:^|;)\s*display\s*:\s*([^;]+)/);
+      const value = declaration ? declaration[1].trim() : null;
+      if (value && value !== 'none') {
+        offenders.push(`${selectors.join(',')} { display: ${value} }`);
+      }
+    }
+    return offenders;
+  };
+
+  const overrides = findDisplayOverrides(cssSource);
+  check('no unqualified .auth-form rule declares display',
+    overrides.length === 0, overrides.join(' | '));
+
+  check('the auth form visibility rules are still present',
+    /\.auth-form\s*\{\s*display:\s*none/.test(cssSource) &&
+    /\.auth-form\[data-active="true"\]\s*\{\s*display:\s*grid/.test(cssSource));
+
   // 11. Suspension is off by default, so no existing account changes behaviour
   const freshUser = new User({ name: 'Suspended Check', email: 'a@scds.saiuniversity.edu.in', password: 'secret123' });
   check('a new account is not suspended', freshUser.suspended === false);

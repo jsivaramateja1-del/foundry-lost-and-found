@@ -24,6 +24,8 @@ const claimSchema = new mongoose.Schema(
       default: 'pending'
     },
     reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    // Why the claim was approved or rejected — kept as part of the history
+    reviewNote: { type: String, trim: true, maxlength: 200 },
     reviewedAt: { type: Date },
     // Approving a claim only reserves the item. The handover is a separate,
     // deliberate step: that is what turns an item into "returned".
@@ -35,5 +37,7 @@ const claimSchema = new mongoose.Schema(
 
 // One claim per user per item - a second attempt returns a duplicate key error
 claimSchema.index({ item: 1, claimant: 1 }, { unique: true });
+// Makes "the other claims on this item" cheap when one is approved
+claimSchema.index({ item: 1, status: 1 });
 
 module.exports = mongoose.model('Claim', claimSchema);

@@ -86,11 +86,20 @@ router.get('/stats', requireRole(...MODERATION_ROLES), async (req, res, next) =>
  */
 router.get('/items', requireRole(...MODERATION_ROLES), async (req, res, next) => {
   try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 25));
+    const total = await Item.countDocuments();
+
     const items = await Item.find()
       .populate('reportedBy', 'name email')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
     res.status(200).json({
       count: items.length,
+      total,
+      page,
+      pages: Math.ceil(total / limit) || 1,
       items: items.map((i) => ({
         id: i._id, title: i.title, category: i.category, type: i.type,
         status: i.status, location: i.location, date: i.date,
@@ -108,12 +117,21 @@ router.get('/items', requireRole(...MODERATION_ROLES), async (req, res, next) =>
  */
 router.get('/claims', requireRole(...ADMIN_ROLES), async (req, res, next) => {
   try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 25));
+    const total = await Claim.countDocuments();
+
     const claims = await Claim.find()
       .populate('claimant', 'name email')
       .populate('item', 'title type category status')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
     res.status(200).json({
       count: claims.length,
+      total,
+      page,
+      pages: Math.ceil(total / limit) || 1,
       claims: claims.map((c) => ({
         id: c._id, status: c.status, message: c.message, createdAt: c.createdAt,
         claimant: c.claimant ? { id: c.claimant._id, name: c.claimant.name, email: c.claimant.email } : null,

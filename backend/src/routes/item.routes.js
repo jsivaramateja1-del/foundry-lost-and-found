@@ -5,6 +5,7 @@ const { CATEGORIES, LOCATIONS } = require('../models/Item');
 const { CATEGORY_TREE, isValidSubcategory } = require('../utils/categories');
 const { protect, requireVerified } = require('../middleware/auth');
 const { notify } = require('../utils/notify');
+const { itemIpLimit, itemAccountLimit, reportIpLimit, reportAccountLimit } = require('../middleware/rateLimit');
 const Report = require('../models/Report');
 
 const router = express.Router();
@@ -278,7 +279,7 @@ router.get('/:id/similar', async (req, res, next) => {
  * Protected. Flag a listing as spam, inappropriate, suspicious, incorrect or
  * "other". One report per student per listing. Only an admin reads these.
  */
-router.post('/:id/report', protect, async (req, res, next) => {
+router.post('/:id/report', reportIpLimit, protect, reportAccountLimit, async (req, res, next) => {
   try {
     const { reason, details } = req.body;
 
@@ -327,7 +328,7 @@ router.post('/:id/report', protect, async (req, res, next) => {
  * POST /api/items
  * Protected. Creates a lost or found report.
  */
-router.post('/', protect, requireVerified, async (req, res, next) => {
+router.post('/', itemIpLimit, protect, itemAccountLimit, requireVerified, async (req, res, next) => {
   try {
     const errors = validateItemBody(req.body);
     if (errors.length) return res.status(400).json({ message: errors[0], errors });
@@ -438,10 +439,12 @@ router.patch('/:id/status', protect, async (req, res, next) => {
       }
 
       await notify(item.reportedBy, 'item_returned',
-        `Your listing "${item.title}" was marked as returned.`, 'dashboard.html');
+        `Your listing "${item.title}" was marked as returned.`,
+        { link: 'dashboard.html#listings', relatedType: 'item', relatedId: item._id });
       if (approved) {
         await notify(approved.claimant, 'item_returned',
-          `"${item.title}" has been marked as returned. Thanks for closing the loop.`, 'dashboard.html');
+          `"${item.title}" has been marked as returned. Thanks for closing the loop.`,
+          { link: 'dashboard.html#claims-made', relatedType: 'claim', relatedId: approved._id });
       }
     }
 

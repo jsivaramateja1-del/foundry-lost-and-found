@@ -35,6 +35,17 @@ const check = (name, cond, detail = '') => {
   check('GET /api/health returns 200', health.status === 200, `got ${health.status}`);
   check('health is JSON with a status field', health.body.status === 'ok');
 
+  check('liveness reports the database state without changing the status code',
+    health.body.db && typeof health.body.db.ok === 'boolean' && health.body.status === 'ok',
+    JSON.stringify(health.body.db));
+
+  const ready = await request(app).get('/api/health/ready');
+  check('readiness returns 503 when the database is not connected',
+    ready.status === 503 && ready.body.status === 'not-ready', `got ${ready.status}`);
+  check('readiness names the database state',
+    ['disconnected', 'connecting', 'disconnecting', 'unknown'].includes(ready.body.db.state),
+    JSON.stringify(ready.body.db));
+
   const config = await request(app).get('/api/auth/config');
   check('GET /api/auth/config returns 200', config.status === 200, `got ${config.status}`);
   check('config lists all four student domains',

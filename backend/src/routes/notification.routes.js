@@ -10,6 +10,8 @@ const publicNotification = (doc) => ({
   type: doc.type,
   message: doc.message,
   link: doc.link,
+  relatedType: doc.relatedType || null,
+  relatedId: doc.relatedId || null,
   read: doc.read,
   createdAt: doc.createdAt
 });

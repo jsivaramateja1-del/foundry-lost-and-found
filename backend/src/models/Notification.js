@@ -26,8 +26,13 @@ const notificationSchema = new mongoose.Schema(
       trim: true,
       maxlength: [300, 'Notification message cannot exceed 300 characters']
     },
-    // Where clicking the notification should take the reader
+    // Where clicking the notification should take the reader. The client
+    // validates this against an allowlist before navigating, so a bad value
+    // can never become an open redirect.
     link: { type: String, trim: true, default: '' },
+    // What the notification is about, so the UI can point at the exact record
+    relatedType: { type: String, enum: ['claim', 'item', 'account', null], default: null },
+    relatedId: { type: mongoose.Schema.Types.ObjectId, default: null },
     read: { type: Boolean, default: false }
   },
   { timestamps: true }

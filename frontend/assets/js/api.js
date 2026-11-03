@@ -234,6 +234,15 @@ function initMobileNav() {
  * real: the server writes a notification when a claim arrives, when a claim is
  * reviewed, and when an item is marked returned. This only reads them.
  */
+// Only in-app pages, and only the dashboard sections that exist
+const SAFE_NOTIFICATION_TARGET = /^(index|dashboard|admin)\.html(#(listings|claims-received|claims-made))?$/;
+
+/** Return the link only if it is a known in-app destination, else ''. */
+function safeNotificationTarget(link) {
+  const value = String(link || '');
+  return SAFE_NOTIFICATION_TARGET.test(value) ? value : '';
+}
+
 async function initNotifications() {
   const root = document.querySelector('[data-notifications]');
   if (!root || !Auth.isLoggedIn) return;
@@ -243,17 +252,39 @@ async function initNotifications() {
   const badge = root.querySelector('[data-notif-badge]');
   const list = root.querySelector('[data-notif-list]');
   const readAll = root.querySelector('[data-notif-read-all]');
+  const count = root.querySelector('[data-notif-count]');
   if (!toggle || !panel || !badge || !list) return;
 
   const paint = (data) => {
-    badge.textContent = data.unread > 99 ? '99+' : String(data.unread);
-    badge.hidden = data.unread === 0;
+    const unread = Number(data.unread) || 0;
+
+    badge.textContent = unread > 99 ? '99+' : String(unread);
+    badge.hidden = unread === 0;
+
+    if (count) count.textContent = unread ? `${unread} unread` : 'All read';
+    if (readAll) {
+      // Nothing to do when nothing is unread: the button says so rather than
+      // looking broken
+      readAll.disabled = unread === 0;
+      readAll.setAttribute('aria-disabled', String(unread === 0));
+    }
+
     list.innerHTML = data.notifications.length
-      ? data.notifications.map((n) => `
-          <li class="notifications__item${n.read ? '' : ' is-unread'}" data-notif-id="${n.id}">
-            <p>${ui.esc(n.message)}</p>
-            <time>${ui.date(n.createdAt)}</time>
-          </li>`).join('')
+      ? data.notifications.map((n) => {
+          const target = safeNotificationTarget(n.link);
+          // Read state must reach a screen reader, not only the eye. A real
+          // span works for both the button and the plain-div variant, whereas
+          // aria-label on a div is ignored by assistive technology.
+          const prefix = n.read ? '' : '<span class="visually-hidden">Unread: </span>';
+          const body = `<p>${prefix}${ui.esc(n.message)}</p><time>${ui.date(n.createdAt)}</time>`;
+          const classes = `notifications__item${n.read ? '' : ' is-unread'}`;
+          // A notification with nowhere to go is rendered as plain text, so it
+          // never looks clickable while doing nothing
+          return target
+            ? `<li><button type="button" class="${classes} notifications__item--link"
+                 data-notif-id="${n.id}" data-notif-target="${ui.esc(target)}">${body}</button></li>`
+            : `<li><div class="${classes}">${body}</div></li>`;
+        }).join('')
       : '<li class="notifications__empty">Nothing yet. Claims and returns show up here.</li>';
   };
 
@@ -261,8 +292,12 @@ async function initNotifications() {
     try {
       paint(await api('/notifications', { auth: true }));
     } catch {
-      // A failed notification fetch must never break the page it sits on
+      // A failed fetch must not break the page, but it must not look like
+      // "you have no notifications" either
       badge.hidden = true;
+      if (count) count.textContent = '';
+      if (readAll) readAll.disabled = true;
+      list.innerHTML = '<li class="notifications__empty">Could not load notifications. Please try again.</li>';
     }
   };
 
@@ -270,30 +305,55 @@ async function initNotifications() {
     const willOpen = panel.hidden;
     panel.hidden = !willOpen;
     toggle.setAttribute('aria-expanded', String(willOpen));
-    if (willOpen) await load();
+    if (willOpen) {
+      list.innerHTML = '<li class="notifications__empty">Loading…</li>';
+      await load();
+    }
   });
 
   if (readAll) {
     readAll.addEventListener('click', async () => {
       try {
-        await api('/notifications/read-all', { method: 'PATCH', auth: true });
+        const result = await api('/notifications/read-all', { method: 'PATCH', auth: true });
         await load();
+        const updated = Number(result && result.updated) || 0;
+        ui.toast(updated
+          ? `${updated} notification${updated === 1 ? '' : 's'} marked as read`
+          : 'No unread notifications');
       } catch (err) {
         ui.toast(err.message);
       }
     });
   }
 
-  // Clicking a notification marks it read
+  // Clicking a notification marks it read and, when it points somewhere,
+  // takes the reader to that section of the dashboard
   list.addEventListener('click', async (event) => {
     const item = event.target.closest('[data-notif-id]');
     if (!item) return;
-    try {
-      await api(`/notifications/${item.dataset.notifId}/read`, { method: 'PATCH', auth: true });
+    const target = item.dataset.notifTarget || '';
+    const wasUnread = item.classList.contains('is-unread');
+
+    // An already-read row needs no request; it simply navigates
+    if (wasUnread) {
+      try {
+        await api(`/notifications/${item.dataset.notifId}/read`, { method: 'PATCH', auth: true });
+      } catch (err) {
+        ui.toast(err.message);
+        return;
+      }
       item.classList.remove('is-unread');
+      const srPrefix = item.querySelector('.visually-hidden');
+      if (srPrefix) srPrefix.remove();
+    }
+
+    if (target) {
+      window.location.href = target;
+      return;
+    }
+    if (wasUnread) {
+      ui.toast('Marked as read');
       await load();
-    } catch (err) {
-      ui.toast(err.message);
     }
   });
 

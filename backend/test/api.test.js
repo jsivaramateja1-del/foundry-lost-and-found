@@ -13,6 +13,9 @@ const mongoose = require('mongoose');
 const app = require('../src/app');
 const connectDB = require('../src/config/db');
 const User = require('../src/models/User');
+const Item = require('../src/models/Item');
+const Claim = require('../src/models/Claim');
+const Notification = require('../src/models/Notification');
 
 let passed = 0;
 let failed = 0;
@@ -237,12 +240,85 @@ const check = (name, condition, detail = '') => {
     const board = await request(app).get('/api/leaderboard');
     check('GET /api/leaderboard returns 200', board.status === 200, `got ${board.status}`);
 
+    // ---------- 6b. Claim conflict: one approval per listing ----------
+    // A third student claims the same item. Approving both must be impossible,
+    // and the second attempt must be refused rather than overwriting the first.
+    const third = await request(app).post('/api/auth/register')
+      .send({ name: 'Third Student', email: 'third@scds.saiuniversity.edu.in', password: 'secret123' });
+    const thirdAuth = { Authorization: `Bearer ${third.body.token}` };
+
+    const foundItem = await request(app).post('/api/items').set(auth).send({
+      title: 'Conflict Test Earbuds',
+      description: 'Used to prove only one claim can be approved.',
+      category: 'Electronics',
+      subcategory: 'Earphones',
+      location: 'Library',
+      date: new Date().toISOString(),
+      type: 'found'
+    });
+    const conflictItemId = foundItem.body.item.id;
+
+    const claimB = await request(app).post('/api/claims').set(thirdAuth)
+      .send({ itemId: conflictItemId, message: 'I lost these on Tuesday.' });
+    const claimC = await request(app).post('/api/claims').set(auth2)
+      .send({ itemId: conflictItemId, message: 'They are mine, dented case.' });
+    check('two different students can claim the same listing',
+      claimB.status === 201 && claimC.status === 201, `${claimB.status}/${claimC.status}`);
+
+    const approveFirst = await request(app).patch(`/api/claims/${claimB.body.claim.id}`)
+      .set(auth).send({ status: 'approved' });
+    check('the first approval succeeds', approveFirst.status === 200, `got ${approveFirst.status}`);
+    check('approving one claim rejects the siblings',
+      approveFirst.body.rejectedSiblings === 1, `got ${approveFirst.body.rejectedSiblings}`);
+
+    const siblingAfter = await Claim.findById(claimC.body.claim.id);
+    check('the sibling claim is now rejected', siblingAfter.status === 'rejected', siblingAfter.status);
+    check('the sibling carries the required note',
+      siblingAfter.reviewNote === 'Another claim was approved for this listing.', siblingAfter.reviewNote);
+
+    const approveSecond = await request(app).patch(`/api/claims/${claimC.body.claim.id}`)
+      .set(auth).send({ status: 'approved' });
+    check('a second approval on the same listing is refused (409)',
+      approveSecond.status === 409, `got ${approveSecond.status}`);
+
+    const itemAfter = await Item.findById(conflictItemId);
+    check('the listing is claimed exactly once', itemAfter.status === 'claimed', itemAfter.status);
+
+    // Notifications must go to the right party: the sibling claimant hears a
+    // rejection that names their own claim, and the approved claimant never
+    // receives a rejection.
+    const siblingUser = await User.findOne({ email: 'other@scds.saiuniversity.edu.in' });
+    const approvedUser = await User.findOne({ email: 'third@scds.saiuniversity.edu.in' });
+    const siblingNotes = await Notification.find({ user: siblingUser._id });
+    const approvedNotes = await Notification.find({ user: approvedUser._id });
+
+    check('the sibling claimant (claimC) was notified',
+      siblingNotes.length > 0, `${siblingNotes.length} notifications`);
+
+    check('the sibling notification is a rejection',
+      siblingNotes.some((n) => n.type === 'claim_rejected'),
+      siblingNotes.map((n) => n.type).join(','));
+
+    check('the rejection points at the sibling claim, not another one',
+      siblingNotes.some((n) => n.type === 'claim_rejected'
+        && String(n.relatedId) === String(claimC.body.claim.id)),
+      siblingNotes.filter((n) => n.type === 'claim_rejected').map((n) => String(n.relatedId)).join(','));
+
+    check('the approved claimant (claimB) got an approval and no rejection',
+      approvedNotes.some((n) => n.type === 'claim_approved')
+      && !approvedNotes.some((n) => n.type === 'claim_rejected'),
+      approvedNotes.map((n) => n.type).join(','));
+
     // ---------- 7. Housekeeping ----------
     const health = await request(app).get('/api/health');
     check('GET /api/health returns 200', health.status === 200, `got ${health.status}`);
 
     const unknown = await request(app).get('/api/does-not-exist');
     check('unknown route returns JSON 404', unknown.status === 404 && !!unknown.body.message, `got ${unknown.status}`);
+
+    const ready = await request(app).get('/api/health/ready');
+    check('readiness is 200 while the database is connected',
+      ready.status === 200 && ready.body.db.ok === true, `got ${ready.status}`);
 
     const meta = await request(app).get('/api/items/meta');
     check('GET /api/items/meta returns categories', meta.status === 200 && meta.body.categories.length > 0);

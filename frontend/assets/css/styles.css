@@ -43,6 +43,19 @@ img { max-width: 100%; display: block; }
    (e.g. .btn { display: inline-flex }). Without this, hidden elements
    still render. */
 [hidden] { display: none !important; }
+
+/* Visible to screen readers, invisible on screen */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
 button, input, select, textarea { font: inherit; color: inherit; }
 a { color: inherit; text-decoration: none; }
 h1, h2, h3, h4, p, figure { margin: 0; }
@@ -821,8 +834,29 @@ input[type="file"].input { padding: 0.55rem; cursor: pointer; }
   overflow-y: auto;
 }
 
-.notifications__item { padding: 0.7rem 0.85rem; border-bottom: 1px solid var(--line); }
-.notifications__item p { margin: 0 0 0.25rem; font-size: 0.8rem; line-height: 1.45; }
+.notifications__item {
+  position: relative;
+  /* Left gutter is always reserved, so a row does not shift when it is read */
+  padding: 0.7rem 0.85rem 0.7rem 1.75rem;
+  border-bottom: 1px solid var(--line);
+}
+/* Unread marker: an accent dot. Read rows keep the gutter but show nothing. */
+.notifications__item::before {
+  content: '';
+  position: absolute;
+  left: 0.7rem;
+  top: 1.2rem;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
+}
+.notifications__item p {
+  margin: 0 0 0.25rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--muted);          /* read: muted */
+}
 .notifications__item time {
   font-size: 0.65rem;
   color: var(--muted);
@@ -830,7 +864,18 @@ input[type="file"].input { padding: 0.55rem; cursor: pointer; }
   text-transform: uppercase;
 }
 .notifications__item.is-unread { background: var(--ink-2); }
-.notifications__item.is-unread p { color: var(--paper); }
+.notifications__item.is-unread::before { background: var(--accent); }
+.notifications__item.is-unread p { color: var(--paper); font-weight: 600; }
+
+.notifications__count {
+  font-size: 0.66rem;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-left: 0.4rem;
+}
+.notifications__head .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .notifications__empty { padding: 1rem 0.85rem; font-size: 0.8rem; color: var(--muted); }
 
 /* Show / hide password */
@@ -986,9 +1031,46 @@ input[type="file"].input { padding: 0.55rem; cursor: pointer; }
 /* ============================================================
    Auth page: consistent vertical rhythm
    ============================================================ */
-.auth-form { display: grid; gap: 0.95rem; }
+/* Spacing only. Visibility belongs to the two rules further up
+   (.auth-form { display: none } and .auth-form[data-active="true"]); a
+   display value here would tie on specificity and win on source order,
+   showing both forms at once. */
+.auth-form { gap: 0.95rem; }
 .auth-form .field { margin: 0; }
 .auth-tabs { margin-bottom: 1.25rem; }
 .auth-panel__inner { display: grid; gap: 1rem; }
 .auth-form .form-note { margin: 0; line-height: 1.5; }
 .password-field { width: 100%; }
+
+/* Pager under the admin tables */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  padding: 0.9rem 1.25rem;
+  border-top: 1px solid var(--line);
+}
+.pager:empty { display: none; }
+.pager__label { font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+
+/* A notification that navigates: a real button, styled as a list row */
+.notifications__item--link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.notifications__item--link:hover { background: var(--ink-3); }
+/* Only an UNREAD row brightens on hover. This rule used to apply to every row
+   and, being later in the file with equal specificity, it beat the read-state
+   colour — so a read notification turned accent-green under the pointer and
+   looked unread. A read row now keeps its muted text on hover; the background
+   change is the affordance. */
+.notifications__item--link.is-unread:hover p { color: var(--accent); }
