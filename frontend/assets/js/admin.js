@@ -47,9 +47,33 @@
           ${data.page >= data.pages ? 'disabled' : ''}>Next</button>`;
     }
 
+    /**
+     * Explain why the admin area is not available, naming the signed-in account
+     * and its role. A bare "this page is for admins" leaves the reader guessing
+     * whether they are signed out, signed in as the wrong account, or missing a
+     * role — which is exactly the confusion this page used to cause.
+     */
+    function showGuard(reason) {
+      const guard = document.getElementById('guard');
+      if (!Auth.isLoggedIn) {
+        guard.innerHTML = 'This page is for administrators. '
+          + '<a href="auth.html?next=admin.html" style="color:var(--accent)">Log in</a>.';
+      } else {
+        const who = ui.esc(Auth.user?.name || 'this account');
+        const role = ui.esc(Auth.user?.role || 'unknown');
+        guard.innerHTML = reason === 'refused'
+          ? `You are signed in as ${who} (${role}), and the server refused part of the admin area. `
+            + 'If that looks wrong, an administrator can check the role on your account. '
+            + '<a href="index.html" style="color:var(--accent)">Back to the board</a>.'
+          : `You are signed in as ${who} (${role}). The admin area needs an administrator or moderator role. `
+            + '<a href="index.html" style="color:var(--accent)">Back to the board</a>.';
+      }
+      guard.hidden = false;
+    }
+
     async function loadAdmin() {
       if (!Auth.isAdmin) {
-        document.getElementById('guard').hidden = false;
+        showGuard('role');
         return;
       }
       document.getElementById('admin-content').hidden = false;
@@ -164,7 +188,7 @@
         if (!Auth.isLoggedIn) return;
         if (err.status === 401 || err.status === 403) {
           document.getElementById('admin-content').hidden = true;
-          document.getElementById('guard').hidden = false;
+          showGuard('refused');
         } else {
           ui.toast(err.message);
         }

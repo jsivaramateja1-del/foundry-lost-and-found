@@ -6,7 +6,16 @@ const params = new URLSearchParams(window.location.search);
 // Only accept a plain page on this site: a ?next= value such as
 // "//evil.example/login" would otherwise redirect them off-site.
 const requestedNext = params.get('next') || '';
-const nextUrl = /^[a-z0-9_-]+\.html(\?[^#]*)?$/i.test(requestedNext) ? requestedNext : 'index.html';
+
+// Where a successful login (or registration) lands when nothing more specific
+// was asked for. A student who has just signed in wants their own dashboard,
+// not the public board. A ?next= value still wins — that is how a protected
+// page sends you back to where you were — and it is still validated against a
+// plain page name, so it cannot be used to leave the site.
+const DEFAULT_AFTER_LOGIN = 'dashboard.html';
+const nextUrl = /^[a-z0-9_-]+\.html(\?[^#]*)?$/i.test(requestedNext)
+  ? requestedNext
+  : DEFAULT_AFTER_LOGIN;
 
 const tabs = {
   login: { tab: document.getElementById('tab-login'), form: document.getElementById('form-login') },
