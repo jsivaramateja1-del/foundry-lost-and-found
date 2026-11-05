@@ -441,6 +441,144 @@ const check = (name, condition, detail = '') => {
     check('E2: a superadmin can delete someone else\'s listing',
       superDelete.status === 200, `got ${superDelete.status}`);
 
+    // ---------- 10. Who may move a listing's status ----------
+    // An 'admin' account, distinct from the superadmin and moderator above
+    const adminUser = await request(app).post('/api/auth/register').send({
+      name: 'Admin Member', email: 'admin2@scds.saiuniversity.edu.in', password: 'secret123'
+    });
+    const authAdmin = { Authorization: `Bearer ${adminUser.body.token}` };
+    await User.updateOne({ _id: adminUser.body.user.id }, { $set: { role: 'admin' } });
+
+    // A hidden listing per attempt, because a successful restore changes it
+    const hiddenItemFor = async (label) => {
+      const created = await request(app).post('/api/items').set(auth).send({
+        title: `Hidden For ${label}`,
+        description: 'A listing hidden by a moderator for a restore test.',
+        category: 'Bottles',
+        location: 'Canteen',
+        date: new Date().toISOString(),
+        type: 'found'
+      });
+      const id = created.body.item && created.body.item.id;
+      await Item.updateOne({ _id: id }, { $set: { status: 'hidden' } });
+      return id;
+    };
+
+    // A moderator may restore another user's takedown
+    const moderatorTarget = await hiddenItemFor('Moderator');
+    const moderatorRestore = await request(app)
+      .patch(`/api/items/${moderatorTarget}/status`).set(authMod).send({ status: 'open' });
+    check('R1: a moderator can restore another user\'s hidden listing (200)',
+      moderatorRestore.status === 200, `got ${moderatorRestore.status}`);
+    check('R1: the listing really became open again',
+      (await Item.findById(moderatorTarget)).status === 'open');
+
+    // A plain student cannot
+    const studentTarget = await hiddenItemFor('Student');
+    const studentRestore = await request(app)
+      .patch(`/api/items/${studentTarget}/status`).set(auth2).send({ status: 'open' });
+    check('R2: a normal student cannot restore someone else\'s hidden listing (403)',
+      studentRestore.status === 403, `got ${studentRestore.status}`);
+    check('R2: the listing is still hidden',
+      (await Item.findById(studentTarget)).status === 'hidden');
+
+    // Neither can the owner
+    const ownerTarget = await request(app).post('/api/items').set(auth2).send({
+      title: 'Hidden For Owner',
+      description: 'A listing hidden by a moderator for a restore test.',
+      category: 'Bottles',
+      location: 'Canteen',
+      date: new Date().toISOString(),
+      type: 'found'
+    });
+    const ownerTargetId = ownerTarget.body.item.id;
+    await Item.updateOne({ _id: ownerTargetId }, { $set: { status: 'hidden' } });
+
+    const ownerRestore = await request(app)
+      .patch(`/api/items/${ownerTargetId}/status`).set(auth2).send({ status: 'open' });
+
+    check('R3: the owner cannot restore their own hidden listing (403)',
+      ownerRestore.status === 403, `got ${ownerRestore.status}`);
+    check('R3: the listing is still hidden',
+      (await Item.findById(ownerTargetId)).status === 'hidden');
+
+    // Administrators keep their full status power
+    const adminTarget = await hiddenItemFor('Admin');
+    const adminRestore = await request(app)
+      .patch(`/api/items/${adminTarget}/status`).set(authAdmin).send({ status: 'open' });
+    check('R4: an admin can restore a hidden listing (200)',
+      adminRestore.status === 200, `got ${adminRestore.status}`);
+
+    const superTarget = await hiddenItemFor('Superadmin');
+    const superRestore = await request(app)
+      .patch(`/api/items/${superTarget}/status`).set(authStaff).send({ status: 'open' });
+    check('R5: a superadmin can restore a hidden listing (200)',
+      superRestore.status === 200, `got ${superRestore.status}`);
+
+    // A moderator has NO general power over someone else's visible listing
+    const visibleTarget = await request(app).post('/api/items').set(auth).send({
+      title: 'Visible Moderator Target',
+      description: 'A visible listing a moderator must not be able to move.',
+      category: 'Bottles',
+      location: 'Canteen',
+      date: new Date().toISOString(),
+      type: 'lost'
+    });
+    const visibleId = visibleTarget.body.item && visibleTarget.body.item.id;
+    const moderatorOnVisible = await request(app)
+      .patch(`/api/items/${visibleId}/status`).set(authMod).send({ status: 'claimed' });
+    check('R6: a moderator cannot change another user\'s visible listing (403)',
+      moderatorOnVisible.status === 403, `got ${moderatorOnVisible.status}`);
+    check('R6: that listing is unchanged', (await Item.findById(visibleId)).status === 'open');
+
+    // Restoring is the only move a moderator may make on a hidden listing
+    const claimHiddenTarget = await hiddenItemFor('ClaimInstead');
+    const moderatorClaimsHidden = await request(app)
+      .patch(`/api/items/${claimHiddenTarget}/status`).set(authMod).send({ status: 'claimed' });
+    check('R7: a moderator cannot mark a hidden listing claimed instead of restoring it (403)',
+      moderatorClaimsHidden.status === 403, `got ${moderatorClaimsHidden.status}`);
+    check('R7: the listing stays hidden',
+      (await Item.findById(claimHiddenTarget)).status === 'hidden');
+
+    // The owner keeps their normal power over their own visible listing
+    const ownerOwnVisible = await request(app)
+      .patch(`/api/items/${visibleId}/status`).set(auth).send({ status: 'claimed' });
+    check('R8: the owner can still change their own visible listing (200)',
+      ownerOwnVisible.status === 200, `got ${ownerOwnVisible.status}`);
+
+    // A moderator cannot undo their own takedown — but another one can
+    const modOwnItem = await request(app).post('/api/items').set(authMod).send({
+      title: 'Moderator Own Hidden',
+      description: 'A listing owned by a moderator and then hidden.',
+      category: 'Bottles',
+      location: 'Canteen',
+      date: new Date().toISOString(),
+      type: 'found'
+    });
+    const modOwnId = modOwnItem.body.item && modOwnItem.body.item.id;
+    await Item.updateOne({ _id: modOwnId }, { $set: { status: 'hidden' } });
+
+    const modSelfRestore = await request(app)
+      .patch(`/api/items/${modOwnId}/status`).set(authMod).send({ status: 'open' });
+    check('R9: a moderator cannot restore their OWN hidden listing (403)',
+      modSelfRestore.status === 403, `got ${modSelfRestore.status}`);
+    check('R9: the listing stays hidden',
+      (await Item.findById(modOwnId)).status === 'hidden');
+
+    // A different moderator may restore it, which is the point of the rule
+    const mod2 = await request(app).post('/api/auth/register').send({
+      name: 'Second Moderator', email: 'mod2@scds.saiuniversity.edu.in', password: 'secret123'
+    });
+    const authMod2 = { Authorization: `Bearer ${mod2.body.token}` };
+    await User.updateOne({ _id: mod2.body.user.id }, { $set: { role: 'moderator' } });
+
+    const otherModRestore = await request(app)
+      .patch(`/api/items/${modOwnId}/status`).set(authMod2).send({ status: 'open' });
+    check('R10: another moderator can restore it (200)',
+      otherModRestore.status === 200, `got ${otherModRestore.status}`);
+    check('R10: and it becomes open',
+      (await Item.findById(modOwnId)).status === 'open');
+
     const delOther = await request(app).delete(`/api/items/${itemId}`).set(auth2);
     check('non-owner cannot delete an item (403)', delOther.status === 403, `got ${delOther.status}`);
 

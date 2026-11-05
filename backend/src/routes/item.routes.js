@@ -445,19 +445,45 @@ router.patch('/:id/status', protect, async (req, res, next) => {
     if (!item) return res.status(404).json({ message: 'Item not found' });
 
     const isOwner = item.reportedBy.toString() === req.user._id.toString();
-    if (!isOwner && !ADMIN_ROLES.includes(req.user.role)) {
-      return res.status(403).json({ message: 'You can only change the status of your own listings' });
-    }
 
     // Remember the old status so points cannot be farmed by clicking twice
     const previousStatus = item.status;
 
+    // Who may move this listing:
+    //   - the owner, on their own listing;
+    //   - an administrator or superadmin, on any listing;
+    //   - a moderator, but ONLY to undo a takedown (hidden -> open). A moderator
+    //     has no general power over other people's visible listings: claiming,
+    //     returning or closing someone else's item stays an administrator's call.
+    const isAdministrator = ADMIN_ROLES.includes(req.user.role);
+    const isModeratorRestore = req.user.role === 'moderator'
+      && previousStatus === 'hidden'
+      && status === 'open';
+
+    if (!isOwner && !isAdministrator && !isModeratorRestore) {
+      return res.status(403).json({
+        message: req.user.role === 'moderator'
+          ? 'Moderators can only restore a hidden listing to open'
+          : 'You can only change the status of your own listings'
+      });
+    }
+
     if (previousStatus === status) {
       return res.status(400).json({ message: `This listing is already ${status}` });
     }
-    // A moderator's takedown is not the owner's to reverse
-    if (previousStatus === 'hidden' && !MODERATION_ROLES.includes(req.user.role)) {
-      return res.status(403).json({ message: 'A hidden listing can only be restored by a moderator or administrator' });
+    // A takedown is reversed by someone else: another moderator, an
+    // administrator or a superadmin. The owner cannot reverse it, and that
+    // includes an owner who is a moderator themselves — a moderator reaching
+    // this point only because they own the listing is still refused.
+    if (previousStatus === 'hidden') {
+      const isStaff = MODERATION_ROLES.includes(req.user.role);
+      const moderatorOnOwnListing = isOwner && req.user.role === 'moderator';
+
+      if (!isStaff || moderatorOnOwnListing) {
+        return res.status(403).json({
+          message: 'A hidden listing can only be restored by another moderator or an administrator'
+        });
+      }
     }
     // Returned and closed are terminal states: reopening them is an
     // administrative correction, not something the owner does by accident
