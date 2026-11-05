@@ -14,16 +14,26 @@
     const statusTag = (s) => `<span class="status status--${s}">${ui.esc(s)}</span>`;
 
     /** Load everything and paint the three tables. */
-    async function refresh() {
+    /**
+     * Reload everything the dashboard shows.
+     *
+     * Returns { ok: true } or { ok: false, message } so a caller that has just
+     * changed something can report both outcomes in one message. Pass
+     * { silent: true } when the caller will do the reporting itself.
+     */
+    async function refresh({ silent = false } = {}) {
       let data;
       try {
         data = await api('/dashboard/me', { auth: true });
       } catch (err) {
         // If the user just logged out, stay quiet instead of bouncing them back
-        if (!Auth.isLoggedIn) return;
-        if (err.status === 401) return Auth.requireLogin('dashboard.html');
-        ui.toast(err.message);
-        return;
+        if (!Auth.isLoggedIn) return { ok: false, message: 'You have been signed out.' };
+        if (err.status === 401) {
+          Auth.requireLogin('dashboard.html');
+          return { ok: false, message: 'Your session expired.' };
+        }
+        if (!silent) ui.toast(err.message);
+        return { ok: false, message: err.message };
       }
 
       Object.entries(data.stats).forEach(([key, value]) => {
@@ -87,12 +97,15 @@
                 : '<span class="form-note">Reviewed</span>'
           ])).join('')
         : '<tr><td colspan="5" style="color:var(--muted)">Nobody has claimed any of your items yet.</td></tr>';
+
+      return { ok: true };
     }
 
     /* ---------------- edit and delete ---------------- */
     const editModal = document.getElementById('modal-edit');
     const meta = { categories: [], locations: [] };
     let editingId = null;
+    let editingStatus = '';   // the status the listing had when the modal opened
 
     function openModalEl(node) {
       node.dataset.open = 'true';
@@ -127,7 +140,25 @@
         document.getElementById('ef-title').value = item.title;
         document.getElementById('ef-description').value = item.description;
         document.getElementById('ef-date').value = new Date(item.date).toISOString().slice(0, 10);
-        document.getElementById('ef-status').value = item.status;
+        editingStatus = item.status;
+        // A moderated listing's status is not one of the editable options.
+        // Show it, disabled, so the select cannot silently misrepresent it.
+        const statusSelect = document.getElementById('ef-status');
+        // Remove any placeholder left over from a listing opened earlier, so
+        // options never accumulate and a stale one can never be shown
+        statusSelect.querySelectorAll('option[data-temporary-status]').forEach((o) => o.remove());
+        const known = [...statusSelect.options].some((o) => o.value === item.status);
+        if (!known) {
+          const extra = document.createElement('option');
+          extra.value = item.status;
+          extra.textContent = item.status.charAt(0).toUpperCase() + item.status.slice(1);
+          extra.disabled = true;
+          extra.dataset.temporaryStatus = 'true';
+          statusSelect.appendChild(extra);
+        }
+        // Set after the options are settled, so the select shows this listing's
+        // real status rather than whatever the previous listing left behind
+        statusSelect.value = item.status;
         fillSelect(document.getElementById('ef-category'), meta.categories, item.category);
         fillSelect(document.getElementById('ef-location'), meta.locations, item.location);
         document.getElementById('ef-custom-category').value = item.customCategory || '';
@@ -169,8 +200,7 @@
         category: document.getElementById('ef-category').value,
         location: document.getElementById('ef-location').value,
         date: document.getElementById('ef-date').value,
-        description: document.getElementById('ef-description').value.trim(),
-        status: document.getElementById('ef-status').value
+        description: document.getElementById('ef-description').value.trim()
       };
       if (payload.category === 'Other') {
         payload.customCategory = document.getElementById('ef-custom-category').value.trim();
@@ -188,12 +218,50 @@
       btn.disabled = true;
       btn.textContent = 'Saving…';
       try {
-        await api(`/items/${editingId}`, { method: 'PUT', body: payload, auth: true });
+        try {
+          await api(`/items/${editingId}`, { method: 'PUT', body: payload, auth: true });
+        } catch (err) {
+          // Nothing was saved, so the modal stays open for the user to correct it
+          showError(err.message);
+          return;
+        }
+
+        // From here the details ARE saved. A status failure below is a partial
+        // success and must never be reported as "nothing was saved".
+        // Status is managed by its own endpoint, so its guards (terminal states,
+        // takedowns, one-off points and notifications) always apply. Only call
+        // it when the value actually changed, or it would 400 on "already open".
+        const wantedStatus = document.getElementById('ef-status').value;
+        const statusChanged = Boolean(wantedStatus) && wantedStatus !== editingStatus;
+        let statusError = null;
+
+        if (statusChanged) {
+          try {
+            await api(`/items/${editingId}/status`, { method: 'PATCH', body: { status: wantedStatus }, auth: true });
+          } catch (err) {
+            statusError = err;
+          }
+        }
+
+        // Close and reload either way: the table must show what the server
+        // holds, not what the user hoped for. The reload reports its own
+        // failure instead of toasting it, so one message can cover both.
         closeModalEl(editModal);
-        ui.toast('Listing updated');
-        await refresh();
-      } catch (err) {
-        showError(err.message);
+        const reload = await refresh({ silent: true });
+        const reloadFailed = !reload.ok;
+
+        // Exactly one toast, because the toast element is reused and a second
+        // message would overwrite the first. Every combination is covered, so
+        // a failed reload can never hide a failed status change.
+        if (statusError && reloadFailed) {
+          ui.toast(`Listing details saved, but the status could not be changed to "${wantedStatus}" (${statusError.message}), and the dashboard could not be refreshed (${reload.message}). Reload the page to see the latest state.`);
+        } else if (statusError) {
+          ui.toast(`Listing details saved, but the status could not be changed to "${wantedStatus}": ${statusError.message}`);
+        } else if (reloadFailed) {
+          ui.toast(`Listing updated, but the dashboard could not be refreshed (${reload.message}). Reload the page to see the latest state.`);
+        } else {
+          ui.toast('Listing updated');
+        }
       } finally {
         btn.disabled = false;
         btn.textContent = 'Save changes';

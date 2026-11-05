@@ -323,6 +323,124 @@ const check = (name, condition, detail = '') => {
     const meta = await request(app).get('/api/items/meta');
     check('GET /api/items/meta returns categories', meta.status === 200 && meta.body.categories.length > 0);
 
+    // ---------- 7. Stage 1 / E1: a hidden listing is not public ----------
+    const hiddenCreate = await request(app).post('/api/items').set(auth2).send({
+      title: 'Taken Down Item',
+      description: 'A listing a moderator will hide.',
+      category: 'Bottles',
+      location: 'Canteen',
+      date: new Date().toISOString(),
+      type: 'found'
+    });
+    const hiddenId = hiddenCreate.body.item && hiddenCreate.body.item.id;
+    check('E1 setup: the listing to be hidden was created', !!hiddenId);
+
+    // A moderator hides it through the admin surface; here we set the field
+    // directly so this suite does not depend on the admin routes
+    await Item.updateOne({ _id: hiddenId }, { $set: { status: 'hidden' } });
+
+    const publicList = await request(app).get('/api/items?limit=100');
+    check('E1: a hidden listing is absent from the public list',
+      publicList.status === 200 && !publicList.body.items.some((i) => i.id === hiddenId),
+      `found ${publicList.body.items.filter((i) => i.id === hiddenId).length}`);
+
+    const statusHidden = await request(app).get('/api/items?status=hidden');
+    check('E1: the public list refuses status=hidden (400)',
+      statusHidden.status === 400, `got ${statusHidden.status}`);
+
+    const anonDetail = await request(app).get(`/api/items/${hiddenId}`);
+    check('E1: a hidden listing is 404 to an anonymous visitor',
+      anonDetail.status === 404, `got ${anonDetail.status}`);
+
+    const anonSimilar = await request(app).get(`/api/items/${hiddenId}/similar`);
+    check('E1: the duplicate-alert route also refuses a hidden listing',
+      anonSimilar.status === 404, `got ${anonSimilar.status}`);
+
+    const ownerDetail = await request(app).get(`/api/items/${hiddenId}`).set(auth2);
+    check('E1: the owner can still open their own hidden listing',
+      ownerDetail.status === 200, `got ${ownerDetail.status}`);
+
+    // ---------- 8. Stage 1 / E2: admin AND superadmin may moderate ----------
+    const staff = await request(app).post('/api/auth/register').send({
+      name: 'Staff Member', email: 'staff@scds.saiuniversity.edu.in', password: 'secret123'
+    });
+    const authStaff = { Authorization: `Bearer ${staff.body.token}` };
+    const staffId = staff.body.user && staff.body.user.id;
+
+    const mod = await request(app).post('/api/auth/register').send({
+      name: 'Mod Member', email: 'mod@scds.saiuniversity.edu.in', password: 'secret123'
+    });
+    const authMod = { Authorization: `Bearer ${mod.body.token}` };
+
+    // promote in the database: protect() reloads the user on every request, so
+    // the existing token immediately carries the new role
+    await User.updateOne({ _id: staffId }, { $set: { role: 'superadmin' } });
+    await User.updateOne({ _id: mod.body.user.id }, { $set: { role: 'moderator' } });
+
+    const modDetail = await request(app).get(`/api/items/${hiddenId}`).set(authMod);
+    check('E2: a moderator can open a hidden listing', modDetail.status === 200, `got ${modDetail.status}`);
+
+    const adminCreate = await request(app).post('/api/items').set(auth).send({
+      title: 'Superadmin Edit Target',
+      description: 'A listing another account will moderate.',
+      category: 'Bottles',
+      location: 'Canteen',
+      date: new Date().toISOString(),
+      type: 'lost'
+    });
+    const adminItemId = adminCreate.body.item && adminCreate.body.item.id;
+
+    const superEdit = await request(app).put(`/api/items/${adminItemId}`).set(authStaff)
+      .send({ title: 'Edited by a superadmin' });
+    check('E2: a superadmin can edit someone else\'s listing',
+      superEdit.status === 200, `got ${superEdit.status}`);
+
+    const superStatus = await request(app).patch(`/api/items/${adminItemId}/status`).set(authStaff)
+      .send({ status: 'claimed' });
+    check('E2: a superadmin can change the status of someone else\'s listing',
+      superStatus.status === 200, `got ${superStatus.status}`);
+
+    const modEdit = await request(app).put(`/api/items/${adminItemId}`).set(authMod)
+      .send({ title: 'Edited by a moderator' });
+    check('E2: a moderator still cannot edit someone else\'s listing (403)',
+      modEdit.status === 403, `got ${modEdit.status}`);
+
+    const studentEdit = await request(app).put(`/api/items/${adminItemId}`).set(auth2)
+      .send({ title: 'Edited by a student' });
+    check('E2: a student still cannot edit someone else\'s listing (403)',
+      studentEdit.status === 403, `got ${studentEdit.status}`);
+
+    // ---------- 9. Stage 1 / E3: status is only changed by its own endpoint ----------
+    const editWithStatus = await request(app).put(`/api/items/${adminItemId}`).set(auth)
+      .send({ title: 'Renamed', status: 'returned' });
+    check('E3: an edit that carries a status is refused (400)',
+      editWithStatus.status === 400, `got ${editWithStatus.status}`);
+
+    const afterEdit = await Item.findById(adminItemId);
+    check('E3: the refused edit changed nothing',
+      afterEdit.title === 'Edited by a superadmin' && afterEdit.status === 'claimed',
+      `${afterEdit.title} / ${afterEdit.status}`);
+
+    const ownerReturn = await request(app).patch(`/api/items/${adminItemId}/status`).set(auth)
+      .send({ status: 'returned' });
+    check('E3: the dedicated status endpoint still works (200)',
+      ownerReturn.status === 200 && ownerReturn.body.item.status === 'returned',
+      `got ${ownerReturn.status}`);
+
+    const ownerUnhide = await request(app).patch(`/api/items/${hiddenId}/status`).set(auth2)
+      .send({ status: 'open' });
+    check('E1: an owner cannot un-hide their own listing (403)',
+      ownerUnhide.status === 403, `got ${ownerUnhide.status}`);
+
+    const staffUnhide = await request(app).patch(`/api/items/${hiddenId}/status`).set(authStaff)
+      .send({ status: 'open' });
+    check('E1: staff can restore a hidden listing (200)',
+      staffUnhide.status === 200, `got ${staffUnhide.status}`);
+
+    const superDelete = await request(app).delete(`/api/items/${adminItemId}`).set(authStaff);
+    check('E2: a superadmin can delete someone else\'s listing',
+      superDelete.status === 200, `got ${superDelete.status}`);
+
     const delOther = await request(app).delete(`/api/items/${itemId}`).set(auth2);
     check('non-owner cannot delete an item (403)', delOther.status === 403, `got ${delOther.status}`);
 

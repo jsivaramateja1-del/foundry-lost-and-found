@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const Item = require('../models/Item');
 const { CATEGORIES, LOCATIONS } = require('../models/Item');
 const { CATEGORY_TREE, isValidSubcategory } = require('../utils/categories');
-const { protect, requireVerified } = require('../middleware/auth');
+const { protect, requireVerified, identifyUser, ADMIN_ROLES, MODERATION_ROLES } = require('../middleware/auth');
 const { notify } = require('../utils/notify');
 const { itemIpLimit, itemAccountLimit, reportIpLimit, reportAccountLimit } = require('../middleware/rateLimit');
 const Report = require('../models/Report');
@@ -34,6 +34,18 @@ const validateImage = (value) => {
     return `image must be smaller than ${Math.round(IMAGE_LIMIT_BYTES / 1024)} KB`;
   }
   return null;
+};
+
+/**
+ * A listing a moderator has taken down is visible only to its owner and to
+ * staff. Everyone else gets the same answer as for a listing that does not
+ * exist, which is what a takedown is supposed to look like.
+ */
+const canSeeHidden = (item, user) => {
+  if (!user) return false;
+  if (MODERATION_ROLES.includes(user.role)) return true;
+  const reporter = item.reportedBy && item.reportedBy._id ? item.reportedBy._id : item.reportedBy;
+  return Boolean(reporter) && String(reporter) === String(user._id);
 };
 
 /** Shape an item for the API, exposing only the reporter's display name */
@@ -149,7 +161,17 @@ router.get('/', async (req, res, next) => {
     }
     if (location && location !== 'all') filter.location = location;
     if (type && type !== 'all') filter.type = type;
-    if (status && status !== 'all') filter.status = status;
+    if (status && status !== 'all') {
+      // 'hidden' is a moderation state, not a public one. Refuse to filter by
+      // it rather than silently returning taken-down listings.
+      if (status === 'hidden') {
+        return res.status(400).json({ message: 'status must be one of: open, claimed, returned, closed' });
+      }
+      filter.status = status;
+    } else {
+      // Nothing taken down by a moderator may appear on the public board
+      filter.status = { $ne: 'hidden' };
+    }
 
     const sortMap = {
       newest: { date: -1, createdAt: -1 },
@@ -218,13 +240,16 @@ router.get('/stats', async (req, res, next) => {
  * GET /api/items/:id
  * Public. Single listing detail.
  */
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', identifyUser, async (req, res, next) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ message: 'Invalid item id' });
     }
     const item = await Item.findById(req.params.id).populate('reportedBy', 'name');
     if (!item) return res.status(404).json({ message: 'Item not found' });
+    if (item.status === 'hidden' && !canSeeHidden(item, req.user)) {
+      return res.status(404).json({ message: 'Item not found' });
+    }
     res.status(200).json({ item: publicItem(item) });
   } catch (err) {
     next(err);
@@ -237,13 +262,16 @@ router.get('/:id', async (req, res, next) => {
  * Finds listings of the same type in the same category whose title shares
  * meaningful words with this one, so users can spot an existing match.
  */
-router.get('/:id/similar', async (req, res, next) => {
+router.get('/:id/similar', identifyUser, async (req, res, next) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ message: 'Invalid item id' });
     }
     const item = await Item.findById(req.params.id);
     if (!item) return res.status(404).json({ message: 'Item not found' });
+    if (item.status === 'hidden' && !canSeeHidden(item, req.user)) {
+      return res.status(404).json({ message: 'Item not found' });
+    }
 
     const stop = new Set(['the', 'a', 'an', 'my', 'and', 'with', 'of', 'in', 'on', 'for', 'black', 'blue', 'new']);
     const words = String(item.title)
@@ -262,6 +290,7 @@ router.get('/:id/similar', async (req, res, next) => {
           _id: { $ne: item._id },
           category: item.category,
           type: item.type === 'lost' ? 'found' : 'lost',
+          status: { $ne: 'hidden' },
           $or: or
         })
           .populate('reportedBy', 'name')
@@ -367,14 +396,23 @@ router.put('/:id', protect, async (req, res, next) => {
     if (!item) return res.status(404).json({ message: 'Item not found' });
 
     const isOwner = item.reportedBy.toString() === req.user._id.toString();
-    if (!isOwner && req.user.role !== 'admin') {
+    if (!isOwner && !ADMIN_ROLES.includes(req.user.role)) {
       return res.status(403).json({ message: 'You can only edit your own listings' });
+    }
+
+    // Status has its own endpoint, which enforces the terminal-state rule and
+    // awards points and notifications exactly once. An edit must not be a
+    // second, unchecked way to move it.
+    if (req.body.status !== undefined) {
+      return res.status(400).json({
+        message: 'status cannot be changed here. Use PATCH /api/items/:id/status'
+      });
     }
 
     const errors = validateItemBody(req.body, { partial: true });
     if (errors.length) return res.status(400).json({ message: errors[0], errors });
 
-    ['title', 'description', 'category', 'subcategory', 'customCategory', 'location', 'customLocation', 'date', 'type', 'imageUrl', 'status']
+    ['title', 'description', 'category', 'subcategory', 'customCategory', 'location', 'customLocation', 'date', 'type', 'imageUrl']
       .forEach((field) => {
         if (req.body[field] !== undefined) item[field] = req.body[field];
       });
@@ -407,7 +445,7 @@ router.patch('/:id/status', protect, async (req, res, next) => {
     if (!item) return res.status(404).json({ message: 'Item not found' });
 
     const isOwner = item.reportedBy.toString() === req.user._id.toString();
-    if (!isOwner && req.user.role !== 'admin') {
+    if (!isOwner && !ADMIN_ROLES.includes(req.user.role)) {
       return res.status(403).json({ message: 'You can only change the status of your own listings' });
     }
 
@@ -417,9 +455,13 @@ router.patch('/:id/status', protect, async (req, res, next) => {
     if (previousStatus === status) {
       return res.status(400).json({ message: `This listing is already ${status}` });
     }
+    // A moderator's takedown is not the owner's to reverse
+    if (previousStatus === 'hidden' && !MODERATION_ROLES.includes(req.user.role)) {
+      return res.status(403).json({ message: 'A hidden listing can only be restored by a moderator or administrator' });
+    }
     // Returned and closed are terminal states: reopening them is an
     // administrative correction, not something the owner does by accident
-    if (['returned', 'closed'].includes(previousStatus) && req.user.role !== 'admin') {
+    if (['returned', 'closed'].includes(previousStatus) && !ADMIN_ROLES.includes(req.user.role)) {
       return res.status(400).json({
         message: `A ${previousStatus} listing can only be reopened by an administrator`
       });
@@ -468,7 +510,7 @@ router.delete('/:id', protect, async (req, res, next) => {
     if (!item) return res.status(404).json({ message: 'Item not found' });
 
     const isOwner = item.reportedBy.toString() === req.user._id.toString();
-    if (!isOwner && req.user.role !== 'admin') {
+    if (!isOwner && !ADMIN_ROLES.includes(req.user.role)) {
       return res.status(403).json({ message: 'You can only delete your own listings' });
     }
 

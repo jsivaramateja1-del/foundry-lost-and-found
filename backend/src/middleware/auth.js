@@ -45,6 +45,26 @@ const protect = async (req, res, next) => {
 };
 
 /**
+ * Attach req.user when a valid Bearer token is present, but never refuse the
+ * request. Public routes use this when they must show a little more to the
+ * owner or to staff — a hidden listing, for example — while staying public.
+ * An absent, invalid or expired token simply means "not identified".
+ */
+const identifyUser = async (req, res, next) => {
+  const header = req.headers.authorization || '';
+  if (!header.startsWith('Bearer ')) return next();
+  try {
+    const decoded = jwt.verify(header.split(' ')[1], secret());
+    const user = await User.findById(decoded.id);
+    // A deleted or suspended account is treated as anonymous here
+    if (user && !user.suspended) req.user = user;
+  } catch {
+    /* not identified: the route continues as an anonymous request */
+  }
+  return next();
+};
+
+/**
  * Require a verified email address, but only when the deployment has email
  * verification switched on. With it off (the default) this is a no-op, so
  * existing accounts keep working exactly as before.
@@ -85,6 +105,7 @@ const signToken = (userId) =>
 
 module.exports = {
   protect,
+  identifyUser,
   adminOnly,
   requireRole,
   requireVerified,
