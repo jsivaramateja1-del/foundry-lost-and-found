@@ -6,6 +6,7 @@
 const state = {
   q: '',
   type: 'all',
+  status: 'all',
   category: 'all',
   subcategory: 'all',
   location: 'all',
@@ -36,6 +37,7 @@ const el = {
   from: document.getElementById('filter-from'),
   to: document.getElementById('filter-to'),
   sort: document.getElementById('filter-sort'),
+  status: document.getElementById('filter-status'),
   reset: document.getElementById('reset-filters'),
   loadMore: document.getElementById('load-more'),
   pageStatus: document.getElementById('page-status'),
@@ -165,7 +167,8 @@ function cardMarkup(item) {
 }
 
 function hasActiveFilters() {
-  return Boolean(state.q) || state.type !== 'all' || state.category !== 'all'
+  return Boolean(state.q) || state.type !== 'all' || state.status !== 'all'
+    || state.category !== 'all' || state.subcategory !== 'all'
     || state.location !== 'all' || Boolean(state.from) || Boolean(state.to);
 }
 
@@ -175,6 +178,7 @@ async function loadItems({ page = 1, append = false } = {}) {
   const params = new URLSearchParams();
   if (state.q) params.set('q', state.q);
   if (state.type !== 'all') params.set('type', state.type);
+  if (state.status !== 'all') params.set('status', state.status);
   if (state.category !== 'all') params.set('category', state.category);
   if (state.subcategory !== 'all') params.set('subcategory', state.subcategory);
   if (state.location !== 'all') params.set('location', state.location);
@@ -228,7 +232,7 @@ function renderGrid(data, { append = false } = {}) {
         'Try a different keyword, or widen the filters. You can also report the item yourself.',
         { firstRun: false });
     } else {
-      showEmpty('No items reported yet',
+      showEmpty('No items reported yet.',
         'Be the first to report a lost or found item on campus.',
         { firstRun: true });
     }
@@ -279,6 +283,7 @@ function fillSubcategories(select, category, selected = '') {
 function resetFilters() {
   state.q = '';
   state.type = 'all';
+  state.status = 'all';
   state.category = 'all';
   state.subcategory = 'all';
   state.location = 'all';
@@ -287,6 +292,7 @@ function resetFilters() {
   state.sort = 'newest';
   el.search.value = '';
   el.type.value = 'all';
+  if (el.status) el.status.value = 'all';
   el.category.value = 'all';
   fillSubcategories(el.subcategory, 'all');
   el.location.value = 'all';
@@ -643,6 +649,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, 300);
   });
   el.type.addEventListener('change', () => { state.type = el.type.value; applyFilters(); });
+  if (el.status) {
+    el.status.addEventListener('change', () => { state.status = el.status.value; applyFilters(); });
+  }
   el.category.addEventListener('change', () => {
     state.category = el.category.value;
     // A subcategory from the previous category is meaningless now

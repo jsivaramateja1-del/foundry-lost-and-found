@@ -373,6 +373,189 @@ All responses are JSON, including errors. Every protected route requires
 | PATCH | `/api/notifications/:id/read` | logged in — mark one as read |
 | PATCH | `/api/notifications/read-all` | logged in — mark all as read |
 
+### Preferences and the leaderboard
+
+```
+PATCH /api/auth/preferences     Protected
+    body: { "leaderboardOptOut": true | false }
+    Sets whether the signed-in student's name appears on the public leaderboard.
+    Points, returns and role are deliberately not writable here — the endpoint
+    rejects nothing silently, it simply has no other fields, so it cannot be
+    used to inflate a score or escalate a role.
+```
+
+`GET /api/leaderboard` is public and returns the top ten students by points.
+Students with `leaderboardOptOut: true` are left out entirely rather than shown
+anonymised, and the response never contains an email address.
+
+### Password reset and account recovery
+
+```
+POST /api/auth/forgot-password      Public, rate limited
+    body: { "email": "..." }
+    Always answers: "If that address has a Foundry account, a reset link is on
+    its way." It does not reveal whether the address is registered.
+
+POST /api/auth/reset-password       Public, rate limited
+    body: { "token": "...", "password": "...", "confirmPassword": "..." }
+    The token works once and expires after 15 minutes.
+```
+
+How it is stored and why:
+
+- The token is 32 random bytes from `crypto.randomBytes`. Only its **SHA-256
+  hash** is stored (`User.resetTokenHash`), so a database leak cannot be turned
+  into a working reset link.
+- `resetTokenExpires` is 15 minutes from the request.
+- The token is **consumed atomically** (`findOneAndUpdate` with `$unset`), so two
+  simultaneous reset requests cannot both succeed: the second update matches
+  nothing. If the password save then fails, the token is spent and the user
+  requests a new link — the failure is closed, never open.
+- `User.tokenVersion` is incremented on reset. Every JWT carries the version it
+  was signed with, and `protect` refuses a token whose version no longer
+  matches — so a reset logs out every older session. Tokens issued before this
+  field existed carry no version and are treated as 0, which means the upgrade
+  itself logs nobody out.
+- The password is hashed by the existing bcrypt pre-save hook; the user's role,
+  points, badges and profile are untouched.
+- The token never appears in an API response and is never logged. If SMTP fails,
+  the endpoint still answers generically and the failure is logged by message
+  only.
+
+**Account recovery without the mailbox:** there is deliberately no alternative
+path. If a student loses access to their university address they must contact
+the Foundry administrator or university IT and prove their identity through
+official channels. There are no security questions and no unauthenticated
+administrative password reset.
+
+### Gamification rules
+
+Points are written only by `backend/src/utils/gamification.js`, never by a route
+handler and never from anything the client sends.
+
+| Event | Points | When it is awarded |
+|---|---|---|
+| Completed return or handover | 10 | When the owner marks a listing returned, or when both sides confirm the handover |
+| Posting a found item | 2 | On creating a listing of type `found` |
+
+**How an award is recorded.** Each `PointEvent` moves through
+`pending → claimed → completed`:
+
+- `pending` — the row exists and nobody is working on it.
+- `claimed` — one request holds a 60-second lease and is applying the credit.
+- `completed` — the points are on the account.
+
+Only the lease holder may credit, and the credit itself is a single atomic update
+guarded on the event id (`User.creditedEvents`). **The marker is permanent and is
+never removed.** That is the whole point: a worker can be paused for an unbounded
+time — it can hold a claim, lose the lease to another worker, and only resume
+after that worker has finished. Any worker that resumes is stopped by the marker,
+because the guard sits inside the same atomic update as the increment and is
+never re-read separately from it. On a replica set the whole thing runs inside a
+transaction instead. See "Repairing point totals" for the recovery paths.
+
+**Storage trade-off, stated plainly:** each award leaves one 24-character id on
+the user document for ever. That is roughly 24 bytes per award — a student with
+1,000 awards adds about 24 KB, well inside MongoDB's 16 MB document limit, but it
+does grow without bound. Pruning an id would be safe only if no worker could
+still be holding a claim on that event, and that cannot be proven while a paused
+process can resume at any time. If the collection ever approaches the limit, the
+honest options are archiving completed events into a separate collection and
+recomputing totals from it, not quietly dropping ids.
+
+**Why points cannot be farmed.** Every award writes a row to the `PointEvent`
+collection with a stable key (`return:<itemId>:<userId>`, `found:<itemId>`), and
+`{ user, key }` is a **unique index**. A repeated request — including two
+concurrent ones — loses the insert and pays nothing. Because the return key is
+the same for both the "mark returned" route and the handover route, an item
+cannot pay out twice through two different code paths.
+
+Badges (`User.badges`, with the date each was earned):
+
+| Badge | Criteria |
+|---|---|
+| First Found Item | Posted your first found item |
+| Helpful Finder | Posted three found items |
+| Successful Return | Completed your first verified return |
+| Community Helper | Completed five verified returns |
+| Trusted Member | Completed ten verified returns |
+
+Badges are never revoked and never awarded twice; the evaluation skips any id
+the user already has.
+
+### Leaderboard
+
+```
+GET /api/leaderboard?period=week|month|all     Public
+```
+
+- Students on equal points **share a rank** (1, 2, 2, 4), ordered by name so the
+  board is stable between requests.
+- `all` reads the running total on the user document.
+- `week` and `month` are date windows over `PointEvent`, so they describe points
+  actually earned in that period rather than a lifetime total.
+- Students with `leaderboardOptOut: true` are excluded from every period,
+  including the windowed boards, and the response never contains an email
+  address. The preference is enforced in the query, not in the browser.
+
+### Repairing point totals
+
+Two different repairs, because there are two different failures:
+
+```
+npm run recover:awards                          report only, all time
+npm run recover:awards -- --apply               create the missing awards
+npm run recover:awards -- --since-days 90 --apply    narrower window
+npm run recover:awards -- --batch-size 500 --apply   bigger pages (1-1000, default 200)
+
+npm run reconcile:points                        report only
+npm run reconcile:points -- --apply             fix under-credited accounts
+npm run reconcile:points -- --apply --allow-decrease
+                                                also overwrite historical balances
+npm run reconcile:points -- --apply --complete-pending
+                                                credit events left pending
+node scripts/reconcile-points.js --restore backups/points-backup-<stamp>.json
+```
+
+**`recover:awards`** covers the case reconciliation cannot see: a business action
+that succeeded while its award failed *before* the ledger row was written. There
+is no row to reconcile, so this script rebuilds eligibility from the business
+records themselves — found listings (not hidden) and returned listings, plus the
+approved claimant of a returned item. Nothing else is eligible.
+
+It looks at **all time by default**, walking the collection in pages ordered by
+`_id` with a cursor, so every eligible record is examined however large the
+collection is and however old the failure was. Each page is processed and then
+released, so memory is bounded by the batch size — nothing accumulates across
+pages, and the collection is never loaded wholesale. It never re-reads a page it
+has already seen. Pass `--since-days N` only when you deliberately want a
+narrower window, and `--batch-size N` to change the page size. The page size must
+be a whole number from 1 to **1000** (default 200); anything else — zero, a
+negative, a decimal, `NaN`, `Infinity` or an over-large value — is rejected with
+an error rather than quietly corrected, because a silently coerced page size is
+how an accidental full-collection read happens. The same limit is enforced inside
+`recoverMissingAwards()`, not only in the CLI.
+
+The report gives exact counters — records scanned, batches, eligible awards,
+already recorded, missing, created and failed — and keeps only a small sample of
+missing and failed keys (10 by default) for diagnosis. Every award goes through
+the same idempotent path the application uses, so running it twice, concurrently,
+or on a live site cannot double-pay.
+
+**`reconcile:points`** compares totals with the ledger. The ledger only starts when it was introduced, so an account can legitimately
+hold points no event records. The script therefore classifies every account:
+
+| State | Meaning | Default action |
+|---|---|---|
+| `in-sync` | the ledger explains the whole balance | none |
+| `historical-balance` | the account holds more than the ledger records | **left alone** |
+| `under-credited` | the ledger records more than the account holds | topped up (only ever adds) |
+
+Reducing a balance can destroy genuine history, so it needs `--allow-decrease`
+on top of `--apply`. Every `--apply` run writes `backend/backups/points-backup-<timestamp>.json`
+before touching anything and prints the `--restore` command that undoes it. The
+script never deletes a user, an event or a listing.
+
 ## 11. Moderation
 
 Students can flag a listing from the item dialog: spam, inappropriate,
@@ -476,15 +659,46 @@ The free tier sleeps when idle, so the first request after a pause can take
 
 ## 15. Known limitations
 
+Stated plainly so nobody assumes more than the code does.
+
+- **Automatic expiry** of stale listings is not implemented, deliberately. The
+  database records when a listing was created but nothing records whether the
+  owner still wants it open, and an item that is still lost does not become
+  less lost because a timer expired. A safe policy needs a decision from the
+  university (for example "close after 90 days with no claim, after emailing
+  the owner"), so it is documented here rather than guessed at in code.
+- **Weekly and monthly leaderboards count only events recorded after the ledger
+  was introduced.** An account's all-time total can therefore be larger than the
+  sum of its weekly and monthly scores. This is a property of introducing a
+  ledger late, not a bug, and the reconciliation script prints each account's
+  pre-ledger balance so the difference is visible.
+- **Exactly-once is guaranteed only on a replica set** (which Atlas is), where
+  the ledger row and the credit commit together. On a standalone MongoDB the
+  design is "at most once, with a recoverable window": a crash between the
+  credit and the `completed` write leaves a claimed event whose points are
+  already on the account. The idempotent guard means reclaiming it cannot pay
+  twice, and `npm run reconcile:points` reports such rows. No claim of exactly-once
+  is made for that configuration.
+- **The repair scripts are manual.** Nothing schedules `recover:awards` or
+  `reconcile:points`; run them after an incident, or add them to a cron if you
+  want them automatic. `recover:awards` is the one to run after a crash that
+  interrupted a write.
+- **Email verification and SMTP** remain off by default (see section 12).
+  Password reset does need SMTP: without it the endpoint still answers
+  generically, but no mail is delivered and the Render log records the failure.
+- **Images** are stored as base64 data URLs capped at 400 KB; there is no
+  external object storage.
+- **Moderation is deliberately manual.** Reports are queued for an
+  administrator; nothing is auto-removed or auto-suspended by a threshold.
+- **There is no in-app chat** between a finder and an owner. Coordination happens
+  through the claim message and the dashboard.
 - No email notifications; coordination happens inside the site through in-app
   notifications and the dashboard.
 - **Email verification is implemented but switched off** until you configure
   SMTP (see section 10). Until then every account is treated as verified.
-- **No password reset.** It needs working SMTP; once section 10 is configured it
-  is a small addition, but it is not built and is not pretended to be.
 - **Moderation is deliberately manual.** Reports are queued for an
   administrator; nothing is auto-removed or auto-suspended by a threshold.
-- **Not built yet**, and deliberately not faked: password reset, in-app messaging between
+- **Not built yet**, and deliberately not faked: in-app messaging between
   users, QR codes per listing, saved listings and saved searches,
   multiple images per listing (one photo each),
   listing expiry and archival, multi-image galleries (listings carry one

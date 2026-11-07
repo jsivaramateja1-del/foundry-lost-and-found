@@ -6,7 +6,10 @@ const params = new URLSearchParams(window.location.search);
 // Only accept a plain page on this site: a ?next= value such as
 // "//evil.example/login" would otherwise redirect them off-site.
 const requestedNext = params.get('next') || '';
-const nextUrl = /^[a-z0-9_-]+\.html(\?[^#]*)?$/i.test(requestedNext) ? requestedNext : 'index.html';
+const DEFAULT_AFTER_LOGIN = 'dashboard.html';
+const nextUrl = /^[a-z0-9_-]+\.html(\?[^#]*)?$/i.test(requestedNext)
+  ? requestedNext
+  : DEFAULT_AFTER_LOGIN;
 
 const tabs = {
   login: { tab: document.getElementById('tab-login'), form: document.getElementById('form-login') },

@@ -1074,3 +1074,33 @@ input[type="file"].input { padding: 0.55rem; cursor: pointer; }
    looked unread. A read row now keeps its muted text on hover; the background
    change is the affordance. */
 .notifications__item--link.is-unread:hover p { color: var(--accent); }
+
+/* Community leaderboard on the dashboard */
+.leaderboard { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.leaderboard__row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+}
+.leaderboard__row:last-child { border-bottom: 0; }
+.leaderboard__rank {
+  min-width: 1.4rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  font-weight: 600;
+}
+.leaderboard__row .form-note { margin-left: auto; }
+
+/* Badges and the personal-impact panel */
+.badges { list-style: none; margin: 0.75rem 0 0; padding: 0; display: grid; gap: 0.5rem; }
+.badge { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.5rem 0.65rem; border: 1px solid var(--line); border-radius: 10px; }
+.badge__dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 0.35rem; background: var(--line); flex: none; }
+.badge__body { display: grid; gap: 0.15rem; }
+.badge--earned { border-color: var(--accent); }
+.badge--earned .badge__dot { background: var(--accent); }
+.badge--locked { opacity: 0.6; }
+.leaderboard__tabs { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.leaderboard__tabs .btn { padding: 0.3rem 0.7rem; font-size: 0.78rem; }
+.leaderboard__tabs .btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }

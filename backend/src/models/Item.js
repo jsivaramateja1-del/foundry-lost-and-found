@@ -54,6 +54,8 @@ const itemSchema = new mongoose.Schema(
     // The route caps the decoded image at 400 KB; base64 adds about a third,
     // so this limit sits above 400 KB on purpose.
     imageUrl: { type: String, trim: true, maxlength: 700000, default: '' },
+    verifiedAt: { type: Date, default: null },
+    verifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     reportedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

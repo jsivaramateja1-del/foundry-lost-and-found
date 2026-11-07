@@ -41,6 +41,28 @@
         if (node) node.textContent = value;
       });
 
+      // Personal impact and badges come from the same response, so they can
+      // never disagree with the counters above
+      const summary = document.getElementById('impact-summary');
+      if (summary && data.impact) {
+        const c = data.impact.contributions;
+        const r = data.impact.returns;
+        summary.textContent = `${c} verified contribution${c === 1 ? '' : 's'}`
+          + ` · ${r} successful return${r === 1 ? '' : 's'}`
+          + ` · ${data.impact.points} points`;
+      }
+      const badgeList = document.getElementById('badges-list');
+      if (badgeList && Array.isArray(data.badges)) {
+        badgeList.innerHTML = data.badges.map((b) => `
+          <li class="badge ${b.earned ? 'badge--earned' : 'badge--locked'}">
+            <span class="badge__dot" aria-hidden="true"></span>
+            <span class="badge__body">
+              <strong>${ui.esc(b.label)}</strong>
+              <span class="form-note">${ui.esc(b.description)}${b.earned && b.earnedAt ? ' · earned ' + ui.date(b.earnedAt) : ''}</span>
+            </span>
+          </li>`).join('');
+      }
+
       // --- your listings ---
       document.getElementById('listings-body').innerHTML = data.items.length
         ? data.items.map((i) => row([
@@ -52,7 +74,7 @@
             [
               i.status === 'returned'
                 ? '<span class="form-note">Returned</span>'
-                : `<button class="btn btn--ghost" data-return="${i.id}">Mark returned</button>`,
+                : '',
               `<button class="btn btn--ghost" data-edit="${i.id}">Edit</button>`,
               `<button class="btn btn--ghost" data-delete="${i.id}">Delete</button>`
             ].join(' ')
@@ -100,6 +122,67 @@
 
       return { ok: true };
     }
+
+    /* ---------------- community leaderboard ---------------- */
+    let leaderboardPeriod = 'all';
+
+    async function loadLeaderboard(period = leaderboardPeriod) {
+      const list = document.getElementById('leaderboard-list');
+      if (!list) return;
+      leaderboardPeriod = period;
+      try {
+        const data = await api(`/leaderboard?period=${encodeURIComponent(period)}`);
+        list.innerHTML = data.leaderboard.length
+          ? data.leaderboard.map((r) => `<li class="leaderboard__row">
+               <span class="leaderboard__rank">${r.rank}</span>
+               <strong>${ui.esc(r.name)}</strong>
+               <span class="form-note">${r.points} pts · ${r.returns} return${r.returns === 1 ? '' : 's'}</span>
+             </li>`).join('')
+          : `<li class="form-note">No points earned ${period === 'all' ? 'yet' : 'in this period'}. Complete a return to start the board.</li>`;
+      } catch {
+        list.innerHTML = '<li class="form-note">Could not load the leaderboard.</li>';
+      }
+    }
+
+    const leaderboardVisible = document.getElementById('leaderboard-visible');
+    if (leaderboardVisible && Auth.user?.role !== 'student') {
+      const preferenceLabel = leaderboardVisible.closest('label');
+      if (preferenceLabel) preferenceLabel.hidden = true;
+    }
+    if (leaderboardVisible && Auth.user?.role === 'student') {
+      // The API stores an opt-out; the checkbox reads as "show me"
+      leaderboardVisible.checked = !(Auth.user && Auth.user.leaderboardOptOut);
+      leaderboardVisible.addEventListener('change', async () => {
+        const wanted = leaderboardVisible.checked;
+        leaderboardVisible.disabled = true;
+        try {
+          const res = await api('/auth/preferences', {
+            method: 'PATCH',
+            body: { leaderboardOptOut: !wanted },
+            auth: true
+          });
+          Auth.save(Auth.token, res.user);
+          ui.toast(res.message);
+          await loadLeaderboard();
+        } catch (err) {
+          leaderboardVisible.checked = !wanted;   // put the switch back
+          ui.toast(err.message);
+        } finally {
+          leaderboardVisible.disabled = false;
+        }
+      });
+    }
+
+    document.querySelectorAll('[data-leaderboard-period]').forEach((button) => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('[data-leaderboard-period]').forEach((b) => {
+          b.setAttribute('aria-pressed', String(b === button));
+        });
+        loadLeaderboard(button.dataset.leaderboardPeriod);
+      });
+    });
+
+    loadLeaderboard();
 
     /* ---------------- edit and delete ---------------- */
     const editModal = document.getElementById('modal-edit');
@@ -268,15 +351,14 @@
       }
     });
 
-    // Approve / reject / mark returned / edit / delete — one delegated listener
+    // Approve / reject / handover / edit / delete — one delegated listener
     document.addEventListener('click', async (event) => {
       const approve = event.target.closest('[data-approve]');
       const reject = event.target.closest('[data-reject]');
-      const markReturned = event.target.closest('[data-return]');
       const edit = event.target.closest('[data-edit]');
       const remove = event.target.closest('[data-delete]');
       const handover = event.target.closest('[data-handover]');
-      const button = approve || reject || markReturned || edit || remove || handover;
+      const button = approve || reject || edit || remove || handover;
       if (!button) return;
 
       if (edit) return openEdit(edit.dataset.edit);
@@ -301,9 +383,6 @@
         } else if (remove) {
           await api(`/items/${remove.dataset.delete}`, { method: 'DELETE', auth: true });
           ui.toast('Listing deleted');
-        } else {
-          await api(`/items/${markReturned.dataset.return}/status`, { method: 'PATCH', body: { status: 'returned' }, auth: true });
-          ui.toast('Marked as returned — points awarded');
         }
         await refresh();
       } catch (err) {

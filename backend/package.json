@@ -13,7 +13,9 @@
     "test:offline": "node test/offline.test.js",
     "test:routes": "node test/routes.test.js",
     "test:ratelimit": "node test/ratelimit.test.js",
-    "test:transactions": "node test/transactions.test.js"
+    "test:transactions": "node test/transactions.test.js",
+    "reconcile:points": "node scripts/reconcile-points.js",
+    "recover:awards": "node scripts/recover-awards.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

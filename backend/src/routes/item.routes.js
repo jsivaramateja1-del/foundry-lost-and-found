@@ -5,6 +5,7 @@ const { CATEGORIES, LOCATIONS } = require('../models/Item');
 const { CATEGORY_TREE, isValidSubcategory } = require('../utils/categories');
 const { protect, requireVerified, identifyUser, ADMIN_ROLES, MODERATION_ROLES } = require('../middleware/auth');
 const { notify } = require('../utils/notify');
+
 const { itemIpLimit, itemAccountLimit, reportIpLimit, reportAccountLimit } = require('../middleware/rateLimit');
 const Report = require('../models/Report');
 
@@ -162,11 +163,14 @@ router.get('/', async (req, res, next) => {
     if (location && location !== 'all') filter.location = location;
     if (type && type !== 'all') filter.type = type;
     if (status && status !== 'all') {
-      // 'hidden' is a moderation state, not a public one. Refuse to filter by
-      // it rather than silently returning taken-down listings.
-      if (status === 'hidden') {
-        return res.status(400).json({ message: 'status must be one of: open, claimed, returned, closed' });
+      const allowedStatuses = ['open', 'claimed', 'returned', 'closed'];
+
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({
+          message: 'status must be one of: open, claimed, returned, closed'
+        });
       }
+
       filter.status = status;
     } else {
       // Nothing taken down by a moderator may appear on the public board
@@ -221,13 +225,20 @@ router.get('/meta', (req, res) => {
  */
 router.get('/stats', async (req, res, next) => {
   try {
+    // A listing a moderator has taken down is not part of the public board, so
+    // it must not inflate the public counters either
+    // Every public counter applies the same visibility rule. returned/claimed/
+    // open cannot currently match a hidden listing because status holds one
+    // value, but applying the rule uniformly means the invariant survives any
+    // future change to how takedowns are represented.
+    const visible = { status: { $ne: 'hidden' } };
     const [total, lost, found, returned, claimed, open] = await Promise.all([
-      Item.countDocuments(),
-      Item.countDocuments({ type: 'lost' }),
-      Item.countDocuments({ type: 'found' }),
-      Item.countDocuments({ status: 'returned' }),
-      Item.countDocuments({ status: 'claimed' }),
-      Item.countDocuments({ status: 'open' })
+      Item.countDocuments(visible),
+      Item.countDocuments({ ...visible, type: 'lost' }),
+      Item.countDocuments({ ...visible, type: 'found' }),
+      Item.countDocuments({ ...visible, status: 'returned' }),
+      Item.countDocuments({ ...visible, status: 'claimed' }),
+      Item.countDocuments({ ...visible, status: 'open' })
     ]);
     // "Active" means still in play: open or claimed, not yet returned or closed
     res.status(200).json({ total, lost, found, returned, claimed, active: open + claimed });
@@ -427,8 +438,8 @@ router.put('/:id', protect, async (req, res, next) => {
 
 /**
  * PATCH /api/items/:id/status
- * Protected. Reporter or admin marks an item claimed / returned / closed.
- * Marking an item returned awards gamification points.
+ * Protected. Reporter or admin may change listing status, except returned.
+ * A return must be confirmed through an approved claim handover.
  */
 router.patch('/:id/status', protect, async (req, res, next) => {
   try {
@@ -436,6 +447,9 @@ router.patch('/:id/status', protect, async (req, res, next) => {
     const allowed = ['open', 'claimed', 'returned', 'closed'];
     if (!allowed.includes(status)) {
       return res.status(400).json({ message: `status must be one of: ${allowed.join(', ')}` });
+    }
+    if (status === 'returned') {
+      return res.status(400).json({ message: 'A listing can only be marked returned after its approved claim handover is confirmed' });
     }
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ message: 'Invalid item id' });
@@ -495,26 +509,6 @@ router.patch('/:id/status', protect, async (req, res, next) => {
 
     item.status = status;
     await item.save();
-
-    // Award points once, the first time an item is marked returned
-    if (status === 'returned' && previousStatus !== 'returned') {
-      const User = require('../models/User');
-      const Claim = require('../models/Claim');
-      await User.findByIdAndUpdate(item.reportedBy, { $inc: { points: 10, returns: 1 } });
-      const approved = await Claim.findOne({ item: item._id, status: 'approved' });
-      if (approved) {
-        await User.findByIdAndUpdate(approved.claimant, { $inc: { points: 10, returns: 1 } });
-      }
-
-      await notify(item.reportedBy, 'item_returned',
-        `Your listing "${item.title}" was marked as returned.`,
-        { link: 'dashboard.html#listings', relatedType: 'item', relatedId: item._id });
-      if (approved) {
-        await notify(approved.claimant, 'item_returned',
-          `"${item.title}" has been marked as returned. Thanks for closing the loop.`,
-          { link: 'dashboard.html#claims-made', relatedType: 'claim', relatedId: approved._id });
-      }
-    }
 
     const populated = await item.populate('reportedBy', 'name');
     res.status(200).json({ message: `Item marked ${status}`, item: publicItem(populated) });

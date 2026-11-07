@@ -142,7 +142,7 @@ const check = (name, cond, detail = '') => {
   // The app sends `script-src 'self'` (helmet's default), so an inline <script>
   // is silently blocked by the browser. That is exactly what stopped the
   // dashboard from ever running its own code.
-  for (const page of ['index.html', 'auth.html', 'dashboard.html', 'admin.html']) {
+  for (const page of ['index.html', 'auth.html', 'dashboard.html', 'admin.html', 'forgot-password.html', 'reset-password.html']) {
     const res = await request(app).get(`/${page}`);
     check(`GET /${page} returns 200`, res.status === 200, `got ${res.status}`);
 
@@ -153,6 +153,51 @@ const check = (name, cond, detail = '') => {
     check(`/${page} has no inline <script> that the CSP would block`,
       inline.length === 0, `found ${inline.length}`);
   }
+
+  // ---------- 8. Account recovery: validation that runs before any query ----------
+  // These paths answer without touching MongoDB, so they are verifiable here.
+  const forgotNoEmail = await request(app).post('/api/auth/forgot-password').send({});
+  check('forgot-password without an address returns 400',
+    forgotNoEmail.status === 400, `got ${forgotNoEmail.status}`);
+  check('forgot-password error is JSON with a message',
+    Boolean(forgotNoEmail.body && forgotNoEmail.body.message));
+
+  const resetNoToken = await request(app).post('/api/auth/reset-password').send({ password: 'abcdef' });
+  check('reset-password without a token returns 400',
+    resetNoToken.status === 400, `got ${resetNoToken.status}`);
+
+  const resetNoPassword = await request(app).post('/api/auth/reset-password').send({ token: 'abc' });
+  check('reset-password without a password returns 400',
+    resetNoPassword.status === 400, `got ${resetNoPassword.status}`);
+
+  const resetShort = await request(app).post('/api/auth/reset-password')
+    .send({ token: 'abc', password: 'abc' });
+  check('reset-password refuses a too-short password',
+    resetShort.status === 400, `got ${resetShort.status}`);
+
+  const resetMismatch = await request(app).post('/api/auth/reset-password')
+    .send({ token: 'abc', password: 'abcdef', confirmPassword: 'different' });
+  check('reset-password refuses a mismatched confirmation',
+    resetMismatch.status === 400, `got ${resetMismatch.status}`);
+
+  const badPeriod = await request(app).get('/api/leaderboard?period=fortnight');
+  check('leaderboard rejects an unknown period (400)',
+    badPeriod.status === 400, `got ${badPeriod.status}`);
+
+  // ---------- 9. The recovery pages actually offer the flow ----------
+  const forgotPage = await request(app).get('/forgot-password.html');
+  check('forgot-password.html contains the email form',
+    forgotPage.status === 200 && /id="forgot-form"/.test(forgotPage.text));
+  check('forgot-password.html explains the no-mailbox route',
+    /administrator or university IT/i.test(forgotPage.text));
+
+  const resetPage = await request(app).get('/reset-password.html');
+  check('reset-password.html contains the new-password form',
+    resetPage.status === 200 && /id="reset-form"/.test(resetPage.text));
+
+  const authPage = await request(app).get('/auth.html');
+  check('auth.html links to the recovery page',
+    /forgot-password\.html/.test(authPage.text));
 
   console.log('\n' + results.join('\n'));
   console.log(`\n${passed} passed, ${failed} failed`);

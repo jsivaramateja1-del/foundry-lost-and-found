@@ -9,7 +9,8 @@ const AUDIT_ACTIONS = [
   'user_rejected',
   'user_unsuspended',
   'report_resolved',
-  'report_dismissed'
+  'report_dismissed',
+  'item_found_verified'
 ];
 
 /**

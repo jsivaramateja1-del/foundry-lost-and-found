@@ -61,6 +61,37 @@
     </div>
 
     <!-- Claims received on your listings -->
+    <section class="panel" id="impact">
+      <div class="panel__head">
+        <h2>Your impact</h2>
+      </div>
+      <div class="panel__body">
+        <p class="form-note" id="impact-summary">Loading…</p>
+        <ul class="badges" id="badges-list"></ul>
+      </div>
+    </section>
+
+    <section class="panel" id="leaderboard">
+      <div class="panel__head">
+        <h2>Community leaderboard</h2>
+        <div class="leaderboard__tabs" role="group" aria-label="Leaderboard period">
+          <button type="button" class="btn btn--ghost" data-leaderboard-period="week" aria-pressed="false">Week</button>
+          <button type="button" class="btn btn--ghost" data-leaderboard-period="month" aria-pressed="false">Month</button>
+          <button type="button" class="btn btn--ghost" data-leaderboard-period="all" aria-pressed="true">All time</button>
+        </div>
+        <label class="form-note" style="display:flex;align-items:center;gap:.5rem;">
+          <input type="checkbox" id="leaderboard-visible" />
+          Show my name on the leaderboard
+        </label>
+      </div>
+      <div class="panel__body">
+        <ol class="leaderboard" id="leaderboard-list">
+          <li class="form-note">Loading…</li>
+        </ol>
+        <p class="form-note">Points come from completed returns, never from logging in or clicking around.</p>
+      </div>
+    </section>
+
     <section class="panel" id="claims-received">
       <div class="panel__head">
         <h2>Claims on your listings</h2>

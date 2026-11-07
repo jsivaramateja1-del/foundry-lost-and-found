@@ -27,11 +27,19 @@ const protect = async (req, res, next) => {
     if (!user) {
       return res.status(401).json({ message: 'Not authorized, user no longer exists' });
     }
+    // A password reset bumps tokenVersion, which retires every older token.
+    // Tokens issued before this field existed carry no tv and count as 0, so
+    // nobody is logged out by the upgrade itself.
+    const tokenVersion = decoded.tv === undefined ? 0 : decoded.tv;
+    if (tokenVersion !== (user.tokenVersion || 0)) {
+      return res.status(401).json({ message: 'Session expired. Please log in again.' });
+    }
     // A temporary suspension expires on its own
     if (user.suspended && user.suspendedUntil && user.suspendedUntil <= new Date()) {
       user.suspended = false;
       user.suspendedUntil = undefined;
       user.suspendedReason = undefined;
+      user.suspendedAt = undefined;
       await user.save();
     }
     if (user.suspended) {
@@ -57,7 +65,8 @@ const identifyUser = async (req, res, next) => {
     const decoded = jwt.verify(header.split(' ')[1], secret());
     const user = await User.findById(decoded.id);
     // A deleted or suspended account is treated as anonymous here
-    if (user && !user.suspended) req.user = user;
+    const tokenVersion = decoded.tv === undefined ? 0 : decoded.tv;
+    if (user && tokenVersion === (user.tokenVersion || 0) && !user.suspended) req.user = user;
   } catch {
     /* not identified: the route continues as an anonymous request */
   }
@@ -100,8 +109,8 @@ const ADMIN_ROLES = ['admin', 'superadmin'];
 const MODERATION_ROLES = ['moderator', 'admin', 'superadmin'];
 const SUPER_ROLES = ['superadmin'];
 
-const signToken = (userId) =>
-  jwt.sign({ id: userId }, secret(), { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
+const signToken = (userId, tokenVersion = 0) =>
+  jwt.sign({ id: userId, tv: tokenVersion }, secret(), { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 
 module.exports = {
   protect,

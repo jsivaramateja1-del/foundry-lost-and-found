@@ -6,6 +6,14 @@
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test_secret_key_for_local_runs_only';
 
+// Higher limits for automated tests only.
+process.env.RATE_LIMIT_ITEMS_IP_MAX = '1000';
+process.env.RATE_LIMIT_ITEMS_MAX = '1000';
+process.env.RATE_LIMIT_CLAIMS_IP_MAX = '1000';
+process.env.RATE_LIMIT_CLAIMS_MAX = '1000';
+process.env.RATE_LIMIT_REPORTS_IP_MAX = '1000';
+process.env.RATE_LIMIT_REPORTS_MAX = '1000';
+
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const request = require('supertest');
 const mongoose = require('mongoose');
@@ -16,6 +24,8 @@ const User = require('../src/models/User');
 const Item = require('../src/models/Item');
 const Claim = require('../src/models/Claim');
 const Notification = require('../src/models/Notification');
+const PointEvent = require('../src/models/PointEvent');
+const mailer = require('../src/utils/mailer');
 
 let passed = 0;
 let failed = 0;
@@ -234,8 +244,10 @@ const check = (name, condition, detail = '') => {
     const adminClaims = await request(app).get('/api/admin/claims').set(adminAuth);
     check('admin can list all claims', adminClaims.status === 200 && adminClaims.body.count === 1, `got ${adminClaims.body.count}`);
 
+    await User.findByIdAndUpdate(login.body.user.id, { role: 'student' });
+
     const markReturned = await request(app).patch(`/api/items/${itemId}/status`).set(auth).send({ status: 'returned' });
-    check('owner can mark an item returned', markReturned.status === 200, `got ${markReturned.status}`);
+    check('owner cannot manually mark an item returned', markReturned.status === 400, `got ${markReturned.status}`);
 
     const board = await request(app).get('/api/leaderboard');
     check('GET /api/leaderboard returns 200', board.status === 200, `got ${board.status}`);
@@ -308,6 +320,182 @@ const check = (name, condition, detail = '') => {
       approvedNotes.some((n) => n.type === 'claim_approved')
       && !approvedNotes.some((n) => n.type === 'claim_rejected'),
       approvedNotes.map((n) => n.type).join(','));
+
+    // ---------- 6c. Compensation after partial approval failure ----------
+    const rollbackItem = await request(app).post('/api/items').set(auth).send({
+      title: 'Approval Rollback Item',
+      description: 'Used to test compensation after sibling update failure.',
+      category: 'Electronics',
+      subcategory: 'Earphones',
+      location: 'Library',
+      date: new Date().toISOString(),
+      type: 'found'
+    });
+    const rollbackItemId = rollbackItem.body.item.id;
+    const rollbackClaim = await request(app).post('/api/claims').set(auth2)
+      .send({ itemId: rollbackItemId, message: 'I lost this item.' });
+    const rollbackSibling = await request(app).post('/api/claims').set(thirdAuth)
+      .send({ itemId: rollbackItemId, message: 'This belongs to me.' });
+
+    const realClaimUpdateMany = Claim.updateMany;
+    let failSiblingUpdate = true;
+    Claim.updateMany = function (...args) {
+      if (failSiblingUpdate) {
+        failSiblingUpdate = false;
+        return Promise.reject(new Error('simulated sibling update failure'));
+      }
+      return realClaimUpdateMany.apply(this, args);
+    };
+    let failedApproval;
+    try {
+      failedApproval = await request(app).patch(`/api/claims/${rollbackClaim.body.claim.id}`)
+        .set(auth).send({ status: 'approved' });
+    } finally {
+      Claim.updateMany = realClaimUpdateMany;
+    }
+
+    const rollbackItemAfter = await Item.findById(rollbackItemId);
+    const rollbackClaimAfter = await Claim.findById(rollbackClaim.body.claim.id);
+    const rollbackSiblingAfter = await Claim.findById(rollbackSibling.body.claim.id);
+    check('APPROVAL ROLLBACK: injected sibling update failure is reported',
+      failedApproval.status === 500, `got ${failedApproval.status}`);
+    check('APPROVAL ROLLBACK: item is reopened after claims are restored',
+      rollbackItemAfter.status === 'open', rollbackItemAfter.status);
+    check('APPROVAL ROLLBACK: winning claim returns to pending',
+      rollbackClaimAfter.status === 'pending', rollbackClaimAfter.status);
+    check('APPROVAL ROLLBACK: sibling claim returns to pending',
+      rollbackSiblingAfter.status === 'pending', rollbackSiblingAfter.status);
+
+    // ---------- 6d. Compensation after a failed handover item transition ----------
+    const handoverRollbackItem = await request(app).post('/api/items').set(auth).send({
+      title: 'Handover Rollback Item',
+      description: 'Used to test compensation when the item update fails.',
+      category: 'Bottles',
+      location: 'Canteen',
+      date: new Date().toISOString(),
+      type: 'found'
+    });
+    const handoverRollbackItemId = handoverRollbackItem.body.item.id;
+    const handoverRollbackClaim = await request(app).post('/api/claims').set(auth2)
+      .send({ itemId: handoverRollbackItemId, message: 'This is mine.' });
+    const handoverRollbackClaimId = handoverRollbackClaim.body.claim.id;
+    const handoverRollbackApproval = await request(app).patch(`/api/claims/${handoverRollbackClaimId}`)
+      .set(auth).send({ status: 'approved' });
+    check('HANDOVER ROLLBACK: test claim is approved',
+      handoverRollbackApproval.status === 200, `got ${handoverRollbackApproval.status}`);
+
+    const realItemFindOneAndUpdate = Item.findOneAndUpdate;
+    let failReturnedTransition = true;
+    Item.findOneAndUpdate = function (filter, update, ...args) {
+      if (failReturnedTransition && filter && filter.status === 'claimed'
+          && update && update.$set && update.$set.status === 'returned') {
+        failReturnedTransition = false;
+        return Promise.reject(new Error('simulated item return update failure'));
+      }
+      return realItemFindOneAndUpdate.call(this, filter, update, ...args);
+    };
+    let failedConsistencyHandover;
+    try {
+      failedConsistencyHandover = await request(app)
+        .post(`/api/claims/${handoverRollbackClaimId}/handover`).set(auth).send({});
+    } finally {
+      Item.findOneAndUpdate = realItemFindOneAndUpdate;
+    }
+
+    const handoverItemAfterFailure = await Item.findById(handoverRollbackItemId);
+    const handoverClaimAfterFailure = await Claim.findById(handoverRollbackClaimId);
+    check('HANDOVER ROLLBACK: injected item update failure is reported',
+      failedConsistencyHandover.status === 500, `got ${failedConsistencyHandover.status}`);
+    check('HANDOVER ROLLBACK: item remains claimed after failed transition',
+      handoverItemAfterFailure.status === 'claimed', handoverItemAfterFailure.status);
+    check('HANDOVER ROLLBACK: claim confirmation is cleared after failed transition',
+      !handoverClaimAfterFailure.handoverConfirmedAt && !handoverClaimAfterFailure.handoverConfirmedBy,
+      String(handoverClaimAfterFailure.handoverConfirmedAt || 'no confirmation'));
+
+    const retriedHandover = await request(app)
+      .post(`/api/claims/${handoverRollbackClaimId}/handover`).set(auth).send({});
+    const handoverItemAfterRetry = await Item.findById(handoverRollbackItemId);
+    const handoverClaimAfterRetry = await Claim.findById(handoverRollbackClaimId);
+    check('HANDOVER ROLLBACK: retry succeeds after compensation',
+      retriedHandover.status === 200, `got ${retriedHandover.status}`);
+    check('HANDOVER ROLLBACK: retry leaves item and claim consistently returned',
+      handoverItemAfterRetry.status === 'returned' && Boolean(handoverClaimAfterRetry.handoverConfirmedAt),
+      `${handoverItemAfterRetry.status} / ${handoverClaimAfterRetry.handoverConfirmedAt}`);
+
+
+    // ---------- 6e. Recovery when both handover update and compensation fail ----------
+    const strandedItem = await request(app).post('/api/items').set(auth).send({
+      title: 'Stranded Handover Item',
+      description: 'Tests recovery when compensation also fails.',
+      category: 'Bottles',
+      location: 'Canteen',
+      date: new Date().toISOString(),
+      type: 'found'
+    });
+    const strandedItemId = strandedItem.body.item.id;
+    const strandedClaim = await request(app).post('/api/claims').set(auth2)
+      .send({ itemId: strandedItemId, message: 'This is mine.' });
+    const strandedClaimId = strandedClaim.body.claim.id;
+    const strandedApproval = await request(app).patch(`/api/claims/${strandedClaimId}`)
+      .set(auth).send({ status: 'approved' });
+    check('HANDOVER RECOVERY: test claim is approved',
+      strandedApproval.status === 200, `got ${strandedApproval.status}`);
+
+    const realStrandedItemUpdate = Item.findOneAndUpdate;
+    const realClaimCollectionUpdate = Claim.collection.updateOne;
+    let failStrandedItem = true;
+    let failStrandedCleanup = true;
+
+    Item.findOneAndUpdate = function (filter, update, ...args) {
+      if (failStrandedItem && filter && filter.status === 'claimed'
+          && update && update.$set && update.$set.status === 'returned') {
+        failStrandedItem = false;
+        return Promise.reject(new Error('simulated stranded item update failure'));
+      }
+      return realStrandedItemUpdate.call(this, filter, update, ...args);
+    };
+    Claim.collection.updateOne = function (filter, update, ...args) {
+      if (failStrandedCleanup && update && update.$unset
+          && update.$unset.handoverConfirmedAt !== undefined) {
+        failStrandedCleanup = false;
+        return Promise.reject(new Error('simulated confirmation cleanup failure'));
+      }
+      return realClaimCollectionUpdate.call(this, filter, update, ...args);
+    };
+
+    let strandedFailure;
+    try {
+      strandedFailure = await request(app)
+        .post(`/api/claims/${strandedClaimId}/handover`).set(auth).send({});
+    } finally {
+      Item.findOneAndUpdate = realStrandedItemUpdate;
+      Claim.collection.updateOne = realClaimCollectionUpdate;
+    }
+
+    const strandedItemAfterFailure = await Item.findById(strandedItemId);
+    const strandedClaimAfterFailure = await Claim.findById(strandedClaimId);
+    const originalHandoverAt = strandedClaimAfterFailure.handoverConfirmedAt;
+    const originalHandoverBy = String(strandedClaimAfterFailure.handoverConfirmedBy || '');
+    check('HANDOVER RECOVERY: both injected failures are reported',
+      strandedFailure.status === 500 && !failStrandedItem && !failStrandedCleanup,
+      `got ${strandedFailure.status}`);
+    check('HANDOVER RECOVERY: item remains claimed after both failures',
+      strandedItemAfterFailure.status === 'claimed', strandedItemAfterFailure.status);
+    check('HANDOVER RECOVERY: stranded confirmation marker remains available',
+      Boolean(originalHandoverAt && originalHandoverBy),
+      `${originalHandoverAt || 'no timestamp'} / ${originalHandoverBy || 'no actor'}`);
+
+    const strandedRetry = await request(app)
+      .post(`/api/claims/${strandedClaimId}/handover`).set(auth).send({});
+    const strandedItemAfterRetry = await Item.findById(strandedItemId);
+    const strandedClaimAfterRetry = await Claim.findById(strandedClaimId);
+    check('HANDOVER RECOVERY: retry resumes the stranded handover',
+      strandedRetry.status === 200, `got ${strandedRetry.status}`);
+    check('HANDOVER RECOVERY: retry preserves original confirmation details',
+      strandedItemAfterRetry.status === 'returned'
+      && String(strandedClaimAfterRetry.handoverConfirmedBy) === originalHandoverBy
+      && new Date(strandedClaimAfterRetry.handoverConfirmedAt).getTime() === new Date(originalHandoverAt).getTime(),
+      `${strandedItemAfterRetry.status} / ${strandedClaimAfterRetry.handoverConfirmedAt}`);
 
     // ---------- 7. Housekeeping ----------
     const health = await request(app).get('/api/health');
@@ -423,9 +611,11 @@ const check = (name, condition, detail = '') => {
 
     const ownerReturn = await request(app).patch(`/api/items/${adminItemId}/status`).set(auth)
       .send({ status: 'returned' });
-    check('E3: the dedicated status endpoint still works (200)',
-      ownerReturn.status === 200 && ownerReturn.body.item.status === 'returned',
+    check('E3: the owner status endpoint cannot bypass handover (400)',
+      ownerReturn.status === 400,
       `got ${ownerReturn.status}`);
+    const adminReturn = await request(app).patch("/api/admin/items/" + adminItemId + "/status").set(authStaff).send({ status: "returned" });
+    check("E3: admin cannot bypass confirmed handover (400)", adminReturn.status === 400, "got " + adminReturn.status);
 
     const ownerUnhide = await request(app).patch(`/api/items/${hiddenId}/status`).set(auth2)
       .send({ status: 'open' });
@@ -448,6 +638,125 @@ const check = (name, condition, detail = '') => {
     });
     const authAdmin = { Authorization: `Bearer ${adminUser.body.token}` };
     await User.updateOne({ _id: adminUser.body.user.id }, { $set: { role: 'admin' } });
+    // ---------- 10A. Account suspension permissions and lifecycle ----------
+    const suspensionStudent = await request(app).post('/api/auth/register').send({
+      name: 'Suspension Student',
+      email: 'suspension-student@scds.saiuniversity.edu.in',
+      password: 'secret123'
+    });
+
+    const suspensionStudentId = suspensionStudent.body.user && suspensionStudent.body.user.id;
+
+    const suspendStudent = await request(app)
+      .patch(`/api/admin/users/${suspensionStudentId}/suspend`)
+      .set(authAdmin)
+      .send({ suspended: true, reason: 'Test suspension', durationDays: 7 });
+
+    const suspendedStudent = await User.findById(suspensionStudentId);
+
+    check(
+      'SUSPEND-1: an admin can temporarily suspend a student (200)',
+      suspendStudent.status === 200 && suspendedStudent && suspendedStudent.suspended === true,
+      `status ${suspendStudent.status}`
+    );
+
+    check(
+      'SUSPEND-1: reason and expiry are saved',
+      suspendedStudent &&
+      suspendedStudent.suspendedReason === 'Test suspension' &&
+      suspendedStudent.suspendedUntil instanceof Date &&
+      suspendedStudent.suspendedUntil > new Date() &&
+      suspendedStudent.suspendedUntil <= new Date(Date.now() + 8 * 24 * 60 * 60 * 1000),
+      suspendedStudent && `${suspendedStudent.suspendedReason} / ${suspendedStudent.suspendedUntil}`
+    );
+
+    const reinstateStudent = await request(app)
+      .patch(`/api/admin/users/${suspensionStudentId}/suspend`)
+      .set(authAdmin)
+      .send({ suspended: false });
+
+    const reinstatedStudent = await User.findById(suspensionStudentId);
+
+    check(
+      'SUSPEND-2: an admin can reinstate a suspended student (200)',
+      reinstateStudent.status === 200 && reinstatedStudent && !reinstatedStudent.suspended,
+      `status ${reinstateStudent.status}`
+    );
+
+    check(
+      'SUSPEND-2: reinstatement clears suspension metadata',
+      reinstatedStudent &&
+      !reinstatedStudent.suspendedReason &&
+      !reinstatedStudent.suspendedAt &&
+      !reinstatedStudent.suspendedUntil
+    );
+
+    const selfSuspend = await request(app)
+      .patch(`/api/admin/users/${adminUser.body.user.id}/suspend`)
+      .set(authAdmin)
+      .send({ suspended: true, reason: 'Self test' });
+
+    check(
+      'SUSPEND-3: an admin cannot suspend their own account (400)',
+      selfSuspend.status === 400,
+      `got ${selfSuspend.status}`
+    );
+
+    const secondAdmin = await request(app).post('/api/auth/register').send({
+      name: 'Second Admin',
+      email: 'suspension-admin@scds.saiuniversity.edu.in',
+      password: 'secret123'
+    });
+
+    await User.updateOne(
+      { _id: secondAdmin.body.user.id },
+      { $set: { role: 'admin' } }
+    );
+
+    const adminSuspendAdmin = await request(app)
+      .patch(`/api/admin/users/${secondAdmin.body.user.id}/suspend`)
+      .set(authAdmin)
+      .send({ suspended: true, reason: 'Role protection test' });
+
+    check(
+      'SUSPEND-4: an admin cannot suspend another admin (400)',
+      adminSuspendAdmin.status === 400,
+      `got ${adminSuspendAdmin.status}`
+    );
+
+    const suspensionSuperTarget = await request(app).post('/api/auth/register').send({
+      name: 'Suspension Superadmin',
+      email: 'suspension-superadmin@scds.saiuniversity.edu.in',
+      password: 'secret123'
+    });
+
+    await User.updateOne(
+      { _id: suspensionSuperTarget.body.user.id },
+      { $set: { role: 'superadmin' } }
+    );
+
+    const adminSuspendSuper = await request(app)
+      .patch(`/api/admin/users/${suspensionSuperTarget.body.user.id}/suspend`)
+      .set(authAdmin)
+      .send({ suspended: true, reason: 'Role protection test' });
+
+    check(
+      'SUSPEND-5: an admin cannot suspend a superadmin (400)',
+      adminSuspendSuper.status === 400,
+      `got ${adminSuspendSuper.status}`
+    );
+
+    const superSuspendAdmin = await request(app)
+      .patch(`/api/admin/users/${secondAdmin.body.user.id}/suspend`)
+      .set(authStaff)
+      .send({ suspended: true, reason: 'Role protection test' });
+
+    check(
+      'SUSPEND-6: a superadmin cannot suspend an admin (400)',
+      superSuspendAdmin.status === 400,
+      `got ${superSuspendAdmin.status}`
+    );
+
 
     // A hidden listing per attempt, because a successful restore changes it
     const hiddenItemFor = async (label) => {
@@ -578,6 +887,583 @@ const check = (name, condition, detail = '') => {
       otherModRestore.status === 200, `got ${otherModRestore.status}`);
     check('R10: and it becomes open',
       (await Item.findById(modOwnId)).status === 'open');
+
+    // ---------- 11. Discovery, statistics and leaderboard preferences ----------
+    // A known returned listing and a known open one, so the filter cannot pass
+    // by returning nothing
+    const filterTarget = await request(app).post('/api/items').set(auth).send({
+      title: 'Status Filter Target',
+      description: 'A listing used to prove the status filter really filters.',
+      category: 'Bottles',
+      location: 'Canteen',
+      date: new Date().toISOString(),
+      type: 'found'
+    });
+    const filterId = filterTarget.body.item && filterTarget.body.item.id;
+    await Item.updateOne({ _id: filterId }, { $set: { status: 'returned' } });
+
+    const statusReturned = await request(app).get('/api/items?status=returned');
+    check('S1: the public status filter returns only that status',
+      statusReturned.status === 200
+      && statusReturned.body.items.every((i) => i.status === 'returned'),
+      `got ${statusReturned.status} with ${statusReturned.body.items.length} items`);
+    check('S1: the returned listing is in the result and an open one is not',
+      statusReturned.body.items.some((i) => i.id === filterId)
+      && !statusReturned.body.items.some((i) => i.status === 'open'),
+      `${statusReturned.body.items.length} items`);
+
+    const statusInvalid = await request(app).get('/api/items?status=invalid');
+    check('S1: invalid status filter is rejected (400)',
+      statusInvalid.status === 400,
+      `got ${statusInvalid.status}`);
+
+    const beforeStats = await request(app).get('/api/items/stats');
+    const statsTarget = await request(app).post('/api/items').set(auth).send({
+      title: 'Stats Hidden Target',
+      description: 'A listing hidden to prove the counters ignore it.',
+      category: 'Bottles',
+      location: 'Canteen',
+      date: new Date().toISOString(),
+      type: 'lost'
+    });
+    const statsId = statsTarget.body.item && statsTarget.body.item.id;
+    const midStats = await request(app).get('/api/items/stats');
+    check('S2: a new listing raises the public total by one',
+      midStats.body.total === beforeStats.body.total + 1,
+      `${beforeStats.body.total} -> ${midStats.body.total}`);
+
+    await Item.updateOne({ _id: statsId }, { $set: { status: 'hidden' } });
+    const afterStats = await request(app).get('/api/items/stats');
+    check('S2: a hidden listing is not counted publicly',
+      afterStats.body.total === beforeStats.body.total,
+      `${afterStats.body.total} vs ${beforeStats.body.total}`);
+
+    // Preferences: authentication, validation, and no privilege escalation
+    const prefNoAuth = await request(app).patch('/api/auth/preferences').send({ leaderboardOptOut: true });
+    check('S3: preferences require a token (401)', prefNoAuth.status === 401, `got ${prefNoAuth.status}`);
+
+    const prefBadType = await request(app).patch('/api/auth/preferences').set(auth2)
+      .send({ leaderboardOptOut: 'yes' });
+    check('S3: a non-boolean preference is refused (400)', prefBadType.status === 400, `got ${prefBadType.status}`);
+
+    const prefEscalate = await request(app).patch('/api/auth/preferences').set(auth2)
+      .send({ leaderboardOptOut: true, points: 9999, role: 'superadmin' });
+    check('S4: unexpected preference fields are rejected (400)', prefEscalate.status === 400, 'got ' + prefEscalate.status);
+
+    const prefValid = await request(app).patch('/api/auth/preferences').set(auth2)
+      .send({ leaderboardOptOut: true });
+    check('S4: a valid leaderboard preference is saved',
+      prefValid.status === 200 && prefValid.body.user.leaderboardOptOut === true,
+      'got ' + prefValid.status);
+
+    // Leaderboard: points are required to appear, and an opt-out hides the name
+    await User.updateOne({ _id: reg2.body.user.id }, { $set: { points: 50, returns: 5, leaderboardOptOut: false } });
+    const boardBefore = await request(app).get('/api/leaderboard');
+    check('S5: a student with points appears on the leaderboard',
+      boardBefore.body.leaderboard.some((r) => r.points === 50), JSON.stringify(boardBefore.body.leaderboard));
+
+    await User.updateOne({ _id: reg2.body.user.id }, { $set: { leaderboardOptOut: true } });
+    const boardAfter = await request(app).get('/api/leaderboard');
+    check('S5: an opted-out student is left off the leaderboard',
+      !boardAfter.body.leaderboard.some((r) => r.points === 50), JSON.stringify(boardAfter.body.leaderboard));
+    check('S5: the leaderboard never exposes an email address',
+      boardAfter.body.leaderboard.every((r) => r.email === undefined));
+
+    // Restore the account so the remaining assertions see the original state
+    await User.updateOne({ _id: reg2.body.user.id }, { $set: { leaderboardOptOut: false, points: 0, returns: 0 } });
+
+    // ---------- 12. Password reset ----------
+    const resetUser = await request(app).post('/api/auth/register').send({
+      name: 'Reset Student', email: 'reset@scds.saiuniversity.edu.in', password: 'oldsecret123'
+    });
+    const resetAuth = { Authorization: `Bearer ${resetUser.body.token}` };
+
+    const forgotUnknown = await request(app).post('/api/auth/forgot-password')
+      .send({ email: 'nobody@scds.saiuniversity.edu.in' });
+    check('P1: forgot-password answers the same way for an unknown address',
+      forgotUnknown.status === 200 && /If that address/.test(forgotUnknown.body.message),
+      `${forgotUnknown.status} ${forgotUnknown.body && forgotUnknown.body.message}`);
+
+    const forgotNoEmail = await request(app).post('/api/auth/forgot-password').send({});
+    check('P2: forgot-password without an address returns 400',
+      forgotNoEmail.status === 400, `got ${forgotNoEmail.status}`);
+
+    const invalidForgot = await request(app).post('/api/auth/forgot-password').send({ email: 'not-an-email' });
+    check('P2a: invalid email format returns 400', invalidForgot.status === 400, 'got '+invalidForgot.status);
+
+    const originalResetMailer = mailer.sendPasswordResetEmail;
+    mailer.sendPasswordResetEmail = async () => { throw new Error('simulated SMTP failure'); };
+    let failedMailResponse;
+    try {
+      failedMailResponse = await request(app).post('/api/auth/forgot-password').send({ email: 'reset@scds.saiuniversity.edu.in' });
+    } finally {
+      mailer.sendPasswordResetEmail = originalResetMailer;
+    }
+    const rawResetUser = await User.collection.findOne({ email: 'reset@scds.saiuniversity.edu.in' });
+    check('P7: SMTP failure returns generic success without leaking mail details', failedMailResponse.status === 200 && !/SMTP|simulated/i.test(JSON.stringify(failedMailResponse.body)), JSON.stringify(failedMailResponse.body));
+    check('P7: reset token is cleared when email delivery fails', !rawResetUser.resetTokenHash && !rawResetUser.resetTokenExpires, 'reset token fields remain');
+
+    const bogusReset = await request(app).post('/api/auth/reset-password')
+      .send({ token: 'not-a-real-token', password: 'newsecret123' });
+    check('P3: a bogus reset token is refused (400)', bogusReset.status === 400, `got ${bogusReset.status}`);
+
+    // Plant a known token exactly as the route would, so the flow can be tested
+    const crypto = require('crypto');
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    await User.updateOne(
+      { email: 'reset@scds.saiuniversity.edu.in' },
+      {
+        $set: {
+          resetTokenHash: crypto.createHash('sha256').update(resetToken).digest('hex'),
+          resetTokenExpires: new Date(Date.now() + 15 * 60 * 1000)
+        }
+      }
+    );
+
+    const doReset = await request(app).post('/api/auth/reset-password')
+      .send({ token: resetToken, password: 'newsecret123', confirmPassword: 'newsecret123' });
+    check('P4: a valid token changes the password (200)', doReset.status === 200, `got ${doReset.status}`);
+
+    const oldLogin = await request(app).post('/api/auth/login')
+      .send({ email: 'reset@scds.saiuniversity.edu.in', password: 'oldsecret123' });
+    check('P4: the old password no longer works (401)', oldLogin.status === 401, `got ${oldLogin.status}`);
+
+    const newLogin = await request(app).post('/api/auth/login')
+      .send({ email: 'reset@scds.saiuniversity.edu.in', password: 'newsecret123' });
+    check('P4: the new password works (200)', newLogin.status === 200, `got ${newLogin.status}`);
+
+    const reuse = await request(app).post('/api/auth/reset-password')
+      .send({ token: resetToken, password: 'another123', confirmPassword: 'another123' });
+    check('P5: the same token cannot be used twice (400)', reuse.status === 400, `got ${reuse.status}`);
+
+    const staleSession = await request(app).get('/api/auth/me').set(resetAuth);
+    check('P6: sessions issued before the reset are rejected (401)',
+      staleSession.status === 401, `got ${staleSession.status}`);
+
+    // ---------- 13. Gamification ledger and badges ----------
+    const pointsBefore = await User.findById(reg.body.user.id).then((u) => u.points);
+    const foundListing = await request(app).post('/api/items').set(auth).send({
+      title: 'Gamification Found Item',
+      description: 'A found item created to prove the ledger pays once.',
+      category: 'Bottles',
+      location: 'Canteen',
+      date: new Date().toISOString(),
+      type: 'found'
+    });
+    const foundId = foundListing.body.item && foundListing.body.item.id;
+    const pointsAfterPosting = await User.findById(reg.body.user.id).then((u) => u.points);
+    const eventsBeforeVerification = await PointEvent.countDocuments({ user: reg.body.user.id, key: 'found:' + foundId });
+    check('G1: posting alone awards no points', pointsAfterPosting === pointsBefore && eventsBeforeVerification === 0, pointsBefore + ' -> ' + pointsAfterPosting + '; events: ' + eventsBeforeVerification);
+    const studentVerify = await request(app).patch('/api/admin/items/' + foundId + '/verify').set(auth);
+    check('G1: a student cannot verify a found listing', studentVerify.status === 403, 'status ' + studentVerify.status);
+    const lostGuard = await request(app).post('/api/items').set(auth2).send({title:'Lost guard test',description:'Test',category:'Bags',location:'Library',date:new Date().toISOString(),type:'lost'});
+    const lostGuardId = lostGuard.body.item && lostGuard.body.item.id;
+    const lostGuardResult = await request(app).patch('/api/admin/items/' + lostGuardId + '/verify').set(authMod);
+    check('G1: moderators cannot verify lost listings', !!lostGuardId && lostGuardResult.status === 400, 'status ' + lostGuardResult.status);
+    const hiddenGuard = await request(app).post('/api/items').set(auth2).send({title:'Hidden guard test',description:'Test',category:'Bags',location:'Library',date:new Date().toISOString(),type:'found'});
+    const hiddenGuardId = hiddenGuard.body.item && hiddenGuard.body.item.id;
+    if(hiddenGuardId) await Item.updateOne({_id:hiddenGuardId},{$set:{status:'hidden'}});
+    const hiddenGuardResult = await request(app).patch('/api/admin/items/' + hiddenGuardId + '/verify').set(authMod);
+    check('G1: moderators cannot verify hidden found listings', !!hiddenGuardId && hiddenGuardResult.status === 400, 'status ' + hiddenGuardResult.status);
+
+    const moderatorVerify = await request(app).patch('/api/admin/items/' + foundId + '/verify').set(authMod);
+    check('G1: moderator verification succeeds', moderatorVerify.status === 200, 'status ' + moderatorVerify.status);
+    const repeatVerify = await request(app).patch('/api/admin/items/' + foundId + '/verify').set(authMod);
+    check('G1: repeated verification is idempotent', repeatVerify.status === 200 && repeatVerify.body.alreadyVerified === true, JSON.stringify(repeatVerify.body));
+    const pointsAfter = await User.findById(reg.body.user.id).then((u) => u.points);
+    check('G1: verified found item awards points exactly once', pointsAfter === pointsBefore + 2, pointsBefore + ' -> ' + pointsAfter);
+    const eventCount = await PointEvent.countDocuments({ user: reg.body.user.id, key: 'found:' + foundId });
+    check('G1: the award is recorded exactly once', eventCount === 1, eventCount + ' events');
+
+    const dupeAward = await PointEvent.create({
+      user: reg.body.user.id, type: 'found_item', points: 2, key: `found:${foundId}`
+    }).then(() => false).catch((err) => err.code === 11000);
+    check('G1: the unique index refuses a second award for the same event', dupeAward === true);
+
+    const impactDash = await request(app).get('/api/dashboard/me').set(auth);
+    check('G2: the dashboard reports the personal impact summary',
+      impactDash.body.impact && typeof impactDash.body.impact.contributions === 'number'
+      && impactDash.body.impact.points === pointsAfter,
+      JSON.stringify(impactDash.body.impact));
+    check('G2: the First Found Item badge is earned and dated',
+      Array.isArray(impactDash.body.badges)
+      && impactDash.body.badges.some((b) => b.id === 'first_found' && b.earned && b.earnedAt),
+      JSON.stringify(impactDash.body.badges && impactDash.body.badges.map((b) => `${b.id}:${b.earned}`)));
+
+    // ---------- 14. Leaderboard periods ----------
+    const badPeriod = await request(app).get('/api/leaderboard?period=fortnight');
+    check('L1: an unknown leaderboard period is refused (400)', badPeriod.status === 400, `got ${badPeriod.status}`);
+
+    const weekBoard = await request(app).get('/api/leaderboard?period=week');
+    check('L1: the weekly board answers with the period it used',
+      weekBoard.status === 200 && weekBoard.body.period === 'week', `got ${weekBoard.status}`);
+    check('L1: the board never exposes an email address',
+      weekBoard.body.leaderboard.every((r) => r.email === undefined));
+
+    // ---------- 15. The leaderboard is a student board ----------
+    // One account per role, all with points, so the filter is the only thing
+    // that can decide who appears.
+    const roleAccounts = {};
+    for (const role of ['faculty', 'moderator', 'admin', 'superadmin']) {
+      const created = await request(app).post('/api/auth/register').send({
+        name: `Board ${role}`,
+        email: `board-${role}@scds.saiuniversity.edu.in`,
+        password: 'secret123'
+      });
+      const id = created.body.user && created.body.user.id;
+      await User.updateOne({ _id: id }, { $set: { role, points: 500, returns: 50 } });
+      roleAccounts[role] = created.body.token;
+    }
+    // A dedicated account for ranking. Its balance is set directly on purpose,
+    // so the shared student account keeps a balance that is fully explained by
+    // the ledger for the consistency check further down.
+    const boardStudent = await request(app).post('/api/auth/register').send({
+      name: 'Board Student', email: 'board-student@scds.saiuniversity.edu.in', password: 'secret123'
+    });
+    const boardStudentId = boardStudent.body.user && boardStudent.body.user.id;
+    await User.updateOne({ _id: boardStudentId }, { $set: { points: 400, returns: 40 } });
+    await PointEvent.create({ user: boardStudentId, type: 'found_item', points: 400, key: 'leaderboard-period-test:' + boardStudentId, status: 'completed' });
+
+    for (const period of ['all', 'week', 'month']) {
+      const board = await request(app).get(`/api/leaderboard?period=${period}`);
+      const names = board.body.leaderboard.map((r) => r.name);
+      check(`LB-${period}: the student appears on the ${period} board`,
+        names.includes('Board Student'), names.join(','));
+      check(`LB-${period}: no staff account appears on the ${period} board`,
+        !['Board faculty', 'Board moderator', 'Board admin', 'Board superadmin'].some((staff) => names.includes(staff)), names.join(','));
+    }
+
+    // Opted out students stay off every period
+    await User.updateOne({ _id: boardStudentId }, { $set: { leaderboardOptOut: true } });
+    for (const period of ['all', 'week', 'month']) {
+      const board = await request(app).get(`/api/leaderboard?period=${period}`);
+      check(`LB-optout-${period}: an opted-out student is absent from the ${period} board`,
+        !board.body.leaderboard.some((r) => r.name === 'Board Student'));
+    }
+    await User.updateOne({ _id: boardStudentId }, { $set: { leaderboardOptOut: false } });
+
+    // ---------- 16. Only students may change the preference ----------
+    for (const [role, token] of Object.entries(roleAccounts)) {
+      const attempt = await request(app).patch('/api/auth/preferences')
+        .set({ Authorization: `Bearer ${token}` })
+        .send({ leaderboardOptOut: true });
+      check(`PREF-${role}: a ${role} cannot change a leaderboard preference (403)`,
+        attempt.status === 403, `got ${attempt.status}`);
+    }
+
+    const studentPref = await request(app).patch('/api/auth/preferences').set(auth)
+      .send({ leaderboardOptOut: true });
+    check('PREF-student: a student still can, and cannot escalate',
+      studentPref.status === 200
+      && studentPref.body.user.leaderboardOptOut === true
+      && studentPref.body.user.role === 'student'
+      && studentPref.body.user.points !== 9999,
+      `role ${studentPref.body.user && studentPref.body.user.role}`);
+    await User.updateOne({ _id: reg.body.user.id }, { $set: { leaderboardOptOut: false } });
+
+    // ---------- 17. Concurrency ----------
+    // Two simultaneous resets with one token: exactly one may win
+    const raceUser = await request(app).post('/api/auth/register').send({
+      name: 'Race Student', email: 'race@scds.saiuniversity.edu.in', password: 'oldsecret123'
+    });
+    const raceToken = require('crypto').randomBytes(32).toString('hex');
+    await User.updateOne(
+      { email: 'race@scds.saiuniversity.edu.in' },
+      {
+        $set: {
+          resetTokenHash: require('crypto').createHash('sha256').update(raceToken).digest('hex'),
+          resetTokenExpires: new Date(Date.now() + 15 * 60 * 1000)
+        }
+      }
+    );
+    const both = await Promise.all([
+      request(app).post('/api/auth/reset-password').send({ token: raceToken, password: 'firstpass1' }),
+      request(app).post('/api/auth/reset-password').send({ token: raceToken, password: 'secondpass2' })
+    ]);
+    const successes = both.filter((r) => r.status === 200).length;
+    check('CONC-reset: exactly one of two simultaneous resets succeeds',
+      successes === 1, both.map((r) => r.status).join(','));
+    check('CONC-reset: the loser is told the link is spent',
+      both.some((r) => r.status === 400));
+
+    // Two simultaneous returns of one item must pay exactly once
+    const raceItem = await request(app).post('/api/items').set(auth).send({
+      title: 'Concurrency Return Target',
+      description: 'A listing returned twice at once.',
+      category: 'Bottles',
+      location: 'Canteen',
+      date: new Date().toISOString(),
+      type: 'found'
+    });
+    const raceItemId = raceItem.body.item && raceItem.body.item.id;
+    const before = await User.findById(reg.body.user.id).then((u) => u.points);
+    const returns = await Promise.all([
+      request(app).patch(`/api/items/${raceItemId}/status`).set(auth).send({ status: 'returned' }),
+      request(app).patch(`/api/items/${raceItemId}/status`).set(auth).send({ status: 'returned' })
+    ]);
+    const after = await User.findById(reg.body.user.id).then((u) => u.points);
+    check('CONC-return: manual status changes do not award return points',
+      after - before === 0 && returns.every((r) => r.status === 400), `${before} -> ${after} (${returns.map((r) => r.status).join(',')})`);
+
+    // Ledger consistency is checked on an account whose balance was never set by
+    // hand, so the ledger really is expected to explain it in full.
+    const cleanUser = await request(app).post('/api/auth/register').send({
+      name: 'Ledger Clean', email: 'ledger-clean@scds.saiuniversity.edu.in', password: 'secret123'
+    });
+    const cleanAuth = { Authorization: `Bearer ${cleanUser.body.token}` };
+    const cleanListing = await request(app).post('/api/items').set(cleanAuth).send({
+      title: 'Clean Ledger Found Item',
+      description: 'One found listing, so the ledger holds exactly one award.',
+      category: 'Bottles',
+      location: 'Canteen',
+      date: new Date().toISOString(),
+      type: 'found'
+    });
+    const cleanItemId = cleanListing.body.item && cleanListing.body.item.id;
+    const cleanVerify = await request(app).patch('/api/admin/items/' + cleanItemId + '/verify').set(authMod);
+    check('CONSISTENCY: moderator verifies the clean found listing', cleanVerify.status === 200, 'status ' + cleanVerify.status);
+
+    const cleanLedger = await PointEvent.aggregate([
+      { $match: { user: new mongoose.Types.ObjectId(cleanUser.body.user.id), status: 'completed' } },
+      { $group: {
+        _id: null,
+        points: { $sum: '$points' },
+        returns: { $sum: { $cond: [{ $eq: ['$type', 'return'] }, 1, 0] } }
+      } }
+    ]);
+    const cleanPoints = cleanLedger.length ? cleanLedger[0].points : 0;
+    const cleanReturns = cleanLedger.length ? cleanLedger[0].returns : 0;
+    const cleanStored = await User.findById(cleanUser.body.user.id);
+    check('CONSISTENCY: the ledger total equals the stored point total',
+      cleanPoints === cleanStored.points, `ledger ${cleanPoints} vs stored ${cleanStored.points}`);
+    check('CONSISTENCY: the ledger return count equals the stored return total',
+      cleanReturns === cleanStored.returns, `ledger ${cleanReturns} vs stored ${cleanStored.returns}`);
+    check('CONSISTENCY: one found listing is worth exactly its points',
+      cleanStored.points === 2, `stored ${cleanStored.points}`);
+
+    // ---------- 18. Hiding a listing must not move any public counter ----------
+    const statsFields = ['total', 'lost', 'found', 'returned', 'claimed', 'open', 'active'];
+    const snapshot = async () => (await request(app).get('/api/items/stats')).body;
+    const baseline = await snapshot();
+
+    const hideLost = await request(app).post('/api/items').set(auth).send({
+      title: 'Stats Hidden Lost',
+      description: 'A lost listing that will be hidden.',
+      category: 'Bottles',
+      location: 'Canteen',
+      date: new Date().toISOString(),
+      type: 'lost'
+    });
+    const hideLostId = hideLost.body.item && hideLost.body.item.id;
+    const verifyLost = await request(app).patch('/api/admin/items/' + hideLostId + '/verify').set(authMod);
+    check('G1: a lost listing cannot be verified', verifyLost.status === 400, 'status ' + verifyLost.status);
+    const afterCreate = await snapshot();
+    check('STATS: a new lost listing raises total and lost',
+      afterCreate.total === baseline.total + 1 && afterCreate.lost === baseline.lost + 1,
+      JSON.stringify({ total: afterCreate.total, lost: afterCreate.lost }));
+
+    await Item.updateOne({ _id: hideLostId }, { $set: { status: 'hidden' } });
+    const afterHide = await snapshot();
+    check('STATS: hiding it restores every counter to the baseline',
+      statsFields.every((f) => afterHide[f] === baseline[f]),
+      statsFields.map((f) => `${f}:${afterHide[f]}/${baseline[f]}`).join(' '));
+
+    // The same for a returned listing, which touches a different counter
+    const hideReturned = await request(app).post('/api/items').set(auth).send({
+      title: 'Stats Hidden Returned',
+      description: 'A listing returned and then hidden.',
+      category: 'Bottles',
+      location: 'Canteen',
+      date: new Date().toISOString(),
+      type: 'found'
+    });
+    const hideReturnedId = hideReturned.body.item && hideReturned.body.item.id;
+    await Item.updateOne({ _id: hideReturnedId }, { $set: { status: 'returned' } });
+    const returnedUp = await snapshot();
+    check('STATS: a returned listing raises the returned counter',
+      returnedUp.returned === baseline.returned + 1, `${returnedUp.returned} vs ${baseline.returned}`);
+
+    await Item.updateOne({ _id: hideReturnedId }, { $set: { status: 'hidden' } });
+    const verifyHidden = await request(app).patch('/api/admin/items/' + hideReturnedId + '/verify').set(authMod);
+    check('G1: a hidden found listing cannot be verified', verifyHidden.status === 400, 'status ' + verifyHidden.status);
+    const afterHideReturned = await snapshot();
+    check('STATS: hiding a returned listing restores every counter',
+      statsFields.every((f) => afterHideReturned[f] === baseline[f]),
+      statsFields.map((f) => `${f}:${afterHideReturned[f]}/${baseline[f]}`).join(' '));
+
+    // ---------- 19. The ledger records a completed award ----------
+    const settled = await PointEvent.findOne({ user: reg.body.user.id, type: 'found_item' });
+    check('LEDGER: an awarded event is stored as completed',
+      settled && settled.status === 'completed', settled && settled.status);
+
+    // ---------- 20. A pending award is not a score ----------
+    const studentId = reg.body.user.id;
+    const pointsBeforePending = await User.findById(studentId).then((u) => u.points);
+    const pendingEvent = await PointEvent.create({
+      user: studentId,
+      type: 'return',
+      points: 999,
+      key: `pending-test:${Date.now()}`,
+      status: 'pending'
+    });
+
+    for (const period of ['week', 'month']) {
+      const board = await request(app).get(`/api/leaderboard?period=${period}`);
+      check(`PENDING-${period}: a pending award does not appear on the ${period} board`,
+        !board.body.leaderboard.some((r) => r.points === 999), JSON.stringify(board.body.leaderboard));
+    }
+
+    const afterPending = await User.findById(studentId).then((u) => u.points);
+    check('PENDING: an uncredited event does not change the stored total',
+      afterPending === pointsBeforePending, `${pointsBeforePending} -> ${afterPending}`);
+
+    const mixed = await request(app).get('/api/dashboard/me').set(auth);
+    check('PENDING: the impact summary reports the pending award separately',
+      mixed.body.impact.pendingAwards >= 1, JSON.stringify(mixed.body.impact));
+    check('PENDING: the recent list contains credited contributions only',
+      mixed.body.impact.recent.every((e) => e.points !== 999),
+      JSON.stringify(mixed.body.impact.recent));
+    check('PENDING: contributions counts credited events only',
+      mixed.body.impact.contributions
+        === (await PointEvent.countDocuments({ user: studentId, status: 'completed' })),
+      `${mixed.body.impact.contributions} vs completed count`);
+
+    // Claiming it and crediting it makes it visible, and only then
+    const claimedEvent = await PointEvent.findOneAndUpdate(
+      { _id: pendingEvent._id, status: 'pending' },
+      { $set: { status: 'completed' } },
+      { new: true }
+    );
+    check('PENDING: the event could be settled for this test', Boolean(claimedEvent));
+    const afterSettle = await request(app).get('/api/dashboard/me').set(auth);
+    check('PENDING: once completed it is counted',
+      afterSettle.body.impact.contributions === mixed.body.impact.contributions + 1,
+      `${mixed.body.impact.contributions} -> ${afterSettle.body.impact.contributions}`);
+
+    // ---------- 21. Recovery after a real handover ----------
+    const recItem = await request(app).post('/api/items').set(auth).send({
+      title: 'Recovery Handover Item',
+      description: 'A listing used to prove handover recovery.',
+      category: 'Bottles',
+      location: 'Canteen',
+      date: new Date().toISOString(),
+      type: 'found'
+    });
+    check('HANDOVER: recovery item creation succeeds',
+      recItem.status === 201,
+      `got ${recItem.status}: ${JSON.stringify(recItem.body)}`
+    );
+    const recItemId = recItem.body.item && recItem.body.item.id;
+
+    const recClaim = await request(app).post('/api/claims').set(auth2)
+      .send({ itemId: recItemId, message: 'That is mine, red cap.' });
+    check('HANDOVER: recovery claim creation succeeds',
+      recClaim.status === 201,
+      `got ${recClaim.status}: ${JSON.stringify(recClaim.body)}`
+    );
+    const recClaimId = recClaim.body.claim && recClaim.body.claim.id;
+
+
+    await request(app).patch(`/api/claims/${recClaimId}`).set(auth).send({ status: 'approved' });
+    const handover = await request(app).post(`/api/claims/${recClaimId}/handover`).set(auth).send({});
+    check('HANDOVER: the handover succeeds', handover.status === 200, `got ${handover.status}: ${JSON.stringify(handover.body)}`);
+
+    const claimAfter = await Claim.findById(recClaimId);
+    check('HANDOVER: the claim stays approved and records the confirmation',
+      claimAfter.status === 'approved' && Boolean(claimAfter.handoverConfirmedAt),
+      `${claimAfter.status} / ${claimAfter.handoverConfirmedAt}`);
+
+    // The recovery test above used a real handover whose awards succeeded, so
+    // start a second one where the ledger write fails at insertion time — the
+    // only faithful simulation of "the award never reached the database".
+    const failItem = await request(app).post('/api/items').set(auth).send({
+      title: 'Handover With Failing Ledger',
+      description: 'A handover whose award cannot be written.',
+      category: 'Bottles',
+      location: 'Canteen',
+      date: new Date().toISOString(),
+      type: 'found'
+    });
+    const failItemId = failItem.body.item && failItem.body.item.id;
+    const failClaim = await request(app).post('/api/claims').set(auth2)
+      .send({ itemId: failItemId, message: 'Mine, blue lid.' });
+    const failClaimId = failClaim.body.claim && failClaim.body.claim.id;
+    await request(app).patch(`/api/claims/${failClaimId}`).set(auth).send({ status: 'approved' });
+
+    const balancesBefore = {
+      owner: await User.findById(reg.body.user.id).then((u) => ({ points: u.points, returns: u.returns })),
+      claimant: await User.findById(reg2.body.user.id).then((u) => ({ points: u.points, returns: u.returns }))
+    };
+
+    const realCreate = PointEvent.create;
+    PointEvent.create = async (doc, opts) => {
+      const key = doc && doc.key ? doc.key : (Array.isArray(doc) && doc[0] ? doc[0].key : '');
+      if (String(key).startsWith(`return:${failItemId}:`)) {
+        throw new Error('simulated ledger outage');
+      }
+      return realCreate.call(PointEvent, doc, opts);
+    };
+
+    let failedHandover;
+    try {
+      failedHandover = await request(app).post(`/api/claims/${failClaimId}/handover`).set(auth).send({});
+    } finally {
+      PointEvent.create = realCreate;
+    }
+
+    check('RECOVERY: the handover still succeeds when the award cannot be written',
+      failedHandover.status === 200, `got ${failedHandover.status}`);
+
+    const balancesAfter = {
+      owner: await User.findById(reg.body.user.id).then((u) => ({ points: u.points, returns: u.returns })),
+      claimant: await User.findById(reg2.body.user.id).then((u) => ({ points: u.points, returns: u.returns }))
+    };
+    check('RECOVERY: neither balance moved while the ledger was down',
+      balancesAfter.owner.points === balancesBefore.owner.points
+      && balancesAfter.owner.returns === balancesBefore.owner.returns
+      && balancesAfter.claimant.points === balancesBefore.claimant.points
+      && balancesAfter.claimant.returns === balancesBefore.claimant.returns,
+      JSON.stringify({ before: balancesBefore, after: balancesAfter }));
+
+    const orphanEvents = await PointEvent.countDocuments({ key: { $regex: `^return:${failItemId}:` } });
+    check('RECOVERY: no return event was created for the failed handover',
+      orphanEvents === 0, `${orphanEvents} rows`);
+
+    const { recoverMissingAwards } = require('../src/utils/gamification');
+    const recovery = await recoverMissingAwards({ apply: true });
+    check('RECOVERY: a handover whose award never landed is found',
+      recovery.missingSample.includes(`return:${failItemId}:${reg.body.user.id}`)
+      && recovery.missingSample.includes(`return:${failItemId}:${reg2.body.user.id}`),
+      JSON.stringify(recovery.missingSample));
+
+    const ownerEvent = await PointEvent.findOne({ key: `return:${failItemId}:${reg.body.user.id}` });
+    const claimantEvent = await PointEvent.findOne({ key: `return:${failItemId}:${reg2.body.user.id}` });
+    check('RECOVERY: both the owner and the claimant now have a completed award',
+      ownerEvent && ownerEvent.status === 'completed'
+      && claimantEvent && claimantEvent.status === 'completed',
+      `${ownerEvent && ownerEvent.status} / ${claimantEvent && claimantEvent.status}`);
+
+    const recoveredBalances = {
+      owner: await User.findById(reg.body.user.id).then((u) => ({ points: u.points, returns: u.returns })),
+      claimant: await User.findById(reg2.body.user.id).then((u) => ({ points: u.points, returns: u.returns }))
+    };
+    check('RECOVERY: the owner was credited exactly once',
+      recoveredBalances.owner.points === balancesBefore.owner.points + 10
+      && recoveredBalances.owner.returns === balancesBefore.owner.returns + 1,
+      JSON.stringify(recoveredBalances.owner));
+    check('RECOVERY: the claimant was credited exactly once',
+      recoveredBalances.claimant.points === balancesBefore.claimant.points + 10
+      && recoveredBalances.claimant.returns === balancesBefore.claimant.returns + 1,
+      JSON.stringify(recoveredBalances.claimant));
+
+    const secondRecovery = await recoverMissingAwards({ apply: true });
+    check('RECOVERY: running it again pays nothing more',
+      secondRecovery.awarded === 0, `awarded ${secondRecovery.awarded}`);
+    const finalBalances = await User.findById(reg.body.user.id).then((u) => ({ points: u.points, returns: u.returns }));
+    check('RECOVERY: the second run leaves the balance untouched',
+      finalBalances.points === recoveredBalances.owner.points
+      && finalBalances.returns === recoveredBalances.owner.returns,
+      JSON.stringify(finalBalances));
 
     const delOther = await request(app).delete(`/api/items/${itemId}`).set(auth2);
     check('non-owner cannot delete an item (403)', delOther.status === 403, `got ${delOther.status}`);
