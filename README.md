@@ -1,828 +1,357 @@
-# Foundry — Campus Lost and Found Portal
+# Foundry — Campus Lost & Found
 
-A full-stack web application for Sai University. Students report lost belongings,
-browse found items, search and filter listings, and coordinate returns through a
-claim workflow that the person who posted the item reviews.
+A lost-and-found board for Sai University. Students report what they have lost,
+post what they have found, and claim their belongings back through a verified
+handover instead of a hopeful message.
 
-**Web Technology and Internet Programming — individual B.Tech CSE project.**
-
-Live demo: <https://foundry-lost-and-found.onrender.com>
+Built as a B.Tech Computer Science project.
 
 ---
 
 ## 1. What it does
 
-- **Register with your Sai University address only** — the `@scds.saiuniversity.edu.in`
-  domain is enforced on the server, not just in the browser.
-- **Report** a lost or found item, with an optional photo.
-- **Search and filter** by keyword, category, subcategory, location, type, status
-  and a date range, with pagination so the board never silently stops at a fixed number.
-- **Category and subcategory** — a dependent pair, so "Electronics" then "Earphones",
-  available in the form, the filters and the listing details.
-- **Dark and light themes** — a toggle on every page, remembered in the browser.
-- **Claim** an item by describing a detail only the owner would know, then
-  confirm the handover once the item actually changes hands.
-- **Review claims** on your own listings from your dashboard: approve or reject.
-- **Administer** the site: statistics, charts, every listing, every claim, every
-  account, plus the ability to remove a listing or change someone's role.
-- **Report a listing** that looks like spam, abuse or a fake, and an
-  administrator reviews it from a moderation queue.
-- **Get notified** in the app when someone claims your item, when a claim is
-  decided, and when an item is marked returned.
-- **Earn points** when a return is completed; a public leaderboard ranks students.
+- **Report a lost item** or **post a found item**, with a category, campus
+  location and date.
+- **Search and filter** the board by type, category, location, status, date range
+  and free text.
+- **Claim a found item.** Only found items can be claimed, never your own, and
+  never one that is already spoken for.
+- **Verify a handover.** The owner approves a claim, the claimant receives a
+  six-digit code, and the owner enters it in person to confirm the return.
+- **Earn points and badges** for verified actions — never for merely posting.
+- **Faculty applications** are reviewed by an administrator before the account
+  can be used.
+- **Campus Explorer** plots known campus locations on a map.
 
-### How a return actually completes
-
-Approving a claim only **reserves** the item — it moves to `claimed` so nobody
-else can claim it, and nothing else happens. The listing becomes `returned`
-only when the owner presses **Confirm handover** on the approved claim, which
-records who confirmed it and when (`handoverConfirmedAt`), awards the points to
-both people and notifies both. Marking an item returned without a handover is
-still possible from the dashboard, and both routes are recorded on the item.
-
-The application starts **completely empty**. There are no seeded listings and no
-default accounts — the first thing a visitor sees is an invitation to report
-something.
+---
 
 ## 2. Technology
 
-| Layer | Technology |
-|---|---|
-| Runtime | Node.js 18+ |
-| Web framework | Express 4 |
-| Database | MongoDB (Atlas or local) with Mongoose 8 |
-| Authentication | JSON Web Tokens + bcryptjs |
-| Security | helmet, CORS, express-rate-limit |
-| Frontend | Plain HTML5, CSS and ES6+ JavaScript — no framework, no build step |
-| Tests | `node test/offline.test.js` (no database), `npm test` (needs MongoDB), Postman collection |
+| Layer | Choice |
+| --- | --- |
+| Database | **PostgreSQL 17** on Supabase, accessed with `pg` (node-postgres) |
+| Backend | Node.js 20, Express 4 |
+| Auth | JWT with a `token_version` check, bcrypt password hashing |
+| Email | **Brevo** HTTP API (transactional email) |
+| Frontend | Plain HTML, CSS and JavaScript — no framework, no build step |
+| Maps | Leaflet, self-hosted under `frontend/assets/vendor/` |
+| Tests | Node scripts, Playwright for the browser suite |
+| CI | GitHub Actions against a real `postgres:16` service |
 
-The frontend is plain HTML/CSS/JS on purpose: the brief rewards code you can
-explain line by line, and there is nothing to compile or install for the demo.
+> **MongoDB is gone.** The project was originally built on MongoDB with Mongoose
+> and was migrated completely to PostgreSQL. No Mongoose code, dependency or
+> test remains, and CI fails if one is reintroduced.
+
+---
 
 ## 3. Repository layout
 
 ```
-foundry/
-├── backend/
-│   ├── server.js                  entry point: checks env, connects DB, listens
-│   ├── src/
-│   │   ├── app.js                 express app, middleware, routes, static serving
-│   │   ├── config/db.js           mongoose connection
-│   │   ├── models/                User.js, Item.js, Claim.js, Notification.js,
-│   │   │                          Report.js, AuditLog.js
-│   │   ├── middleware/            auth.js (JWT + roles), error.js (404 + handler)
-│   │   ├── routes/                auth, item, claim, dashboard, admin, leaderboard,
-│   │   │                          notifications
-│   │   └── utils/
-│   │       ├── notify.js          writes a notification without breaking the request
-│   │       ├── email.js           the university domain rule + verification tokens
-│   │       ├── categories.js      the category/subcategory tree and locations
-│   │       ├── audit.js           records administrative actions
-│   │       └── mailer.js          sends the verification email (only when enabled)
-│   ├── scripts/
-│   │   ├── create-admin.js        creates the first administrator from env vars
-│   │   ├── db-info.js             read-only: which database am I connected to?
-│   │   └── cleanup-demo.js        removes the old seed data (dry run by default)
-│   ├── test/
-│   │   ├── offline.test.js        runs with no database
-│   │   └── api.test.js            full API suite, needs MongoDB
-│   ├── postman/                   Foundry.postman_collection.json
-│   ├── .env.example               every variable, placeholders only
-│   └── package.json
-└── frontend/
-    ├── index.html                 hero, stats, browse, filters, modals
-    ├── auth.html                  log in / create account
-    ├── dashboard.html             your metrics, listings, claims, edit modal
-    ├── admin.html                 statistics, charts, listings, accounts, claims
-    └── assets/
-        ├── css/styles.css
-        └── js/  api.js (shared helpers), theme-init.js (theme before paint),
-                 app.js (homepage), auth.js (login), dashboard.js, admin.js
+backend/
+  server.v2.js              entry point — validates config, connects, listens
+  src/
+    app.v2.js               Express app: middleware, route mounting, error handling
+    config/pg.js            connection pool, TLS modes, transaction helper
+    lib/brevo.js            email client and all seven templates
+    middleware/
+      auth.v2.js            JWT verification, role guards
+      rateLimit.js          IP and account limiters
+    repositories/           all SQL lives here
+      users.js  items.js  claims.js  points.js  notify.js  badges.js
+    routes/
+      auth.v2.routes.js     register, verify, resend, login, reset, preferences
+      items.v2.routes.js    board, search, create, edit, moderation
+      claims.v2.routes.js   claim, review, handover
+      misc.v2.routes.js     notifications, dashboard, leaderboard, campus,
+                            reports, admin
+    utils/categories.js     category tree shared by the API and the form
+  db/schema.sql             the whole schema — idempotent, safe to re-run
+  scripts/create-admin-pg.js
+  test/
+    auth-v2.test.js         domain rule and email templates (no database)
+    pg.integration.test.js  the API against a real Postgres
+    boot-v2.test.js         the server actually starts
+    deploy.test.js          the command the platform runs
+    browser/app.spec.js     Playwright against the real UI
+
+frontend/
+  index.html                the board
+  auth.html                 sign in, register, verify
+  dashboard.html            your listings, claims, badges, leaderboard
+  admin.html                moderation and administration
+  explorer.html             campus map
+  forgot-password.html  reset-password.html
+  assets/js/                api.js, auth.js, app.js, dashboard.js, admin.js …
 ```
 
-## 4. Who can register
+---
 
-Foundry is for the Sai University community. Registration accepts the four
-school domains plus the faculty domain, and nothing else:
+## 4. Setup
 
-| Domain | Who |
-|---|---|
-| `@scds.saiuniversity.edu.in` | School of Computing and Data Science |
-| `@sas.saiuniversity.edu.in` | School of Arts and Sciences |
-| `@sol.saiuniversity.edu.in` | School of Law |
-| `@sahs.saiuniversity.edu.in` | School of Allied Health Sciences |
-| `@saiuniversity.edu.in` | Faculty (account needs administrator approval) |
-
-The rule lives in `backend/src/utils/email.js` and is applied in
-`POST /api/auth/register`. It is enforced on the server, so a direct API call
-cannot bypass it, and the browser applies the same rule first for a faster
-message. The comparison is exact and case-insensitive:
-
-| Address | Result |
-|---|---|
-| `audisiva.i-29@scds.saiuniversity.edu.in` | accepted |
-| `STUDENT@SCDS.SAIUNIVERSITY.EDU.IN` | accepted (case-insensitive) |
-| `student@gmail.com` | refused |
-| `student@saiuniversity.edu.in` | accepted, created as a **faculty** account pending approval |
-| `student@sai.edu` | refused — not a university domain |
-| `student@eng.saiuniversity.edu.in` | refused — not one of the four schools |
-| `student@scds.saiuniversity.edu.in.evil.com` | refused — suffix trick |
-| `student@sub.scds.saiuniversity.edu.in` | refused — subdomain |
-
-The list is configurable with `ALLOWED_EMAIL_DOMAIN` (comma separated). Setting
-it **replaces** the list rather than adding to it, so a mistake in the
-environment cannot quietly widen the rule. Nothing widens it otherwise: no
-extra domains and no subdomains. Registration always creates a
-**student**; the role is never read from the request body. Administrators are
-only created through `npm run create-admin`.
-
-Accounts that already exist on another domain keep working — the rule applies
-to new registrations, so no production account is locked out.
-
-## 5. Roles
-
-| Role | Can do | Cannot do |
-|---|---|---|
-| `student` | report, claim, edit own listings, report abuse | anything administrative |
-| `faculty` | the same, once an administrator approves the account | anything administrative |
-| `moderator` | review reports, hide and restore listings, read the moderation queue and audit log | see accounts or claims, delete listings, suspend anyone |
-| `admin` | everything above, plus users, claims, suspensions, deleting listings, approving faculty | appoint or demote administrators |
-| `superadmin` | everything, including appointing administrators | — |
-
-Every route states the roles it accepts (`requireRole(...)` in
-`backend/src/routes/admin.routes.js`); the frontend only decides what to show.
-A moderator opening the admin page gets the moderation panels, and the account
-and claim tables say "not available for your role" instead of breaking.
-
-The first account created by `npm run create-admin` is a **superadmin**, because
-only a superadmin can appoint other administrators. Set `ADMIN_ROLE=admin` if you
-want a plain administrator instead.
-
-## 6. Setup from a fresh clone
-
-You need Node.js 18 or newer and a MongoDB database (Atlas free tier is fine).
+You need **Node.js 20** and a **PostgreSQL database** (Supabase free tier is
+enough).
 
 ```bash
-git clone https://github.com/jsivaramateja1-del/foundry-lost-and-found.git
-cd foundry/backend
+cd backend
 npm install
+cp .env.example .env        # then fill it in
+npm run db:init             # applies db/schema.sql
+npm start                   # http://localhost:5000
 ```
 
-Create your environment file:
+Create your first administrator once you have registered an account:
 
 ```bash
-copy .env.example .env        # Windows cmd
-cp .env.example .env          # macOS / Linux
+npm run create-admin -- you@saiuniversity.edu.in superadmin
 ```
 
-Now edit `.env` and fill in at least these three values:
+The server refuses to start without `JWT_SECRET` and `DATABASE_URL`, and prints
+the sender address at boot so you can see whether email is configured.
 
-| Variable | Required | What it is |
-|---|---|---|
-| `MONGO_URI` | yes | Your MongoDB connection string, ending in `/foundry` |
-| `JWT_SECRET` | yes | A long random string. The server will not start without it |
-| `NODE_ENV` | yes | `development` locally, `production` when deployed |
+---
 
-Generate a secret with:
+## 5. Environment variables
 
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
+| Name | Required | Notes |
+| --- | --- | --- |
+| `DATABASE_URL` | **yes** | Use the Supabase **shared pooler** string, not the direct one |
+| `JWT_SECRET` | **yes** | Long random string. There is no fallback |
+| `APP_URL` | **yes in production** | Absolute base URL for links in email |
+| `BREVO_API_KEY` | for email | Must start with `xkeysib-`; needs *Transactional email: All* |
+| `BREVO_SENDER` | for email | A verified Brevo sender address |
+| `NODE_ENV` | recommended | `production` enforces the CORS allow-list |
+| `CLIENT_ORIGIN` | in production | Comma-separated allowed origins |
+| `PG_CA_CERT_PATH` | recommended | Path to `prod-ca-2021.crt` for verified TLS |
+| `PG_SSL_NO_VERIFY` | fallback | `true` accepts any certificate. Logs a warning |
+| `PG_POOL_MAX` | optional | Pool size **per process** (default 10) |
 
-Optional variables: `PORT` (defaults to 5000 — never set it on Render),
-`JWT_EXPIRES_IN` (defaults to `7d`), `CLIENT_ORIGIN` (extra CORS origins, comma
-separated; same-origin is always allowed).
+### Why the pooler string
 
-> **There is no default JWT secret and no fallback.** If `JWT_SECRET` is missing,
-> `server.js` refuses to start and says so. That is deliberate: a secret committed
-> to a repository lets anyone forge an admin token.
+Supabase's **direct** connection (`db.<ref>.supabase.co:5432`) is IPv6-only on
+the free plan, and Render has no outbound IPv6 — so it fails with
+`ENETUNREACH`, which looks like a credentials problem. The **shared pooler**
+(`aws-<n>-<region>.pooler.supabase.com`, user `postgres.<ref>`) is IPv4 and
+works. The code warns at startup if `DATABASE_URL` points at the direct host.
 
-Start the server:
+---
 
-```bash
-npm start
-```
+## 6. Who can register
 
-Expected output:
+| Address | Becomes |
+| --- | --- |
+| `…@scds.saiuniversity.edu.in` | student |
+| `…@sas`, `…@sol`, `…@sahs.saiuniversity.edu.in` | student |
+| `…@saiuniversity.edu.in` (no subdomain) | **pending faculty application** |
+| anything else | refused |
 
-```
-MongoDB Connected: <your cluster host>
-Server running on http://localhost:5000
-```
+Any subdomain of `saiuniversity.edu.in` is a student address. The bare parent
+domain is staff, and staff are not self-service: the account is created with
+`pending_approval = true` and cannot sign in until an administrator approves it.
 
-Expected output:
+Lookalikes such as `saiuniversity.edu.in.evil.com` and
+`notsaiuniversity.edu.in` are refused — the domain is compared exactly after the
+`@`, never with a suffix match on the raw string.
 
-```
-MongoDB Connected: host=<your cluster host> database=foundry
-Server running on http://localhost:5000
-```
+---
 
-Open <http://localhost:5000>. Express serves the frontend from `../frontend`, so
-there is only one service to run.
+## 7. Account lifecycle
 
-### Checking which database you are on
+1. **Register.** The account is created unverified. A verification email is sent.
+2. **Verify.** The link carries a token whose SHA-256 hash is stored, valid for
+   24 hours and usable once.
+3. **Sign in.** Refused if the address is unverified, the account is pending
+   approval, or it is suspended.
+4. **Lost the email?** `POST /api/auth/resend-verification` issues a fresh link.
+   It answers identically whether or not the account exists.
+5. **Forgot the password?** A reset link valid for one hour. Resetting bumps
+   `token_version`, which retires every existing session.
 
-```bash
-npm run db:info
-```
+A faculty applicant goes through the same steps, plus an administrator decision.
 
-Read-only. Prints the host, the database name, counts of users / listings /
-claims, who owns the existing listings, and whether any of the old demo accounts
-exist. Run it locally and compare the host and database name with the
-"MongoDB Connected" line in your Render logs — if they differ, your local
-commands are changing a different database from the one the live site reads.
+---
 
-## 7. Creating the first administrator
+## 8. Roles
 
-**No administrator account ships with this project, and no password is stored in
-the source code.** You create the first admin yourself:
+| Role | Can |
+| --- | --- |
+| `student` | post, edit and delete their own listings; claim; confirm their own handover |
+| `faculty` | the same as a student. It is a label, **not** a staff role |
+| `moderator` | hide a listing; restore a hidden listing to `open` — never their own, and never one that is visible |
+| `admin` | moderation, suspend and reinstate accounts, approve applications, verify found listings |
+| `superadmin` | everything above, plus changing roles and creating campus locations |
 
-```bash
-cd backend
-set ADMIN_NAME=Your Name
-set ADMIN_EMAIL=you@saiuniversity.edu.in
-set ADMIN_PASSWORD=a-long-password-you-choose
-npm run create-admin
-```
+Authorization is enforced on the server. The UI hides controls it knows will be
+refused, but nothing depends on that.
 
-On macOS or Linux use `export` instead of `set`. The password must be at least
-8 characters. Expected output:
+---
 
-```
-Administrator created: you@saiuniversity.edu.in
-```
+## 9. Points and badges
 
-Running the command again with an email that already has an account promotes
-that account to admin and leaves its password unchanged.
+Points are awarded **only for verified actions**.
 
-Every other account is created through the **Create account** form on the site
-and starts as a normal student.
+| Action | Points | When |
+| --- | --- | --- |
+| Found item verified | 2 | A moderator verifies the listing |
+| Item returned | 10 | A handover is completed |
 
-## 8. If you are upgrading from the old seeded version
+Posting a listing earns nothing. Claiming earns nothing. A double award is
+impossible: `point_events` has a unique `(user_id, event_key)` and the award is
+`INSERT … ON CONFLICT DO NOTHING` inside the same transaction as the user total.
 
-Earlier versions of this project shipped a `seed.js` that created three accounts
-with published passwords and twelve sample listings. That file is gone. If your
-database still contains that data, remove it with:
+| Badge | Earned by |
+| --- | --- |
+| First Found Item | 1 verified found listing |
+| Helpful Finder | 3 verified found listings |
+| Successful Return | 1 completed return |
+| Community Helper | 5 completed returns |
+| Trusted Member | 10 completed returns |
 
-```bash
-cd backend
-npm run cleanup:demo
-```
+Badges are never revoked. Students may opt out of the leaderboard; opted-out
+students and non-students never appear on it.
 
-That is a **dry run**: it lists the demo accounts, listings and claims it found
-and deletes nothing. When you are happy with the list, run:
+---
 
-```bash
-npm run cleanup:demo -- --apply
-```
+## 10. API
 
-It only touches items reported by the three old demo accounts and the claims
-attached to them. Listings created by real users are never removed.
-
-**Run `npm run create-admin` first, and use an email that is not one of the three
-demo addresses.** If you create your admin with `admin@saiuniversity.edu.in`,
-the cleanup will delete that account along with the rest of the demo data.
-
-## 9. Tests
-
-Seven suites. Four need no database at all; three start an in-memory MongoDB.
-
-```bash
-cd backend
-node test/offline.test.js      # unit + source guards, no database
-npm run test:routes            # route-level, no database
-npm run test:ratelimit         # rate limiter, no database
-npm test                       # API suite, needs MongoDB
-npm run test:transactions      # replica-set behaviour, needs MongoDB
-npm run test:coverage          # coverage of the remaining paths, needs MongoDB
-```
-
-| Suite | Command | Expected | Database |
-|---|---|---|---|
-| Offline | `node test/offline.test.js` | 239 passed, 0 failed | no |
-| Routes | `npm run test:routes` | 95 passed, 0 failed | no |
-| Rate limits | `npm run test:ratelimit` | 5 passed, 0 failed | no |
-| API | `npm test` | 219 passed, 0 failed | yes |
-| Transactions | `npm run test:transactions` | 33 passed, 0 failed | yes |
-| Coverage | `npm run test:coverage` | 47 passed, 0 failed | yes |
-| Frontend | `npm run test:frontend` | 24 passed, 0 failed | no |
-
-The three database-free suites were re-run after the latest changes. The three
-MongoDB suites were last verified on Windows; re-run them after pulling.
-
-`test/frontend.test.js` runs the real `frontend/assets/js/auth.js` inside a stub
-DOM and drives the registration form: it asserts that one click sends exactly one
-`POST /api/auth/register`, that validation stops the request with a visible
-message, that a pending faculty application is reported, and that the button is
-disabled in flight and restored afterwards. This exists because a handler that
-throws before calling the API produces **no network request at all**, which no
-server-side suite can observe.
-
-`test/routes.test.js` needs **no database at all**: every case is decided before
-the first Mongoose query — the domain rule, input validation, the authentication
-gate, id validation and the JSON error shape. It also reads the frontend files to
-check the registration feedback path, because a ReferenceError in the submit
-handler is exactly the kind of fault that no server test can see.
-
-The offline suite proves the app loads, all 46 routes are registered, the schemas
-reject bad input, bcrypt and JWT round-trip, no fallback secret exists, and the
-email-domain rule and verification tokens behave.
-
-The full API suite starts an in-memory MongoDB (`mongodb-memory-server`), so the
-first run downloads a database binary. To run against a real database instead:
-
-```bash
-set MONGO_URI=mongodb://localhost:27017/foundry-test
-npm test
-```
-
-Some suites inject failures on purpose (approval rollback, handover rollback,
-ledger outage, concurrent resets). Those log errors during a **passing** run and
-are not failures.
-
-The Postman collection in `backend/postman/` has 48 requests with assertions,
-across Health, Auth, Items, Claims, Dashboards, Cleanup and Notifications. It
-includes the domain-refusal case, email verification and the handover step.
-
-## 10. Scheduled monitoring
-
-Three GitHub Actions workflows live in `.github/workflows/`. They are inert until
-the repository receives them, and they check the real service — none of them
-prints success without making the request.
-
-| Workflow | When | What it checks |
-|---|---|---|
-| `ci.yml` | every push and pull request, or manually | installs with `npm ci`, syntax-checks every JS file, runs all seven suites, runs `npm audit --audit-level=high`, and fails the build on any failure |
-| `health-check.yml` | daily at 02:30 UTC (08:00 IST) | `/api/health`, `/api/health/ready` (which fails when the database is unreachable), the homepage, and five critical API routes |
-| `weekly-audit.yml` | Mondays at 03:00 UTC (08:30 IST) | the full suite, a dependency advisory report, and a boot test that starts the server and fetches the homepage |
-
-**Enabling / disabling:** in GitHub, open *Actions*, pick the workflow and use the
-*Enable workflow* / *Disable workflow* menu. To run one on demand, open the
-workflow and press *Run workflow* (`workflow_dispatch` is enabled on all three).
-
-**Pointing the probe at a different host:** set a repository variable named
-`PRODUCTION_URL` (Settings → Secrets and variables → Actions → Variables). The
-default is `https://foundry-lost-and-found.onrender.com`.
-
-**Reading results:** the *Actions* tab shows each run; a failure lists the exact
-endpoint and status code. Nothing in these workflows writes to production data —
-`reconcile:points` is run without `--apply`, so it only reports.
-
-**Scheduled runs only happen on the default branch.** GitHub fires `schedule:`
-triggers from the repository's default branch (currently `main`). While these
-workflows exist only on `phase3-stage1`, the daily and weekly crons do **not**
-run — you can still start them by hand with *Run workflow*. To activate the
-schedules, merge this branch into the default branch.
-
-**Ledger consistency** is checked by `npm run test:ledger`: it seeds a known
-account and ledger pair in an isolated in-memory database, runs the same
-classification the production script uses, and asserts that a matching balance
-is reported in sync, that a pending award is not counted as a score, that an
-under-credited account is detected, and that nothing was written. For a real
-deployment, `npm run reconcile:points` (without `--apply`) prints the same
-comparison against live data and changes nothing.
-
-**What they do not do:** they do not read application logs (no log drain is
-configured), do not send email or chat notifications, and do not deploy. Wire a
-notification step to your channel of choice if you want alerts pushed.
-
-## 11. API
-
-All responses are JSON, including errors. Every protected route requires
+All responses are JSON, including errors. Authenticated routes need
 `Authorization: Bearer <token>`.
 
-| Method | Path | Who |
-|---|---|---|
-| GET | `/api/health` | public |
-| GET | `/api/auth/config` | public — allowed email domain + whether verification is on |
-| POST | `/api/auth/register` | public — Sai University addresses only |
-| POST | `/api/auth/verify-email` | public — consume a verification token |
-| POST | `/api/auth/resend-verification` | logged in — issue a fresh token (rate limited) |
-| POST | `/api/auth/login` | public |
-| GET | `/api/auth/me` | logged in |
-| POST | `/api/auth/logout` | logged in |
-| GET | `/api/items` | public — `q`, `category`, `location`, `type`, `status`, `from`, `to`, `sort`, `page`, `limit` |
-| GET | `/api/items/meta` | public — categories, subcategories and locations |
-| GET | `/api/items/stats` | public — genuine counters for the homepage tiles |
-| GET | `/api/items/:id` | public |
-| GET | `/api/items/:id/similar` | public — duplicate-item alert |
-| POST | `/api/items/:id/report` | logged in — flag a listing, once per student |
-| POST | `/api/items` | logged in |
-| PUT | `/api/items/:id` | owner or admin |
-| PATCH | `/api/items/:id/status` | owner or admin |
-| DELETE | `/api/items/:id` | owner or admin |
-| POST | `/api/claims` | logged in |
-| GET | `/api/claims/mine` | logged in |
-| GET | `/api/claims/received` | logged in — every claim on your listings, one query |
-| GET | `/api/claims/item/:itemId` | item owner or admin |
-| PATCH | `/api/claims/:id` | item owner or admin — approve or reject |
-| POST | `/api/claims/:id/handover` | item owner or admin — confirm the item changed hands |
-| GET | `/api/dashboard/me` | logged in |
-| GET | `/api/admin/stats` | admin |
-| GET | `/api/admin/items` | admin |
-| GET | `/api/admin/claims` | admin |
-| GET | `/api/admin/users` | admin |
-| GET | `/api/admin/reports` | admin — moderation queue (`?status=open|resolved|dismissed|all`) |
-| PATCH | `/api/admin/reports/:id` | admin — resolve or dismiss a report |
-| PATCH | `/api/admin/users/:id/suspend` | admin — suspend (optionally for N days) or reinstate |
-| PATCH | `/api/admin/users/:id/approve` | admin — approve or reject a pending faculty account |
-| GET | `/api/admin/audit` | admin — the last 50 administrative actions |
-| PATCH | `/api/admin/items/:id/status` | admin |
-| DELETE | `/api/admin/items/:id` | admin |
-| PATCH | `/api/admin/users/:id/role` | superadmin only — appoint moderators and administrators |
-| GET | `/api/leaderboard` | public |
-| GET | `/api/notifications` | logged in — your newest notifications + unread count |
-| PATCH | `/api/notifications/:id/read` | logged in — mark one as read |
-| PATCH | `/api/notifications/read-all` | logged in — mark all as read |
+### Auth — `/api/auth`
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/config` | accepted domains, whether email is configured |
+| POST | `/register` | creates a student, or a pending faculty application |
+| GET | `/verify?token=` | verifies from a link |
+| POST | `/verify-email` | same, with the token in the body |
+| POST | `/resend-verification` | new link; non-enumerating |
+| POST | `/login` | returns a token |
+| POST | `/forgot-password` | always answers the same way |
+| POST | `/reset-password` | retires all existing sessions |
+| PATCH | `/preferences` | leaderboard opt-out (students only) |
+| POST | `/logout` | acknowledgement; tokens are stateless |
+| GET | `/me` | the signed-in user |
 
-### Preferences and the leaderboard
+### Items — `/api/items`
+`GET /` (filters: `type category location status subcategory q from to sort page limit`),
+`GET /stats`, `GET /meta`, `GET /:id`, `GET /:id/similar`, `POST /`,
+`PUT /:id`, `DELETE /:id`, `PATCH /:id/status`.
 
-```
-PATCH /api/auth/preferences     Protected
-    body: { "leaderboardOptOut": true | false }
-    Sets whether the signed-in student's name appears on the public leaderboard.
-    Points, returns and role are deliberately not writable here — the endpoint
-    rejects nothing silently, it simply has no other fields, so it cannot be
-    used to inflate a score or escalate a role.
-```
+### Claims — `/api/claims`
+`POST /`, `GET /mine` (includes the handover code), `GET /received`,
+`PATCH /:id/review`, `POST /:id/complete`.
 
-`GET /api/leaderboard` is public and returns the top ten students by points.
-Students with `leaderboardOptOut: true` are left out entirely rather than shown
-anonymised, and the response never contains an email address.
+### Everything else
+`GET/PATCH /api/notifications` (`/read-all`, `/:id/read`), `GET /api/dashboard/me`,
+`GET /api/leaderboard?period=week|month|all`, `GET/POST /api/campus/locations`,
+`POST /api/reports`, and the admin surface under `/api/admin`: `GET /stats`,
+`/items`, `/claims`, `/reports`, `/audit`, `/users`; `PATCH /items/:id/verify`,
+`/items/:id/status`, `/users/:id/approve`, `/users/:id/suspend`,
+`/users/:id/role`, `/reports/:id`; `DELETE /items/:id`.
 
-### Password reset and account recovery
+---
 
-```
-POST /api/auth/forgot-password      Public, rate limited
-    body: { "email": "..." }
-    Always answers: "If that address has a Foundry account, a reset link is on
-    its way." It does not reveal whether the address is registered.
+## 11. Database
 
-POST /api/auth/reset-password       Public, rate limited
-    body: { "token": "...", "password": "...", "confirmPassword": "..." }
-    The token works once and expires after 15 minutes.
+Nine tables: `users`, `items`, `claims`, `point_events`, `notifications`,
+`reports`, `audit_logs`, `campus_locations`, `user_badges`.
+
+Design notes worth knowing for a viva:
+
+- **UUID primary keys**, and `CHECK` constraints carry the enums (`role`,
+  `status`, `type`, `category`, `location`, `reason`).
+- **`point_events` has a unique `(user_id, event_key)`.** That single index is
+  what makes crediting idempotent — it replaced an unbounded marker array on the
+  user document in the Mongo design.
+- **Claim approval and handover are real transactions.** `approve()` locks the
+  item row, refuses unless it is still `open`, marks the claim approved, rejects
+  every sibling with a note, and moves the item to `claimed` — all or nothing.
+  `complete()` marks the claim completed, the item returned, and credits both
+  parties exactly once.
+- **Full-text search** uses a GIN index over `to_tsvector('simple', …)`.
+- `db/schema.sql` is idempotent and CI applies it twice to prove that.
+
+---
+
+## 12. Testing
+
+```bash
+npm run test:auth-v2     # domain rule and templates — no database needed
+npm run test:pg          # the API against a real Postgres (TEST_DATABASE_URL)
+npm run test:boot-v2     # the server actually starts and serves
+npm run test:deploy      # runs `npm run start:pg`, the command the platform runs
+npm run test:browser     # Playwright against the real UI
 ```
 
-How it is stored and why:
+`TEST_DATABASE_URL` must point at a **disposable** database: the suites truncate
+their tables.
 
-- The token is 32 random bytes from `crypto.randomBytes`. Only its **SHA-256
-  hash** is stored (`User.resetTokenHash`), so a database leak cannot be turned
-  into a working reset link.
-- `resetTokenExpires` is 15 minutes from the request.
-- The whole reset is **one atomic update** on a single document
-  (`findOneAndUpdate`): it sets the new password hash, unsets the token fields and
-  increments `tokenVersion` in the same write. Two simultaneous reset requests
-  cannot both succeed — the second matches nothing — and there is no window where
-  the link is spent but the password is unchanged, or the password changes while
-  older sessions stay valid.
-- `User.tokenVersion` is incremented on reset. Every JWT carries the version it
-  was signed with, and `protect` refuses a token whose version no longer
-  matches — so a reset logs out every older session. Tokens issued before this
-  field existed carry no version and are treated as 0, which means the upgrade
-  itself logs nobody out.
-- The password is hashed explicitly with bcrypt (cost 10) before the update, so
-  the atomic write and the pre-save hook produce the same hash strength. The
-  user's role and other fields are untouched.
-- The token never appears in an API response and is never logged. If SMTP fails,
-  the endpoint still answers generically and the failure is logged by message
-  only.
+Two suites refuse to skip when `CI=true`. A skip in CI is a lie — the workflow is
+supposed to provide a database.
 
-**Account recovery without the mailbox:** there is deliberately no alternative
-path. If a student loses access to their university address they must contact
-the Foundry administrator or university IT and prove their identity through
-official channels. There are no security questions and no unauthenticated
-administrative password reset.
+---
 
-### Gamification rules
+## 13. Continuous integration
 
-Points are written only by `backend/src/utils/gamification.js`, never by a route
-handler and never from anything the client sends.
+One job, against a real `postgres:16` service:
 
-| Event | Points | When it is awarded |
-|---|---|---|
-| Completed return or handover | 10 | When the owner marks a listing returned, or when both sides confirm the handover |
-| Posting a found item | 2 | On creating a listing of type `found` |
+1. `npm ci`
+2. syntax-check every JavaScript file, including `server.v2.js`
+3. **fail if any file imports Mongoose**
+4. apply `db/schema.sql`, twice
+5. auth unit tests
+6. PostgreSQL integration tests
+7. boot the real server
+8. **run the deploy command exactly as the platform does**
+9. seed, install Chromium, run the browser tests
+10. `npm audit`
 
-**How an award is recorded.** Each `PointEvent` moves through
-`pending → claimed → completed`:
+Step 8 exists because CI once tested the code and never the deployment, and two
+outages reached production with a green pipeline.
 
-- `pending` — the row exists and nobody is working on it.
-- `claimed` — one request holds a 60-second lease and is applying the credit.
-- `completed` — the points are on the account.
+---
 
-Only the lease holder may credit, and the credit itself is a single atomic update
-guarded on the event id (`User.creditedEvents`). **The marker is permanent and is
-never removed.** That is the whole point: a worker can be paused for an unbounded
-time — it can hold a claim, lose the lease to another worker, and only resume
-after that worker has finished. Any worker that resumes is stopped by the marker,
-because the guard sits inside the same atomic update as the increment and is
-never re-read separately from it. On a replica set the whole thing runs inside a
-transaction instead. See "Repairing point totals" for the recovery paths.
+## 14. Deploying
 
-**Storage trade-off, stated plainly:** each award leaves one 24-character id on
-the user document for ever. That is roughly 24 bytes per award — a student with
-1,000 awards adds about 24 KB, well inside MongoDB's 16 MB document limit, but it
-does grow without bound. Pruning an id would be safe only if no worker could
-still be holding a claim on that event, and that cannot be proven while a paused
-process can resume at any time. If the collection ever approaches the limit, the
-honest options are archiving completed events into a separate collection and
-recomputing totals from it, not quietly dropping ids.
+Render, root directory = repository root.
 
-**Why points cannot be farmed.** Every award writes a row to the `PointEvent`
-collection with a stable key (`return:<itemId>:<userId>`, `found:<itemId>`), and
-`{ user, key }` is a **unique index**. A repeated request — including two
-concurrent ones — loses the insert and pays nothing. Because the return key is
-the same for both the "mark returned" route and the handover route, an item
-cannot pay out twice through two different code paths.
+| Setting | Value |
+| --- | --- |
+| Build Command | `cd backend && npm install` |
+| Start Command | `cd backend && npm run start:pg` |
+| Health check | `/api/health/ready` |
 
-Badges (`User.badges`, with the date each was earned):
+Set `DATABASE_URL` (pooler), `JWT_SECRET`, `APP_URL`, `BREVO_API_KEY`,
+`BREVO_SENDER`, `NODE_ENV=production`, `CLIENT_ORIGIN`.
 
-| Badge | Criteria |
-|---|---|
-| First Found Item | Posted your first found item |
-| Helpful Finder | Posted three found items |
-| Successful Return | Completed your first verified return |
-| Community Helper | Completed five verified returns |
-| Trusted Member | Completed ten verified returns |
+Apply the schema once against the production database:
 
-Badges are never revoked and never awarded twice; the evaluation skips any id
-the user already has.
-
-### Leaderboard
-
-```
-GET /api/leaderboard?period=week|month|all     Public
+```bash
+cd backend && DATABASE_URL="<pooler string>" npm run db:init
 ```
 
-- Students on equal points **share a rank** (1, 2, 2, 4), ordered by name so the
-  board is stable between requests.
-- `all` reads the running total on the user document.
-- `week` and `month` are date windows over `PointEvent`, so they describe points
-  actually earned in that period rather than a lifetime total.
-- Students with `leaderboardOptOut: true` are excluded from every period,
-  including the windowed boards, and the response never contains an email
-  address. The preference is enforced in the query, not in the browser.
+---
 
-### Repairing point totals
+## 15. Known limitations
 
-Two different repairs, because there are two different failures:
+Stated plainly, because they are real:
 
-```
-npm run recover:awards                          report only, all time
-npm run recover:awards -- --apply               create the missing awards
-npm run recover:awards -- --since-days 90 --apply    narrower window
-npm run recover:awards -- --batch-size 500 --apply   bigger pages (1-1000, default 200)
+- **Email deliverability.** Brevo flags a `gmail.com` sender as a freemail domain
+  that fails DMARC alignment, so Gmail and Yahoo may spam-filter or reject
+  verification mail. A domain with SPF, DKIM and DMARC fixes it. The resend link
+  and an administrator's ability to verify an account are the workarounds.
+- **No campus seeder.** `campus_locations` is created but never populated; the
+  Explorer page is empty until an administrator adds each location.
+- **No ledger reconciliation tool.** There is no script to compare
+  `users.points` against the sum of `point_events`.
+- **No reapplication after rejection.** A rejected faculty account keeps its row,
+  and the unique email index means re-registering returns 409.
+- **TLS is not exercised in CI.** The deploy check uses a local plain Postgres,
+  so the Supabase certificate path is verified only in production.
+- **The Render Start Command is not recorded in the repository.** If it is edited
+  in the dashboard, nothing in CI notices.
 
-npm run reconcile:points                        report only
-npm run reconcile:points -- --apply             fix under-credited accounts
-npm run reconcile:points -- --apply --allow-decrease
-                                                also overwrite historical balances
-npm run reconcile:points -- --apply --complete-pending
-                                                credit events left pending
-node scripts/reconcile-points.js --restore backups/points-backup-<stamp>.json
-```
+---
 
-**`recover:awards`** covers the case reconciliation cannot see: a business action
-that succeeded while its award failed *before* the ledger row was written. There
-is no row to reconcile, so this script rebuilds eligibility from the business
-records themselves — found listings (not hidden) and returned listings, plus the
-approved claimant of a returned item. Nothing else is eligible.
+## 16. Licence
 
-It looks at **all time by default**, walking the collection in pages ordered by
-`_id` with a cursor, so every eligible record is examined however large the
-collection is and however old the failure was. Each page is processed and then
-released, so memory is bounded by the batch size — nothing accumulates across
-pages, and the collection is never loaded wholesale. It never re-reads a page it
-has already seen. Pass `--since-days N` only when you deliberately want a
-narrower window, and `--batch-size N` to change the page size. The page size must
-be a whole number from 1 to **1000** (default 200); anything else — zero, a
-negative, a decimal, `NaN`, `Infinity` or an over-large value — is rejected with
-an error rather than quietly corrected, because a silently coerced page size is
-how an accidental full-collection read happens. The same limit is enforced inside
-`recoverMissingAwards()`, not only in the CLI.
-
-The report gives exact counters — records scanned, batches, eligible awards,
-already recorded, missing, created and failed — and keeps only a small sample of
-missing and failed keys (10 by default) for diagnosis. Every award goes through
-the same idempotent path the application uses, so running it twice, concurrently,
-or on a live site cannot double-pay.
-
-**`reconcile:points`** compares totals with the ledger. The ledger only starts when it was introduced, so an account can legitimately
-hold points no event records. The script therefore classifies every account:
-
-| State | Meaning | Default action |
-|---|---|---|
-| `in-sync` | the ledger explains the whole balance | none |
-| `historical-balance` | the account holds more than the ledger records | **left alone** |
-| `under-credited` | the ledger records more than the account holds | topped up (only ever adds) |
-
-Reducing a balance can destroy genuine history, so it needs `--allow-decrease`
-on top of `--apply`. Every `--apply` run writes `backend/backups/points-backup-<timestamp>.json`
-before touching anything and prints the `--restore` command that undoes it. The
-script never deletes a user, an event or a listing.
-
-## 12. Moderation
-
-Students can flag a listing from the item dialog: spam, inappropriate,
-suspicious, incorrect or other, with an optional note. One report per student
-per listing — a second attempt returns `409`, and the unique index on
-`{ item, reportedBy }` enforces that in the database too. You cannot report your
-own listing.
-
-Administrators get a **Reported listings** queue on the admin page, with Resolve
-and Dismiss. Resolving a report is a judgement recorded against it; removing the
-listing is a separate action (`DELETE /api/admin/items/:id`), so a moderator
-cannot accidentally delete evidence while triaging.
-
-**Suspending an account** blocks login and every protected route with a clear
-message. A suspension can be temporary (`durationDays`: 3, 7, 15, 30 or any
-value up to 365) or permanent; a temporary one lifts itself when it expires, and
-an administrator can reinstate at any time. A reason is required and is kept in
-the audit log.
-
-**Faculty registration** creates a `faculty` account in a pending state. A
-pending account **cannot sign in**: both the login route and the `protect`
-middleware refuse it with 403, so no token is ever issued and no protected route
-is reachable. An administrator approves it via
-`PATCH /api/admin/users/:id/approve`, after which it signs in normally. A
-rejection must include a reason, which is stored and which blocks the account. Two guard rails: an administrator cannot suspend themselves, and cannot
-suspend another administrator — otherwise one compromised admin could lock out
-the rest. Suspended students are marked in the accounts table and can be
-reinstated at any time.
-
-**Every administrative action is recorded** in an audit log shown at the bottom
-of the admin page: listing deleted, listing status changed, role changed, user
-suspended or reinstated, report resolved or dismissed. The actor's email is
-stored with each entry so the log still reads correctly if an account is later
-removed.
-
-## 13. Email verification (implemented, off by default)
-
-The full flow exists: a random 32-byte token is created on registration, only
-its SHA-256 hash is stored, it expires in 24 hours, it is consumed once, and
-`POST /api/auth/resend-verification` issues a fresh one under a 5-per-10-minute
-rate limit. `POST /api/auth/verify-email` consumes it. When verification is on,
-creating a listing or a claim requires a verified address.
-
-It is **disabled by default** because sending email needs an SMTP account,
-which this project does not have. Nothing pretends otherwise:
-
-- With `EMAIL_VERIFICATION=disabled` (the default), accounts are created
-  verified and behaviour is exactly as before.
-- With `EMAIL_VERIFICATION=enabled`, the server **refuses to start** unless
-  `SMTP_HOST` is set, so a verification email can never be silently skipped.
-
-To turn it on, set these in `backend/.env` (and on Render):
-
-```
-EMAIL_VERIFICATION=enabled
-APP_URL=https://foundry-lost-and-found.onrender.com
-SMTP_HOST=smtp.yourprovider.com
-SMTP_PORT=587
-SMTP_USER=your-smtp-username
-SMTP_PASSWORD=your-smtp-password
-SMTP_FROM=Foundry <no-reply@saiuniversity.edu.in>
-```
-
-Any standard SMTP account works; a Gmail account with an app password is
-enough for a demo. No paid service is required or recommended.
-
-## 14. Security
-
-- Passwords are hashed with bcrypt and never returned by any endpoint.
-- Authorisation is enforced on the server in each route, never in the UI. A
-  student cannot edit, delete or change the status of someone else's listing, and
-  cannot read claims on it.
-- Every error, including a 404 and an uncaught exception, returns JSON.
-- **The Content-Security-Policy is `script-src 'self'`, so no page may use an
-  inline `<script>`.** All page logic lives in `frontend/assets/js/`. A test
-  fails the build if an inline script reappears — that mistake once stopped the
-  dashboard and admin pages from running any of their code in the browser.
-- Everything that reaches the DOM is escaped through the shared `ui.esc()` helper,
-  so a listing title cannot inject script.
-- Photos are shrunk in the browser and validated on the server: only PNG, JPEG or
-  WebP data URLs under 400 KB, or an https link, are accepted.
-- A listing in a terminal state (`returned`, `closed`) can only be reopened by an
-  administrator, and a status change to the current status is refused.
-- Notifications are written server-side only; the client can read them and mark
-  them read, and can never create one.
-- helmet sets security headers, CORS is restricted to configured origins, and
-  login/registration are rate limited.
-- `.env` is git-ignored; `.env.example` contains placeholders only.
-
-## 15. When the database is unavailable
-
-Two public listing routes check the connection before querying and answer
-immediately:
-
-| Route | Database down |
-|---|---|
-| `GET /api/items` | **503** straight away, JSON body |
-| `GET /api/items/stats` | **503** straight away, JSON body |
-
-```json
-{ "message": "The service is temporarily unavailable. Please try again shortly." }
-```
-
-**This is deliberately partial.** Every other database-backed route — claims,
-dashboard, leaderboard, notifications, the admin surface, item detail, and the
-authenticated mutations — has **no such guard yet**. When MongoDB is unreachable
-they still let Mongoose buffer for its default 10 seconds and then return a
-**500** with a logged stack trace. A caller waits ten seconds and gets an
-unhelpful status.
-
-That behaviour is honest but not ideal, and it is documented here rather than
-hidden: do not assume the whole API answers 503 when the database is down. Only
-the two routes above do.
-
-The health endpoints are unaffected and are the right thing to probe:
-`GET /api/health` always answers 200 and reports the database state, while
-`GET /api/health/ready` answers 200 only when the database is connected.
-
-Extending the guard to the remaining routes is a small, mechanical change — the
-same `mongoose.connection.readyState !== 1` check placed before the first query
-— but it changes production status codes, so it is a decision rather than a
-silent edit.
-
-## 16. Deploying to Render
-
-- Root Directory: `backend`
-- Build Command: `npm install`
-- Start Command: `node server.js`
-- Environment variables: `MONGO_URI`, `JWT_SECRET`, `NODE_ENV=production`
-  (do **not** set `PORT` — Render assigns one)
-
-After the first deploy, create the admin account by running `npm run create-admin`
-locally against the same `MONGO_URI`.
-
-The free tier sleeps when idle, so the first request after a pause can take
-30–50 seconds. That is the host, not the application.
-
-## 17. Known limitations
-
-Stated plainly so nobody assumes more than the code does.
-
-- **Automatic expiry** of stale listings is not implemented, deliberately. The
-  database records when a listing was created but nothing records whether the
-  owner still wants it open, and an item that is still lost does not become
-  less lost because a timer expired. A safe policy needs a decision from the
-  university (for example "close after 90 days with no claim, after emailing
-  the owner"), so it is documented here rather than guessed at in code.
-- **Weekly and monthly leaderboards count only events recorded after the ledger
-  was introduced.** An account's all-time total can therefore be larger than the
-  sum of its weekly and monthly scores. This is a property of introducing a
-  ledger late, not a bug, and the reconciliation script prints each account's
-  pre-ledger balance so the difference is visible.
-- **Exactly-once is guaranteed only on a replica set** (which Atlas is), where
-  the ledger row and the credit commit together. On a standalone MongoDB the
-  design is "at most once, with a recoverable window": a crash between the
-  credit and the `completed` write leaves a claimed event whose points are
-  already on the account. The idempotent guard means reclaiming it cannot pay
-  twice, and `npm run reconcile:points` reports such rows. No claim of exactly-once
-  is made for that configuration.
-- **The repair scripts are manual.** Nothing schedules `recover:awards` or
-  `reconcile:points`; run them after an incident, or add them to a cron if you
-  want them automatic. `recover:awards` is the one to run after a crash that
-  interrupted a write.
-- **Email verification and SMTP** remain off by default (see section 12).
-  Password reset does need SMTP: without it the endpoint still answers
-  generically, but no mail is delivered and the Render log records the failure.
-- **Images** are stored as base64 data URLs capped at 400 KB; there is no
-  external object storage.
-- **Moderation is deliberately manual.** Reports are queued for an
-  administrator; nothing is auto-removed or auto-suspended by a threshold.
-- **There is no in-app chat** between a finder and an owner. Coordination happens
-  through the claim message and the dashboard.
-- No email notifications; coordination happens inside the site through in-app
-  notifications and the dashboard.
-- **Email verification is implemented but switched off** until you configure
-  SMTP (see section 10). Until then every account is treated as verified.
-- **Moderation is deliberately manual.** Reports are queued for an
-  administrator; nothing is auto-removed or auto-suspended by a threshold.
-- **Not built yet**, and deliberately not faked: in-app messaging between
-  users, QR codes per listing, saved listings and saved searches,
-  multiple images per listing (one photo each),
-  listing expiry and archival, multi-image galleries (listings carry one
-  photo), configurable academic structures (school/department/programme),
-  scheduled database backups, maintenance mode, and email notifications. Each
-  needs its own model, migration and tests; they are the next milestones, not
-  half-finished stubs.
-- **No notifications to administrators** when a report arrives — the open-report
-  count on the admin dashboard is the signal.
-- **No QR codes, listing expiry or account deletion.** All three were
-  considered and left out: QR needs an extra dependency, and expiry and account
-  deletion need a data-retention policy this project does not have.
-- **Campus locations are a fixed list** in `backend/src/models/Item.js`
-  (Library, Main Block, Canteen, Hostel A/B, Sports Complex, Auditorium,
-  Parking) plus "Other" with a free-text field. Changing the list would
-  invalidate existing listings, so it is left as it is.
-- **No WhatsApp integration.** The site says so plainly on the homepage; wiring
-  it up would need the WhatsApp Business API and approval.
-- **No independent ownership verification.** A claim is checked by whoever
-  posted the listing, not by university staff. The UI does not pretend otherwise.
-- **Images are stored inline** in the item document rather than in object
-  storage. Fine at this scale; documented under image storage above.
-- An administrator can change a role but cannot delete a user account, on
-  purpose: account deletion needs a policy this project does not have.
-- There is no listing expiry or archival; old listings stay until someone
-  changes their status or deletes them.
+Academic project, Sai University.
