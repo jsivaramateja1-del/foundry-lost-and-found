@@ -1,0 +1,12 @@
+name: MCP capability probe
+
+# Temporary file written by the Sarvam GitHub MCP connector to prove it holds
+# the Workflows permission. This branch is deleted after the check.
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "mcp write probe"
