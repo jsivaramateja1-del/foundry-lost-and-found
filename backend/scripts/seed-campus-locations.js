@@ -19,7 +19,11 @@ const CAMPUS = {
   description: 'One Hub Road, Old Mahabalipuram Road, Paiyanur, Chennai 603104. 103-acre campus.',
   lat: 12.65416,
   lng: 80.15771,
-  source: 'University contact page (saiuniversity.edu.in) and Wikipedia coordinates 12°39′15″N 80°09′28″E'
+  source: 'University contact page (saiuniversity.edu.in) and Wikipedia coordinates 12°39′15″N 80°09′28″E',
+  // The published contact page this address and coordinate come from. The API
+  // derives `verified` from this field, so leaving it out would publish the one
+  // location we can actually vouch for as "Unverified".
+  sourceUrl: 'https://www.saiuniversity.edu.in/sai-university-contact'
 };
 
 (async () => {

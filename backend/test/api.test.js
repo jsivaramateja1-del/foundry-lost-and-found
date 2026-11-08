@@ -1597,6 +1597,39 @@ const check = (name, condition, detail = '') => {
     check('FACULTY-LIFECYCLE: the test accounts were removed',
       removed.deletedCount === 3, `deleted ${removed.deletedCount}`);
 
+    // ---------- 25. Campus location provenance is returned as verified ----------
+    const CampusLocation = require('../src/models/CampusLocation');
+    const verifiedLoc = await CampusLocation.create({
+      name: 'Verified Test Location', kind: 'building',
+      lat: 12.65416, lng: 80.15771,
+      source: 'test fixture',
+      sourceUrl: 'https://www.saiuniversity.edu.in/sai-university-contact'
+    });
+    const unverifiedLoc = await CampusLocation.create({
+      name: 'Unverified Test Location', kind: 'building',
+      lat: 12.654, lng: 80.157, source: 'no link recorded'
+    });
+
+    const campusList = await request(app).get('/api/campus/locations');
+    check('CAMPUS: the locations endpoint answers (200)', campusList.status === 200,
+      `got ${campusList.status}`);
+
+    const foundVerified = (campusList.body.locations || []).find((l) => l.name === 'Verified Test Location');
+    check('CAMPUS: a location with a source link is returned as verified',
+      Boolean(foundVerified) && foundVerified.verified === true,
+      JSON.stringify(foundVerified));
+    check('CAMPUS: its sourceUrl is returned unchanged',
+      Boolean(foundVerified)
+      && foundVerified.sourceUrl === 'https://www.saiuniversity.edu.in/sai-university-contact',
+      String(foundVerified && foundVerified.sourceUrl));
+
+    const foundUnverified = (campusList.body.locations || []).find((l) => l.name === 'Unverified Test Location');
+    check('CAMPUS: a location without a source link is returned as unverified',
+      Boolean(foundUnverified) && foundUnverified.verified === false,
+      JSON.stringify(foundUnverified));
+
+    await CampusLocation.deleteMany({ name: { $in: ['Verified Test Location', 'Unverified Test Location'] } });
+
   } catch (err) {
     failed++;
     results.push(`  FAIL  unexpected error: ${err.message}`);

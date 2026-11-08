@@ -429,6 +429,39 @@ const check = (name, cond, detail = '') => {
       JSON.stringify(config.body.facultyDomains));
   }
 
+  // ---- The campus seed publishes a real source link ----
+  {
+    const seed = fs.readFileSync(
+      path.join(__dirname, '..', 'scripts', 'seed-campus-locations.js'), 'utf8');
+
+    const urlMatch = /sourceUrl:\s*'([^']+)'/.exec(seed);
+    check('the seeded campus record carries a sourceUrl',
+      Boolean(urlMatch), 'no sourceUrl in the CAMPUS record');
+
+    if (urlMatch) {
+      const url = urlMatch[1];
+      check('the seeded sourceUrl is https',
+        /^https:\/\/[^\s]+$/.test(url), url);
+      check('the seeded sourceUrl is the university domain',
+        /^https:\/\/(www\.)?saiuniversity\.edu\.in\//.test(url), url);
+    }
+
+    // The coordinates must not drift while the source is edited.
+    check('the seeded latitude is unchanged', /lat:\s*12\.65416/.test(seed));
+    check('the seeded longitude is unchanged', /lng:\s*80\.15771/.test(seed));
+    check('the seeded name is unchanged',
+      /name:\s*'Sai University Main Campus'/.test(seed));
+
+    // Idempotency: it looks the record up and inserts only when absent. Any of
+    // these calls would mean it could overwrite an existing record.
+    check('the seed looks for an existing record first',
+      /findOne\(\{\s*name:\s*CAMPUS\.name\s*\}\)/.test(seed),
+      'no findOne guard');
+    check('the seed cannot update or overwrite an existing record',
+      !/updateOne|updateMany|findOneAndUpdate|replaceOne|bulkWrite/.test(seed),
+      'an update call is present');
+  }
+
   console.log('\n' + results.join('\n'));
   // Close the handle so the process exits without waiting on Mongoose
   try { await require('mongoose').connection.close(); } catch { /* never connected */ }
