@@ -5,9 +5,22 @@
  * handover and points-ledger paths need real transactions with row locks, and
  * PostgREST cannot express a multi-statement transaction.
  *
- * DATABASE_URL should be the Supabase "Connection pooling" string (port 6543,
- * pgbouncer) for the app, and the direct string (port 5432) for migrations.
- * Never commit either.
+ * DATABASE_URL MUST be Supabase's shared pooler string for anything running on
+ * Render:
+ *
+ *   postgresql://postgres.<PROJECT_REF>:<PASSWORD>@aws-<N>-<REGION>.pooler.supabase.com:6543/postgres
+ *
+ * Why this matters: Supabase's direct connection (db.<ref>.supabase.co, port
+ * 5432) resolves to an IPv6 address on the free plan, and Render does not
+ * support outbound IPv6. Using the direct string from Render fails with
+ * ENETUNREACH — which looks like bad credentials but is a routing problem.
+ * The shared pooler is IPv4-only on every plan, so it works.
+ *
+ *   Web service / cron  -> pooler, transaction mode, port 6543
+ *   Long-lived worker   -> pooler, session mode, port 5432
+ *   Migrations / pg_dump -> direct connection, from a machine with IPv6
+ *
+ * Never commit any of these strings.
  */
 const { Pool } = require('pg');
 
@@ -37,6 +50,19 @@ const connectDB = async (connectionString = process.env.DATABASE_URL) => {
   pool.on('error', (err) => {
     console.error('Unexpected PostgreSQL pool error:', err.message);
   });
+
+  // Catch the IPv6 trap before it produces an unexplained failure.
+  try {
+    const parsed = new URL(connectionString);
+    if (/\.supabase\.co$/i.test(parsed.hostname) && parsed.port === '5432') {
+      console.warn(
+        'WARNING: DATABASE_URL points at the Supabase DIRECT host on port 5432. ' +
+        'That endpoint is IPv6-only on the free plan and Render has no outbound IPv6, ' +
+        'so connections will fail with ENETUNREACH. Use the shared pooler string ' +
+        '(aws-<n>-<region>.pooler.supabase.com:6543) instead.'
+      );
+    }
+  } catch { /* an unparseable URL will fail at connect anyway */ }
 
   const { rows } = await pool.query('select current_database() as db, inet_server_addr() as host');
   console.log(`PostgreSQL Connected: host=${rows[0].host || 'pooler'} database=${rows[0].db}`);
