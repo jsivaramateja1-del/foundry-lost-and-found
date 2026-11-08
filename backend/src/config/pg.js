@@ -79,19 +79,6 @@ const connectDB = async (connectionString = process.env.DATABASE_URL) => {
   }
   if (pool) return pool;
 
-  pool = new Pool({
-    connectionString: connectTarget,
-    max: Number(process.env.PG_POOL_MAX || 10),
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
-    ssl: sslConfig()
-  });
-
-  // A pool error must never crash the process silently.
-  pool.on('error', (err) => {
-    console.error('Unexpected PostgreSQL pool error:', err.message);
-  });
-
   // pg-connection-string lets an `sslmode` parameter in the URL override the
   // explicit `ssl` option we pass to the Pool. That silently defeats the TLS
   // settings above: ?sslmode=disable gives plaintext, ?sslmode=no-verify drops
@@ -109,6 +96,20 @@ const connectDB = async (connectionString = process.env.DATABASE_URL) => {
       connectTarget = parsed.toString();
     }
   } catch { /* an unparseable URL will fail at connect anyway */ }
+
+  pool = new Pool({
+    connectionString: connectTarget,
+    max: Number(process.env.PG_POOL_MAX || 10),
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+    ssl: sslConfig()
+  });
+
+  // A pool error must never crash the process silently.
+  pool.on('error', (err) => {
+    console.error('Unexpected PostgreSQL pool error:', err.message);
+  });
+
 
   // Catch the IPv6 trap before it produces an unexplained failure.
   try {
