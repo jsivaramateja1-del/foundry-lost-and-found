@@ -1,6 +1,10 @@
 name: CI
 
 # Runs on every push and pull request. A failing check blocks the merge.
+#
+# The project runs on PostgreSQL only. The MongoDB job and suites were removed
+# with the Mongoose code: they tested a backend that is no longer deployed, and
+# a green result from them meant nothing.
 on:
   push:
     branches: ['**']
@@ -8,96 +12,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
-
-      - name: Install dependencies (reproducible)
-        working-directory: backend
-        run: npm ci
-
-      - name: Syntax check every JavaScript file
-        working-directory: backend
-        run: |
-          find src scripts test -name '*.js' -print0 | xargs -0 -n1 node --check
-          find ../frontend -name '*.js' -print0 | xargs -0 -n1 node --check
-
-      - name: Offline tests (no database)
-        working-directory: backend
-        run: npm run test:offline
-
-      - name: Route tests (no database)
-        working-directory: backend
-        run: npm run test:routes
-
-      - name: Rate-limit tests (no database)
-        working-directory: backend
-        run: npm run test:ratelimit
-
-      - name: Frontend registration regression tests
-        working-directory: backend
-        run: npm run test:frontend
-
-      # These three start mongodb-memory-server, which downloads a Linux mongod.
-      - name: API tests
-        working-directory: backend
-        run: npm test
-
-      - name: Transaction tests (replica set)
-        working-directory: backend
-        run: npm run test:transactions
-
-      - name: Coverage tests
-        working-directory: backend
-        run: npm run test:coverage
-
-      - name: Boot test (real server, isolated in-memory database)
-        working-directory: backend
-        run: npm run test:boot
-
-      - name: Ledger consistency audit (read-only, isolated database)
-        working-directory: backend
-        run: npm run test:ledger
-
-      - name: Install the browser used by the browser tests
-        working-directory: backend
-        run: npx playwright install --with-deps chromium
-
-      - name: Browser tests (real Chromium against the real server)
-        working-directory: backend
-        run: npm run test:browser
-
-      - name: Keep browser artefacts when something fails
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: backend/test-results
-          if-no-files-found: ignore
-
-      - name: Dependency vulnerability audit
-        working-directory: backend
-        run: npm audit --audit-level=high
-
-      - name: Keep the test output when something fails
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-output
-          path: backend/*.log
-          if-no-files-found: ignore
-
-  # The PostgreSQL backend is what production actually runs, so it gets its own
-  # job against a real database. Before this existed, every other step tested
-  # the retired MongoDB code and a broken Postgres build passed CI.
   postgres:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -133,6 +47,21 @@ jobs:
         working-directory: backend
         run: npm ci
 
+      - name: Syntax check every JavaScript file
+        working-directory: backend
+        run: |
+          find src scripts test -name '*.js' -print0 | xargs -0 -n1 node --check
+          find ../frontend -name '*.js' -print0 | xargs -0 -n1 node --check
+
+      - name: No file may still import Mongoose
+        working-directory: backend
+        run: |
+          if grep -rn "require('mongoose')\|require(\"mongoose\")" src scripts test; then
+            echo "::error::Mongoose is still imported somewhere; the migration is incomplete."
+            exit 1
+          fi
+          echo "No Mongoose imports remain."
+
       - name: Apply the schema
         working-directory: backend
         run: psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f db/schema.sql
@@ -153,10 +82,14 @@ jobs:
         working-directory: backend
         run: npm run test:boot-v2
 
+      - name: Dependency vulnerability audit
+        working-directory: backend
+        run: npm audit --audit-level=high
+
       - name: Keep the output when something fails
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: postgres-job-output
+          name: ci-output
           path: backend/*.log
           if-no-files-found: ignore
