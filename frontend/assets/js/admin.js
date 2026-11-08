@@ -159,7 +159,10 @@
                   : '',
                 u.pendingApproval ? '' : u.role === 'admin'
                   ? `<button class="btn btn--ghost" data-user="${u.id}" data-role="student">Make student</button>`
-                  : `<button class="btn btn--ghost" data-user="${u.id}" data-role="admin">Make admin</button>`,
+                  : `<button class="btn btn--ghost" data-user="${u.id}" data-role="admin">Make admin</button>
+                     ${u.role === 'faculty'
+                        ? `<button class="btn btn--ghost" data-user="${u.id}" data-role="student">Make student</button>`
+                        : `<button class="btn btn--ghost" data-user="${u.id}" data-role="faculty">Make faculty</button>`}`,
                 u.role === 'admin'
                   ? ''
                   : u.suspended

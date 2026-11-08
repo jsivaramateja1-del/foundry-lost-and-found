@@ -1,9 +1,11 @@
 /**
  * Authentication on PostgreSQL.
  *
- * Domain rule: any address on a subdomain of saiuniversity.edu.in registers as
- * a student. Faculty accounts are created or promoted by an administrator, so
- * there is no self-service path to a privileged role.
+ * Domain rule: an address on the parent domain itself (saiuniversity.edu.in,
+ * no subdomain) registers as a PENDING FACULTY APPLICATION; any school
+ * subdomain registers as a student. A pending account cannot sign in until an
+ * administrator approves it, and an approved faculty account gains no staff
+ * powers — it can do exactly what a student can.
  */
 const express = require('express');
 const crypto = require('crypto');
@@ -114,10 +116,19 @@ router.post('/register', authLimiter, async (req, res, next) => {
         'The account exists but cannot be verified until mail works.'
       );
     }
+    // A faculty applicant is not simply verifying an address: they are waiting
+    // on an administrator. Saying only 'check your email' leaves them unable to
+    // understand why signing in still fails afterwards.
+    const message = faculty
+      ? (sent.ok
+          ? 'Your faculty application has been received. Verify your email, then wait for an administrator to approve your account.'
+          : 'Your application was recorded, but we could not send the verification email. Please contact an administrator.')
+      : (sent.ok
+          ? 'Check your email to verify your account.'
+          : 'Your account was created, but we could not send the verification email. Please contact an administrator.');
+
     res.status(201).json({
-      message: sent.ok
-        ? 'Check your email to verify your account.'
-        : 'Your account was created, but we could not send the verification email. Please contact an administrator.',
+      message,
       pendingVerification: true,
       verificationRequired: true,
       // The sign-in page branches on this to explain the application state
@@ -171,6 +182,33 @@ router.post('/verify-email', authLimiter, async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+/**
+ * POST /api/auth/resend-verification — issues a fresh verification link.
+ *
+ * Without this an applicant whose verification email never arrived is stuck:
+ * they cannot sign in, cannot re-register (the email is taken), and the token
+ * expires after 24 hours. Answers identically whether or not the account
+ * exists, so it cannot be used to enumerate addresses.
+ */
+router.post('/resend-verification', authLimiter, async (req, res, next) => {
+  try {
+    const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const user = await users.findByEmail(email);
+
+    if (user && !user.emailVerified) {
+      const token = newToken();
+      await users.setVerificationToken(
+        user.id, sha256(token), new Date(Date.now() + 24 * 60 * 60 * 1000));
+      await mailer.send('verification', user.email, {
+        name: user.name, link: `${appUrl()}/auth.html?verify=${token}`
+      });
+    }
+    res.status(200).json({
+      message: 'If that address needs verifying, a new link is on its way.'
+    });
+  } catch (err) { next(err); }
 });
 
 /** POST /api/auth/login */

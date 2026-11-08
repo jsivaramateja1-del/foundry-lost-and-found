@@ -536,6 +536,11 @@ admin.patch('/users/:id/approve', protect, requireRole('admin', 'superadmin'), a
         return res.status(400).json({ message: 'A reason is required to reject an application' });
       }
       const rejected = await users.reject(target.id, note);
+      notify.create(null, {
+        userId: target.id, type: 'account_rejected',
+        message: `Your account application was not approved. ${note}`,
+        link: 'auth.html', relatedType: 'user', relatedId: target.id
+      }).catch(() => {});
       await notify.audit({
         actor: req.user.id, actorEmail: req.user.email,
         action: 'user.rejected', targetType: 'user', targetId: target.id, note
@@ -546,6 +551,11 @@ admin.patch('/users/:id/approve', protect, requireRole('admin', 'superadmin'), a
     }
 
     const approved = await users.approve(target.id);
+    notify.create(null, {
+      userId: target.id, type: 'account_approved',
+      message: 'Your account has been approved. You can sign in now.',
+      link: 'auth.html', relatedType: 'user', relatedId: target.id
+    }).catch(() => {});
     await notify.audit({
       actor: req.user.id, actorEmail: req.user.email,
       action: 'user.approved', targetType: 'user', targetId: target.id
