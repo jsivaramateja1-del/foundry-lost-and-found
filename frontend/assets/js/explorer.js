@@ -34,6 +34,22 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  /**
+   * A location is only as trustworthy as its evidence. One that links to a page
+   * the reader can open is marked verified; one that only carries a description
+   * is marked unverified, so nobody mistakes a claim for a check.
+   */
+  function provenance(loc) {
+    if (loc.sourceUrl) {
+      return '<span style="color:var(--accent,#4ade80);font-weight:600;">Verified</span> · '
+        + '<a href="' + escapeHtml(loc.sourceUrl) + '" target="_blank" rel="noopener noreferrer">'
+        + 'view source</a>'
+        + (loc.source ? ' <span style="opacity:.7;">(' + escapeHtml(loc.source) + ')</span>' : '');
+    }
+    return '<span style="color:#f59e0b;font-weight:600;">Unverified</span>'
+      + (loc.source ? ' · ' + escapeHtml(loc.source) : ' · no source recorded');
+  }
+
   function initMap() {
     if (typeof L === 'undefined') {
       // The CDN did not load. Say so plainly rather than showing an empty box.
@@ -85,7 +101,7 @@
       card.innerHTML =
         '<h3>' + escapeHtml(loc.name) + '</h3>' +
         '<p>' + escapeHtml(loc.description || loc.kind) + '</p>' +
-        (loc.source ? '<div class="loc-source">Source: ' + escapeHtml(loc.source) + '</div>' : '');
+        provenance(loc);
       function focus() { selectLocation(loc); }
       card.addEventListener('click', focus);
       card.addEventListener('keydown', function (e) {
@@ -109,7 +125,7 @@
       '<h2 style="margin:0 0 6px;font-size:18px;">' + escapeHtml(loc.name) + '</h2>' +
       '<p style="margin:0 0 10px;opacity:.8;">' + escapeHtml(loc.description || '') + '</p>' +
       '<p style="margin:0 0 6px;font-size:13px;"><strong>Coordinates:</strong> ' + loc.lat + ', ' + loc.lng + '</p>' +
-      (loc.source ? '<p style="margin:0 0 10px;font-size:12px;opacity:.6;">Source: ' + escapeHtml(loc.source) + '</p>' : '') +
+      '<p style="margin:0 0 10px;font-size:12px;opacity:.6;">' + provenance(loc) + '</p>' +
       '<p style="margin:0 0 10px;">' +
       '<a href="' + walk + '" target="_blank" rel="noopener">Walking directions</a> · ' +
       '<a href="' + streetView + '" target="_blank" rel="noopener">Open in Street View</a>' +

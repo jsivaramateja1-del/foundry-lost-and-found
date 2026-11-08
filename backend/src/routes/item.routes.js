@@ -315,6 +315,10 @@ router.get('/:id', identifyUser, async (req, res, next) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ message: 'Invalid item id' });
     }
+
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ message: 'The service is temporarily unavailable. Please try again shortly.' });
+    }
     const item = await Item.findById(req.params.id).populate('reportedBy', 'name');
     if (!item) return res.status(404).json({ message: 'Item not found' });
     if (item.status === 'hidden' && !canSeeHidden(item, req.user)) {

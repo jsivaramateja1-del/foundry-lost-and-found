@@ -23,7 +23,10 @@ router.get('/locations', async (req, res, next) => {
       count: locations.length,
       locations: locations.map((l) => ({
         id: String(l._id), name: l.name, kind: l.kind, description: l.description,
-        lat: l.lat, lng: l.lng, source: l.source
+        lat: l.lat, lng: l.lng, source: l.source, sourceUrl: l.sourceUrl || '',
+        // Derived, never stored: a location is verified when it links to
+        // evidence a reader can open for themselves.
+        verified: Boolean(l.sourceUrl)
       }))
     });
   } catch (err) {
@@ -45,6 +48,7 @@ router.post('/locations', protect, requireRole('admin', 'superadmin'), async (re
     const kind = typeof req.body.kind === 'string' ? req.body.kind.trim() : 'building';
     const description = typeof req.body.description === 'string' ? req.body.description.trim() : '';
     const source = typeof req.body.source === 'string' ? req.body.source.trim() : '';
+    const sourceUrl = typeof req.body.sourceUrl === 'string' ? req.body.sourceUrl.trim() : '';
     const lat = Number(req.body.lat);
     const lng = Number(req.body.lng);
 
@@ -58,17 +62,21 @@ router.post('/locations', protect, requireRole('admin', 'superadmin'), async (re
     if (source.length < 3) {
       return res.status(400).json({ message: 'source is required: say where the coordinate came from' });
     }
+    if (sourceUrl && !/^https?:\/\/[^\s]+$/i.test(sourceUrl)) {
+      return res.status(400).json({ message: 'sourceUrl must be an http or https link' });
+    }
 
     const existing = await CampusLocation.findOne({ name });
     if (existing) return res.status(409).json({ message: 'A location with that name already exists' });
 
     const created = await CampusLocation.create({
-      name, kind, description, lat, lng, source, createdBy: req.user._id
+      name, kind, description, lat, lng, source, sourceUrl, createdBy: req.user._id
     });
     res.status(201).json({
       location: {
         id: String(created._id), name: created.name, kind: created.kind,
-        description: created.description, lat: created.lat, lng: created.lng, source: created.source
+        description: created.description, lat: created.lat, lng: created.lng,
+        source: created.source, sourceUrl: created.sourceUrl, verified: Boolean(created.sourceUrl)
       }
     });
   } catch (err) {

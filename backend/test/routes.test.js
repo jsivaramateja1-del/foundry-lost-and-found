@@ -366,6 +366,34 @@ const check = (name, cond, detail = '') => {
       studentPost.status === 401, `got ${studentPost.status}`);
   }
 
+  // ---- Wider database-outage coverage ----
+  {
+    const detail = await request(app).get('/api/items/64d2f1f1f1f1f1f1f1f1f1f1');
+    check('item detail answers 503 when the database is down',
+      detail.status === 503, `got ${detail.status}`);
+
+    const badId = await request(app).get('/api/items/not-an-id');
+    check('a malformed id is still a 400, not a 503',
+      badId.status === 400, `got ${badId.status}`);
+
+    const board = await request(app).get('/api/leaderboard');
+    check('the leaderboard answers 503 when the database is down',
+      board.status === 503, `got ${board.status}`);
+
+    const badPeriod = await request(app).get('/api/leaderboard?period=decade');
+    check('an invalid period is still a 400, not a 503',
+      badPeriod.status === 400, `got ${badPeriod.status}`);
+  }
+
+  // ---- Campus locations carry auditable provenance ----
+  {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'campus.routes.js'), 'utf8');
+    check('a location exposes whether its source can be opened',
+      /verified: Boolean\(l\.sourceUrl\)/.test(src), 'verified flag missing');
+    check('a source link must be an http(s) URL',
+      /\^https\?:/.test(src), 'sourceUrl validation missing');
+  }
+
   console.log('\n' + results.join('\n'));
   // Close the handle so the process exits without waiting on Mongoose
   try { await require('mongoose').connection.close(); } catch { /* never connected */ }
