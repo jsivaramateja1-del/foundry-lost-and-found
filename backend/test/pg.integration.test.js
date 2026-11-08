@@ -97,6 +97,35 @@ const { connectDB, closeDB, many, one, transaction } = require('../src/config/pg
       .send({ email: 'integration@scds.saiuniversity.edu.in', password: 'wrong' });
     check('a wrong password is refused (401)', wrongPw.status === 401, `got ${wrongPw.status}`);
 
+    // ---------- resend verification ----------
+    const unknownResend = await request(app).post('/api/auth/resend-verification')
+      .send({ email: 'nobody@scds.saiuniversity.edu.in' });
+    check('resend answers 200 for an unknown address', unknownResend.status === 200,
+      `got ${unknownResend.status}`);
+
+    const unverified = await users.create({
+      name: 'Resend Test', email: 'resend@scds.saiuniversity.edu.in',
+      password: await bcrypt.hash('secret123', 4)
+    });
+    const knownResend = await request(app).post('/api/auth/resend-verification')
+      .send({ email: 'resend@scds.saiuniversity.edu.in' });
+    check('resend answers 200 for a real address', knownResend.status === 200);
+    check('resend gives the same answer either way (no enumeration)',
+      unknownResend.body.message === knownResend.body.message,
+      `${unknownResend.body.message} vs ${knownResend.body.message}`);
+
+    const withToken = await users.findById(unverified.id);
+    check('resend stores a fresh verification token',
+      Boolean(withToken.verificationTokenHash) && Boolean(withToken.verificationTokenExpires));
+
+    // A verified account must not be re-tokened.
+    await users.markVerified(unverified.id);
+    await request(app).post('/api/auth/resend-verification')
+      .send({ email: 'resend@scds.saiuniversity.edu.in' });
+    const afterVerify = await users.findById(unverified.id);
+    check('resend does nothing for an already-verified account',
+      afterVerify.verificationTokenHash === null);
+
     // ---------- faculty applications ----------
     const facultyReg = await request(app).post('/api/auth/register')
       .send({ name: 'Prof Applicant', email: 'prof@saiuniversity.edu.in', password: 'secret123' });

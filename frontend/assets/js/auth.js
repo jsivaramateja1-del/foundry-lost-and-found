@@ -116,7 +116,7 @@ document.querySelectorAll('[data-toggle-password]').forEach((button) => {
  */
 function scorePassword(value) {
   if (!value) return { score: 0, label: 'Use at least 8 characters' };
-  if (value.length < 6) return { score: 0, label: 'Too short — at least 8 characters' };
+  if (value.length < 8) return { score: 0, label: 'Too short — at least 8 characters' };
 
   let score = 1;
   if (value.length >= 10) score += 1;
@@ -139,6 +139,34 @@ registerPassword.addEventListener('input', () => {
   strengthLabel.textContent = label;
 });
 
+/* ---------------- resend the verification email ---------------- */
+
+const resendBtn = document.getElementById('resend-verification');
+if (resendBtn) {
+  resendBtn.addEventListener('click', async () => {
+    // Whichever address the user has already typed, on either tab.
+    const email = (document.getElementById('register-email')?.value
+      || document.getElementById('login-email')?.value || '').trim();
+
+    if (!email) {
+      showError('register-error', 'Enter your university email address first.');
+      return;
+    }
+    resendBtn.disabled = true;
+    const original = resendBtn.textContent;
+    resendBtn.textContent = 'Sending…';
+    try {
+      const result = await api('/auth/resend-verification', { method: 'POST', body: { email } });
+      showNotice(result.message || 'If that address needs verifying, a new link is on its way.');
+    } catch (err) {
+      showError('register-error', err.message);
+    } finally {
+      resendBtn.disabled = false;
+      resendBtn.textContent = original;
+    }
+  });
+}
+
 /* ---------------- email verification link ---------------- */
 
 const verifyToken = params.get('verify');
@@ -155,6 +183,21 @@ if (verifyToken) {
       notice.dataset.show = 'true';
     }
   })();
+}
+
+/** A neutral, non-alarming message: the action succeeded. */
+function showNotice(text) {
+  const notice = document.getElementById('auth-notice');
+  if (!notice) return;
+  notice.className = 'form-success';
+  notice.textContent = text;
+  notice.dataset.show = 'true';
+}
+
+/** Reveal the resend link once a verification email has been asked for. */
+function showResend() {
+  const wrap = document.getElementById('resend-wrap');
+  if (wrap) wrap.hidden = false;
 }
 
 initTheme();
@@ -179,10 +222,10 @@ document.getElementById('form-login').addEventListener('submit', async (event) =
     // first. Guarding here means a missing token can never be written to
     // localStorage as the string "undefined".
     if (!data.token || !data.user) {
-      showError('register-error', data.message
-        || 'Account created. Check your university email for the verification link before signing in.');
+      showError('login-error', data.message
+        || 'Sign-in did not complete. Please try again.');
       btn.disabled = false;
-      btn.textContent = 'Create account';
+      btn.textContent = 'Log in';
       return;
     }
 
@@ -222,17 +265,21 @@ document.getElementById('form-register').addEventListener('submit', async (event
     const data = await api('/auth/register', { method: 'POST', body: { name, email, password } });
 
     // A faculty application is not a session: say so, leave the form usable.
+    // Written to the neutral notice, not the red error slot — the account was
+    // created successfully, and a red box at that moment reads as failure.
     if (data.pendingApproval) {
-      showError('register-error', data.message
+      showNotice(data.message
         || 'Your faculty application is waiting for administrator approval.');
+      showResend();
       btn.disabled = false;
       btn.textContent = 'Create account';
       return;
     }
 
     if (data.verificationRequired) {
-      showError('register-error',
-        'Account created. Check your university email for the verification link before signing in.');
+      showNotice(data.message
+        || 'Account created. Check your university email for the verification link before signing in.');
+      showResend();
       btn.disabled = false;
       btn.textContent = 'Create account';
       return;

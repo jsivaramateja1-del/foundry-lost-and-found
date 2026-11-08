@@ -157,7 +157,7 @@
                   ? `<button class="btn btn--ghost" data-approve-user="${u.id}">Approve</button>
                      <button class="btn btn--ghost" data-reject-user="${u.id}">Reject</button>`
                   : '',
-                u.pendingApproval ? '' : u.role === 'admin'
+                u.pendingApproval || !Auth.isSuperAdmin || u.role === 'superadmin' ? '' : u.role === 'admin'
                   ? `<button class="btn btn--ghost" data-user="${u.id}" data-role="student">Make student</button>`
                   : `<button class="btn btn--ghost" data-user="${u.id}" data-role="admin">Make admin</button>
                      ${u.role === 'faculty'
