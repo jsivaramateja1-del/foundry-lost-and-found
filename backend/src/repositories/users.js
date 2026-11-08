@@ -45,6 +45,9 @@ const toSafeObject = (user) => user && {
   leaderboardOptOut: user.leaderboardOptOut,
   emailVerified: user.emailVerified,
   pendingApproval: user.pendingApproval,
+  // The admin table renders a suspended badge and picks Suspend vs Reinstate
+  // from this flag, so omitting it silently broke both.
+  suspended: user.suspended,
   suspendedReason: user.suspendedReason,
   createdAt: user.createdAt
 };

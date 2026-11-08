@@ -237,7 +237,9 @@ admin.get('/stats', protect, requireRole(...STAFF), async (req, res, next) => {
         left join items i on i.created_at::date = d.day
        group by d.day order by d.day`);
 
-    res.status(200).json({ totals, byCategory, perDay });
+    const byStatus = await many(
+      `select status, count(*)::int as count from items group by status order by status`);
+    res.status(200).json({ totals, byStatus, byCategory, perDay });
   } catch (err) { next(err); }
 });
 
@@ -275,7 +277,9 @@ admin.get('/items', protect, requireRole(...STAFF), async (req, res, next) => {
 });
 
 /** GET /api/admin/claims */
-admin.get('/claims', protect, requireRole(...STAFF), async (req, res, next) => {
+// Admin-only: a moderator has no reason to read every claim and claimant name
+// on the platform, and the pre-migration rule restricted it the same way.
+admin.get('/claims', protect, requireRole('admin', 'superadmin'), async (req, res, next) => {
   try {
     const page = pageOf(req.query), limit = limitOf(req.query);
     const total = (await one('select count(*)::int as n from claims')).n;
@@ -384,8 +388,11 @@ admin.patch('/items/:id/status', protect, requireRole('admin', 'superadmin'), as
   try {
     const requested = typeof req.body.status === 'string' ? req.body.status.trim() : '';
     const next_ = requested === 'closed' ? 'hidden' : requested;
-    if (!['open', 'claimed', 'returned', 'hidden'].includes(next_)) {
-      return res.status(400).json({ message: 'status must be open, claimed, returned or hidden' });
+    if (!['open', 'claimed', 'hidden'].includes(next_)) {
+      return res.status(400).json({
+        message: 'status must be open, claimed or hidden. A listing becomes returned only '
+               + 'when its approved claim handover is completed.'
+      });
     }
     const existing = await items.findByIdRaw(req.params.id);
     if (!existing) return res.status(404).json({ message: 'Listing not found' });
@@ -484,6 +491,54 @@ admin.patch('/reports/:id', protect, requireRole(...STAFF), async (req, res, nex
       action: `report.${status}`, targetType: 'report', targetId: row.id
     });
     res.status(200).json({ message: `Report ${status}`, report: { id: row.id, status } });
+  } catch (err) { next(err); }
+});
+
+/** GET /api/admin/users — the account list the admin page builds from. */
+admin.get('/users', protect, requireRole('admin', 'superadmin'), async (req, res, next) => {
+  try {
+    const rows = await many('select * from users order by created_at desc limit 200');
+    res.status(200).json({
+      count: rows.length,
+      users: rows.map((r) => ({
+        ...users.toSafeObject(users.toUser(r)),
+        pendingApproval: r.pending_approval,
+        approvalNote: r.approval_note,
+        emailVerified: r.email_verified,
+        suspended: r.suspended,
+        suspendedReason: r.suspended_reason
+      }))
+    });
+  } catch (err) { next(err); }
+});
+
+/** PATCH /api/admin/users/:id/approve — approve or reject an application. */
+admin.patch('/users/:id/approve', protect, requireRole('admin', 'superadmin'), async (req, res, next) => {
+  try {
+    const target = await users.findById(req.params.id);
+    if (!target) return res.status(404).json({ message: 'User not found' });
+
+    if (req.body.approved === false) {
+      const note = typeof req.body.note === 'string' ? req.body.note.trim() : '';
+      if (note.length < 3) {
+        return res.status(400).json({ message: 'A reason is required to reject an application' });
+      }
+      const rejected = await users.reject(target.id, note);
+      await notify.audit({
+        actor: req.user.id, actorEmail: req.user.email,
+        action: 'user.rejected', targetType: 'user', targetId: target.id, note
+      });
+      return res.status(200).json({
+        message: 'Application rejected', user: users.toSafeObject(rejected)
+      });
+    }
+
+    const approved = await users.approve(target.id);
+    await notify.audit({
+      actor: req.user.id, actorEmail: req.user.email,
+      action: 'user.approved', targetType: 'user', targetId: target.id
+    });
+    res.status(200).json({ message: 'Account approved', user: users.toSafeObject(approved) });
   } catch (err) { next(err); }
 });
 
