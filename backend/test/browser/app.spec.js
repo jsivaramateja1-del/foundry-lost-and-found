@@ -99,7 +99,12 @@ test('Campus Explorer loads Leaflet and draws the map', async ({ page }) => {
   await page.goto('/explorer.html');
   await page.waitForFunction(() => typeof window.L !== 'undefined', null, { timeout: 20000 });
   await expect(page.locator('#map')).toBeVisible();
-  await expect(page.locator('#map .leaflet-tile-pane')).toBeVisible({ timeout: 20000 });
+  // Assert what our code is responsible for: Leaflet initialised the container
+  // and our marker code ran. Whether OpenStreetMap's tile servers paint pixels
+  // is their network, not this application, and asserting on it makes the suite
+  // fail for reasons we cannot fix.
+  await expect(page.locator('#map')).toHaveClass(/leaflet-container/, { timeout: 20000 });
+  await expect(page.locator('#map .leaflet-marker-icon').first()).toBeVisible({ timeout: 20000 });
 });
 
 test('Campus Explorer lists the seeded location as verified', async ({ page }) => {
