@@ -189,6 +189,18 @@ function initTheme() {
   // first paint. Trust that decision instead of re-deriving it with a
   // different rule, which caused a flash of the wrong theme and ignored the
   // operating system setting entirely.
+  // Bind the toggle. Nothing did this before, so the button was inert on every
+  // page and the choice was never stored.
+  document.querySelectorAll('[data-theme-toggle]').forEach(function (btn) {
+    if (btn.dataset.themeBound === 'true') return;
+    btn.dataset.themeBound = 'true';
+    btn.addEventListener('click', function () {
+      var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      try { localStorage.setItem('foundry.theme', next); } catch (e) { /* private mode */ }
+      applyTheme(next);
+    });
+  });
+
   var decided = document.documentElement.getAttribute('data-theme');
   if (decided === 'light' || decided === 'dark') {
     applyTheme(decided);
