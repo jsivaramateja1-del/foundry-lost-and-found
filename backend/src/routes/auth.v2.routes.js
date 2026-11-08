@@ -50,7 +50,10 @@ const authLimiter = rateLimit({
 router.get('/config', (req, res) => {
   res.status(200).json({
     universityDomain: PARENT_DOMAIN,
-    emailVerification: true
+    emailVerification: true,
+    // Lets the UI and the operator see at a glance whether mail can actually be
+    // sent. Without this, a missing key looks like "signup silently does nothing".
+    emailConfigured: Boolean(process.env.BREVO_API_KEY && process.env.BREVO_SENDER)
   });
 });
 
@@ -79,8 +82,17 @@ router.post('/register', authLimiter, async (req, res, next) => {
     const sent = await mailer.send('verification', user.email, { name: user.name, link });
 
     // No JWT is issued here: the account is not usable until the address is proven.
+    if (!sent.ok) {
+      console.error(
+        `[auth] verification email to ${user.email} was NOT sent ` +
+        `(${sent.skipped ? 'Brevo not configured' : 'Brevo rejected the request'}). ` +
+        'The account exists but cannot be verified until mail works.'
+      );
+    }
     res.status(201).json({
-      message: 'Check your email to verify your account.',
+      message: sent.ok
+        ? 'Check your email to verify your account.'
+        : 'Your account was created, but we could not send the verification email. Please contact an administrator.',
       pendingVerification: true,
       emailSent: sent.ok === true
     });

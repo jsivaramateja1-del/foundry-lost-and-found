@@ -14,6 +14,15 @@ const PORT = process.env.PORT || 5000;
       throw new Error('JWT_SECRET is not set. Add it to backend/.env (see .env.example).');
     }
     await connectDB();
+
+    // Say once, at boot, whether mail can work. A missing key then shows up in
+    // the deploy log instead of surfacing as a silent signup failure.
+    if (process.env.BREVO_API_KEY && process.env.BREVO_SENDER) {
+      console.log(`Email: configured (sender ${process.env.BREVO_SENDER})`);
+    } else {
+      console.warn('Email: NOT configured — set BREVO_API_KEY and BREVO_SENDER. ' +
+        'Registration will create accounts but no verification email will be sent.');
+    }
     app.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT} (PostgreSQL)`);
     });

@@ -3,6 +3,8 @@ const crypto = require('crypto');
 const claims = require('../repositories/claims');
 const items = require('../repositories/items');
 const { protect } = require('../middleware/auth.v2');
+const mailer = require('../lib/brevo');
+const users = require('../repositories/users');
 
 const router = express.Router();
 
@@ -32,6 +34,15 @@ router.post('/', protect, async (req, res, next) => {
 
     const claim = await claims.create({ item: item.id, claimant: req.user.id, message });
     if (!claim) return res.status(409).json({ message: 'You have already claimed this item' });
+
+    // Tell the finder someone has claimed their item. Fire-and-forget: a mail
+    // outage must not undo a claim that is already stored.
+    users.findById(item.reportedBy)
+      .then((owner) => owner && mailer.send('itemClaimed', owner.email, {
+        name: owner.name, title: item.title, link: `${process.env.APP_URL || ''}/dashboard.html`
+      }))
+      .catch(() => {});
+
     res.status(201).json({ claim });
   } catch (err) { next(err); }
 });
@@ -82,6 +93,16 @@ router.patch('/:id/review', protect, async (req, res, next) => {
 
     if (result.error === 'not-found') return res.status(404).json({ message: 'Claim not found' });
     if (result.error === 'not-pending') return res.status(409).json({ message: 'That claim was already reviewed' });
+
+    // Tell the claimant the outcome. Only an approval needs the handover code
+    // explained, so only an approval sends mail.
+    if (decision === 'approve' && result.approved) {
+      users.findById(claim.claimant)
+        .then((claimant) => claimant && mailer.send('claimApproved', claimant.email, {
+          name: claimant.name, title: item.title, link: `${process.env.APP_URL || ''}/dashboard.html`
+        }))
+        .catch(() => {});
+    }
 
     res.status(200).json({ message: `Claim ${decision}d`, ...result });
   } catch (err) { next(err); }
