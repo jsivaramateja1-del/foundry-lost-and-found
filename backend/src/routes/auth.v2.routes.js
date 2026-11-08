@@ -101,7 +101,7 @@ router.post('/register', authLimiter, async (req, res, next) => {
   }
 });
 
-/** GET /api/auth/verify?token=... */
+/** GET /api/auth/verify?token=... — used by links that carry the token in the URL. */
 router.get('/verify', async (req, res, next) => {
   try {
     const token = typeof req.query.token === 'string' ? req.query.token : '';
@@ -114,6 +114,29 @@ router.get('/verify', async (req, res, next) => {
     const verified = await users.markVerified(user.id);
     await mailer.send('welcome', verified.email, { name: verified.name });
 
+    res.status(200).json({ message: 'Email verified. You can sign in now.', verified: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/auth/verify-email — the endpoint the sign-in page calls, with the
+ * token in the request body. The GET above stays for links that carry it in the
+ * URL. Both run the same verification.
+ */
+router.post('/verify-email', authLimiter, async (req, res, next) => {
+  try {
+    const raw = req.body && req.body.token;
+    const token = typeof raw === 'string' ? raw.trim() : '';
+    if (!token) return res.status(400).json({ message: 'A verification token is required' });
+
+    const user = await users.findByVerificationHash(sha256(token));
+    if (!user) {
+      return res.status(400).json({ message: 'That link is invalid or has expired. Request a new one.' });
+    }
+    const verified = await users.markVerified(user.id);
+    await mailer.send('welcome', verified.email, { name: verified.name });
     res.status(200).json({ message: 'Email verified. You can sign in now.', verified: true });
   } catch (err) {
     next(err);
@@ -196,6 +219,34 @@ router.post('/reset-password', authLimiter, async (req, res, next) => {
     next(err);
   }
 });
+
+/**
+ * PATCH /api/auth/preferences — currently just the leaderboard opt-out.
+ * Only students appear on the leaderboard, so only a student can change this.
+ */
+const updatePreferences = async (req, res, next) => {
+  try {
+    if (typeof req.body.leaderboardOptOut !== 'boolean') {
+      return res.status(400).json({ message: 'leaderboardOptOut must be true or false' });
+    }
+    if (req.user.role !== 'student') {
+      return res.status(403).json({ message: 'Only students have a leaderboard preference' });
+    }
+    const { one } = require('../config/pg');
+    await one('update users set leaderboard_opt_out = $2 where id = $1',
+      [req.user.id, req.body.leaderboardOptOut]);
+    res.status(200).json({
+      message: req.body.leaderboardOptOut
+        ? 'You will no longer appear on the leaderboard.'
+        : 'You will appear on the leaderboard again.',
+      leaderboardOptOut: req.body.leaderboardOptOut
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+router.patch('/preferences', protect, updatePreferences);
+router.post('/preferences', protect, updatePreferences);
 
 /** GET /api/auth/me */
 router.get('/me', protect, async (req, res) => {
