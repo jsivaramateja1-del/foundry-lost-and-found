@@ -53,7 +53,10 @@ router.get('/config', (req, res) => {
     emailVerification: true,
     // Lets the UI and the operator see at a glance whether mail can actually be
     // sent. Without this, a missing key looks like "signup silently does nothing".
-    emailConfigured: Boolean(process.env.BREVO_API_KEY && process.env.BREVO_SENDER)
+    emailConfigured: Boolean(process.env.BREVO_API_KEY && process.env.BREVO_SENDER),
+    // Kept for the existing client, which validates against these lists.
+    allowedEmailDomains: [PARENT_DOMAIN],
+    facultyDomains: [PARENT_DOMAIN]
   });
 });
 
@@ -94,6 +97,7 @@ router.post('/register', authLimiter, async (req, res, next) => {
         ? 'Check your email to verify your account.'
         : 'Your account was created, but we could not send the verification email. Please contact an administrator.',
       pendingVerification: true,
+      verificationRequired: true,
       emailSent: sent.ok === true
     });
   } catch (err) {
@@ -235,11 +239,15 @@ const updatePreferences = async (req, res, next) => {
     const { one } = require('../config/pg');
     await one('update users set leaderboard_opt_out = $2 where id = $1',
       [req.user.id, req.body.leaderboardOptOut]);
+    const updated = await users.findById(req.user.id);
     res.status(200).json({
       message: req.body.leaderboardOptOut
         ? 'You will no longer appear on the leaderboard.'
         : 'You will appear on the leaderboard again.',
-      leaderboardOptOut: req.body.leaderboardOptOut
+      leaderboardOptOut: req.body.leaderboardOptOut,
+      // The client re-saves this into localStorage; without it the cached
+      // profile is overwritten with undefined and every role check degrades.
+      user: publicUser(updated)
     });
   } catch (err) {
     next(err);

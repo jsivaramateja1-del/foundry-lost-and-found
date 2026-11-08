@@ -17,12 +17,23 @@ const notifications = express.Router();
 
 notifications.get('/', protect, async (req, res, next) => {
   try {
-    const rows = await many(
+    const rows = (await many(
       `select id, type, message, link, read, created_at from notifications
-        where user_id = $1 order by created_at desc limit 50`, [req.user.id]);
+        where user_id = $1 order by created_at desc limit 50`, [req.user.id]))
+      .map((n) => ({ ...n, createdAt: n.created_at }));
     const unread = await one(
       'select count(*)::int as n from notifications where user_id=$1 and read=false', [req.user.id]);
     res.status(200).json({ notifications: rows, unread: unread.n });
+  } catch (err) { next(err); }
+});
+
+// Must be declared BEFORE /:id/read or 'read-all' is captured as an id.
+notifications.patch('/read-all', protect, async (req, res, next) => {
+  try {
+    const r = await one(
+      `update notifications set read = true
+        where user_id = $1 and read = false returning id`, [req.user.id]);
+    res.status(200).json({ updated: r ? 1 : 0, message: 'All notifications marked read' });
   } catch (err) { next(err); }
 });
 
@@ -46,12 +57,39 @@ dashboard.get('/me', protect, async (req, res, next) => {
     const audit = await points.auditUser(req.user.id);
     const unread = await one(
       'select count(*)::int as n from notifications where user_id=$1 and read=false', [req.user.id]);
+    const claimsMade = await many(
+      `select c.id, c.status, c.message, c.created_at, i.title as item_title
+         from claims c join items i on i.id = c.item
+        where c.claimant = $1 order by c.created_at desc limit 50`, [req.user.id]);
+    const claimsReceived = await many(
+      `select c.id, c.status, c.message, c.created_at, u.name as claimant_name
+         from claims c join items i on i.id = c.item join users u on u.id = c.claimant
+        where i.reported_by = $1 order by c.created_at desc limit 50`, [req.user.id]);
+
+    const count = (st) => mine.items.filter((i) => i.status === st).length;
+    // `stats`, `impact`, `badges`, `items` and `claims` are the names the
+    // dashboard reads. Badges are not implemented yet, so the array is empty
+    // rather than missing — a missing key throws in the page.
     res.status(200).json({
       user: users.toSafeObject(req.user),
+      stats: {
+        listings: mine.items.length,
+        lost: mine.items.filter((i) => i.type === 'lost').length,
+        found: mine.items.filter((i) => i.type === 'found').length,
+        open: count('open'), claimed: count('claimed'), returned: count('returned'),
+        claimsMade: claimsMade.length,
+        claimsReceived: claimsReceived.length,
+        pendingClaims: claimsReceived.filter((c) => c.status === 'pending').length,
+        points: req.user.points, returns: req.user.returns
+      },
+      impact: { points: req.user.points, returns: req.user.returns,
+                contributions: mine.items.length },
+      badges: [],
+      items: mine.items,
+      claims: claimsMade.map((c) => ({ ...c, itemTitle: c.item_title })),
+      claimsReceived: claimsReceived.map((c) => ({ ...c, claimantName: c.claimant_name })),
       listings: mine.items,
-      ledger,
-      pointsAudit: audit,
-      unreadNotifications: unread.n
+      ledger, pointsAudit: audit, unreadNotifications: unread.n
     });
   } catch (err) { next(err); }
 });
@@ -65,7 +103,14 @@ leaderboard.get('/', async (req, res, next) => {
     if (!['week','month','all'].includes(period)) {
       return res.status(400).json({ message: 'period must be one of: week, month, all' });
     }
-    res.status(200).json({ period, entries: await points.leaderboard(period) });
+    const rows = await points.leaderboard(period);
+    // The frontend reads `leaderboard` and `rank`; keep those names and expose
+    // `position` too so either spelling works.
+    res.status(200).json({
+      period,
+      count: rows.length,
+      leaderboard: rows.map((r) => ({ ...r, rank: r.position }))
+    });
   } catch (err) { next(err); }
 });
 

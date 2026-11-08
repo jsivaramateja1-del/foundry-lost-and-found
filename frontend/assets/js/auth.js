@@ -172,6 +172,17 @@ document.getElementById('form-login').addEventListener('submit', async (event) =
 
   try {
     const data = await api('/auth/login', { method: 'POST', body: { email, password } });
+    // Registration no longer returns a session: the account must be verified
+    // first. Guarding here means a missing token can never be written to
+    // localStorage as the string "undefined".
+    if (!data.token || !data.user) {
+      showError('register-error', data.message
+        || 'Account created. Check your university email for the verification link before signing in.');
+      btn.disabled = false;
+      btn.textContent = 'Create account';
+      return;
+    }
+
     finish(data.token, data.user);
   } catch (err) {
     showError('login-error', err.message);
@@ -197,7 +208,7 @@ document.getElementById('form-register').addEventListener('submit', async (event
     return showError('register-error',
       `Registration is limited to Sai University addresses: ${acceptedDomains().map((d) => `@${d}`).join(', ')}.`);
   }
-  if (password.length < 6) return showError('register-error', 'Password must be at least 6 characters.');
+  if (password.length < 8) return showError('register-error', 'Password must be at least 6 characters.');
   if (password !== confirm) return showError('register-error', 'The two passwords do not match.');
 
   const btn = document.getElementById('register-submit');

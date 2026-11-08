@@ -601,7 +601,7 @@ async function submitClaim(event) {
   try {
     await api('/claims', {
       method: 'POST',
-      body: { itemId: state.activeItemId, message },
+      body: { item: state.activeItemId, message },
       auth: true
     });
     closeAllModals();
@@ -727,9 +727,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     btn.disabled = true;
     btn.textContent = 'Sending…';
     try {
-      await api(`/items/${state.activeItemId}/report`, {
+      await api('/reports', {
         method: 'POST',
+        auth: true,
         body: {
+          item: state.activeItemId,
           reason: document.getElementById('ri-reason').value,
           details: document.getElementById('ri-details').value.trim()
         },

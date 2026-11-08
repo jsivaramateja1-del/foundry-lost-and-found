@@ -16,7 +16,8 @@ const oneValue = (v) => (typeof v === 'string' ? v.trim() : '');
 
 router.get('/', async (req, res, next) => {
   try {
-    for (const key of ['type','category','location','status','subcategory','q','sort']) {
+    for (const key of ['type','category','location','status','subcategory','q','sort',
+                       'from','to','page','limit']) {
       if (req.query[key] !== undefined && typeof req.query[key] !== 'string') {
         return res.status(400).json({ message: `${key} must be a single value` });
       }
@@ -48,6 +49,17 @@ router.get('/', async (req, res, next) => {
     const q = oneValue(req.query.q);
     if (q) filter.q = q.slice(0, 80);
 
+    // The date-range filter the board sends. It was silently ignored, so the
+    // UI showed unfiltered results while claiming a range was applied.
+    for (const k of ['from', 'to']) {
+      const v = oneValue(req.query[k]);
+      if (!v) continue;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+        return res.status(400).json({ message: `${k} must be YYYY-MM-DD` });
+      }
+      filter[k] = v;
+    }
+
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 12));
     const sort = oneValue(req.query.sort) || 'newest';
@@ -65,7 +77,13 @@ router.get('/stats', async (req, res, next) => {
 });
 
 router.get('/meta', (req, res) => {
-  res.status(200).json({ categories: CATEGORIES, locations: LOCATIONS, types: TYPES, statuses: STATUSES });
+  const { CATEGORY_TREE } = require('../utils/categories');
+  res.status(200).json({
+    categories: CATEGORIES, locations: LOCATIONS, types: TYPES, statuses: STATUSES,
+    // The form populates its subcategory selects from this map; without it the
+    // dropdowns only ever contained the placeholder.
+    subcategories: CATEGORY_TREE
+  });
 });
 
 router.get('/:id', async (req, res, next) => {
@@ -86,7 +104,8 @@ router.get('/:id/similar', async (req, res, next) => {
     }
     const item = await items.findById(req.params.id);
     if (!item) return res.status(404).json({ message: 'Listing not found' });
-    res.status(200).json({ items: await items.similar(item) });
+    const rows = await items.similar(item);
+    res.status(200).json({ count: rows.length, items: rows });
   } catch (err) { next(err); }
 });
 

@@ -372,13 +372,18 @@
       button.disabled = true;
       try {
         if (approve) {
-          await api(`/claims/${approve.dataset.approve}`, { method: 'PATCH', body: { status: 'approved' }, auth: true });
+          await api(`/claims/${approve.dataset.approve}/review`, { method: 'PATCH', body: { decision: 'approve' }, auth: true });
           ui.toast('Claim approved');
         } else if (reject) {
-          await api(`/claims/${reject.dataset.reject}`, { method: 'PATCH', body: { status: 'rejected' }, auth: true });
+          await api(`/claims/${reject.dataset.reject}/review`, { method: 'PATCH', body: { decision: 'reject' }, auth: true });
           ui.toast('Claim rejected');
         } else if (handover) {
-          await api(`/claims/${handover.dataset.handover}/handover`, { method: 'POST', auth: true });
+          // The claimant reads their six-digit code from their own dashboard
+          // and tells the owner in person; the owner enters it here to prove
+          // the item actually changed hands.
+          const code = window.prompt('Enter the six-digit handover code from the claimant:');
+          if (!code) { button.disabled = false; return; }
+          await api(`/claims/${handover.dataset.handover}/complete`, { method: 'POST', body: { code: code.trim() }, auth: true });
           ui.toast('Handover confirmed — the listing is now marked returned');
         } else if (remove) {
           await api(`/items/${remove.dataset.delete}`, { method: 'DELETE', auth: true });
