@@ -21,7 +21,11 @@
     "test:boot": "node test/boot.test.js",
     "test:ledger": "node test/ledger.test.js",
     "seed:campus": "node scripts/seed-campus-locations.js",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "start:pg": "node server.v2.js",
+    "dev:pg": "nodemon server.v2.js",
+    "test:auth-v2": "node test/auth-v2.test.js",
+    "test:pg": "node test/pg.integration.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
