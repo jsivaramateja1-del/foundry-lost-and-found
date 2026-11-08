@@ -5,6 +5,7 @@ const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
 const { protect, signToken } = require('../middleware/auth');
 const {
+  FACULTY_DOMAINS,
   allowedDomain,
   studentDomains,
   isFacultyEmail,
@@ -48,6 +49,13 @@ router.get('/config', (req, res) => {
   res.status(200).json({
     // Every domain a student may use, plus the first one for older clients
     allowedEmailDomains: studentDomains(),
+    // The faculty parent domain is accepted by the server, so the browser has to
+    // know about it too or a faculty applicant is refused client-side. When
+    // ALLOWED_EMAIL_DOMAIN overrides the list, everything accepted is already in
+    // allowedEmailDomains and this stays empty.
+    facultyDomains: String(process.env.ALLOWED_EMAIL_DOMAIN || '').trim()
+      ? []
+      : FACULTY_DOMAINS,
     allowedEmailDomain: allowedDomain(),
     emailVerification: emailVerificationEnabled()
   });
@@ -119,11 +127,22 @@ router.post('/register', authLimiter, async (req, res, next) => {
       }
     }
 
+    // A faculty application is not an account yet. Issuing a token here would
+    // hand a pending user a session the API then refuses at every protected
+    // route, so the response carries the state and no credential.
+    if (faculty) {
+      return res.status(201).json({
+        user: user.toSafeObject(),
+        pendingApproval: true,
+        message: 'Your faculty application has been received. An administrator must approve it before you can sign in.'
+      });
+    }
+
     res.status(201).json({
       token: signToken(user._id, user.tokenVersion),
       user: user.toSafeObject(),
       verificationRequired: needsVerification,
-      pendingApproval: faculty
+      pendingApproval: false
     });
   } catch (err) {
     next(err);
@@ -228,6 +247,14 @@ router.post('/login', authLimiter, async (req, res, next) => {
     if (user.suspended) {
       return res.status(403).json({
         message: 'This account has been suspended. Contact the administrator if you think this is a mistake.'
+      });
+    }
+
+    // A faculty application is not an account yet: it must be approved first,
+    // so no token is issued while it is pending.
+    if (user.pendingApproval) {
+      return res.status(403).json({
+        message: 'Your account is waiting for administrator approval. You will be able to sign in once it is approved.'
       });
     }
 

@@ -15,7 +15,11 @@
     "test:ratelimit": "node test/ratelimit.test.js",
     "test:transactions": "node test/transactions.test.js",
     "reconcile:points": "node scripts/reconcile-points.js",
-    "recover:awards": "node scripts/recover-awards.js"
+    "recover:awards": "node scripts/recover-awards.js",
+    "test:frontend": "node test/frontend.test.js",
+    "test:coverage": "node test/coverage.test.js",
+    "test:boot": "node test/boot.test.js",
+    "test:ledger": "node test/ledger.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

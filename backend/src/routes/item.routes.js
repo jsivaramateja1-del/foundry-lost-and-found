@@ -156,12 +156,56 @@ router.get('/', async (req, res, next) => {
         { customLocation: rx }
       ];
     }
-    if (category && category !== 'all') filter.category = category;
-    if (req.query.subcategory && req.query.subcategory !== 'all') {
-      filter.subcategory = req.query.subcategory;
+    // Express 4 parses ?category[$ne]=x into an object. Assigning that straight
+    // into the query would hand MongoDB an operator the UI never offers, so every
+    // filter is coerced to a plain string and checked against its vocabulary.
+    // A repeated or bracketed parameter arrives as an array or object. Reject it
+    // outright rather than quietly ignoring it, so a caller cannot tell whether
+    // the filter was applied.
+    const badParam = ['category', 'subcategory', 'location', 'type', 'status']
+      .find((key) => req.query[key] !== undefined && typeof req.query[key] !== 'string');
+    if (badParam) {
+      return res.status(400).json({ message: `${badParam} must be a single value` });
     }
-    if (location && location !== 'all') filter.location = location;
-    if (type && type !== 'all') filter.type = type;
+
+    const onlyString = (value) => (typeof value === 'string' ? value.trim() : '');
+    const inList = (value, list) => (list.includes(value) ? value : null);
+
+    const categoryFilter = onlyString(category);
+    if (categoryFilter && categoryFilter !== 'all') {
+      const safeCategory = inList(categoryFilter, CATEGORIES);
+      if (!safeCategory) {
+        return res.status(400).json({ message: 'category must be one of the listed categories' });
+      }
+      filter.category = safeCategory;
+    }
+
+    const subcategoryFilter = onlyString(req.query.subcategory);
+    if (subcategoryFilter && subcategoryFilter !== 'all') {
+      // Subcategories are per-category, so only the shape is checked here
+      if (!/^[A-Za-z0-9 &/'-]{1,60}$/.test(subcategoryFilter)) {
+        return res.status(400).json({ message: 'subcategory is not valid' });
+      }
+      filter.subcategory = subcategoryFilter;
+    }
+
+    const locationFilter = onlyString(location);
+    if (locationFilter && locationFilter !== 'all') {
+      const safeLocation = inList(locationFilter, LOCATIONS);
+      if (!safeLocation) {
+        return res.status(400).json({ message: 'location must be one of the listed locations' });
+      }
+      filter.location = safeLocation;
+    }
+
+    const typeFilter = onlyString(type);
+    if (typeFilter && typeFilter !== 'all') {
+      const safeType = inList(typeFilter, ['lost', 'found']);
+      if (!safeType) {
+        return res.status(400).json({ message: 'type must be either lost or found' });
+      }
+      filter.type = safeType;
+    }
     if (status && status !== 'all') {
       const allowedStatuses = ['open', 'claimed', 'returned', 'closed'];
 

@@ -37,6 +37,11 @@ if (params.get('mode') === 'register') selectTab('register');
 let authConfig = {
   allowedEmailDomains: ['scds.saiuniversity.edu.in', 'sas.saiuniversity.edu.in', 'sol.saiuniversity.edu.in', 'sahs.saiuniversity.edu.in'],
   allowedEmailDomain: 'scds.saiuniversity.edu.in',
+  // The faculty parent domain is part of the server's rule, so it belongs in the
+  // fallback too: if /api/auth/config is briefly unavailable, a faculty member
+  // must still be able to submit the form. This does not widen what the server
+  // accepts — it mirrors it, and the server still rejects anything else.
+  facultyDomains: ['saiuniversity.edu.in'],
   emailVerification: false
 };
 
@@ -46,19 +51,29 @@ let authConfig = {
   } catch {
     /* fall back to the built-in default; the server still enforces its own rule */
   }
-  const domains = authConfig.allowedEmailDomains || [authConfig.allowedEmailDomain];
+  // The server also accepts the faculty parent domain, so validation uses both
+  // lists. The hint shows the student schools; faculty are told separately.
+  const studentDomains = authConfig.allowedEmailDomains || [authConfig.allowedEmailDomain];
+  const facultyDomains = authConfig.facultyDomains || [];
+  const domains = [...studentDomains, ...facultyDomains];
   document.querySelectorAll('[data-allowed-domain]').forEach((node) => {
     node.textContent = domains.map((d) => `@${d}`).join(', ');
   });
 })();
+
+/** Every domain the server accepts: the student schools and the faculty parent. */
+function acceptedDomains() {
+  const student = authConfig.allowedEmailDomains || [authConfig.allowedEmailDomain];
+  const faculty = authConfig.facultyDomains || [];
+  return [...student, ...faculty].filter(Boolean).map((d) => String(d).toLowerCase());
+}
 
 /** Same rule as the server: the domain must match exactly. */
 function isAllowedEmail(email) {
   const value = String(email || '').trim().toLowerCase();
   const at = value.lastIndexOf('@');
   if (at <= 0) return false;
-  const domains = (authConfig.allowedEmailDomains || [authConfig.allowedEmailDomain]).map((d) => d.toLowerCase());
-  return domains.includes(value.slice(at + 1));
+  return acceptedDomains().includes(value.slice(at + 1));
 }
 
 function showError(id, message) {
@@ -174,7 +189,7 @@ document.getElementById('form-register').addEventListener('submit', async (event
   if (!email) return showError('register-error', 'Please enter your email.');
   if (!isAllowedEmail(email)) {
     return showError('register-error',
-      `Registration is limited to Sai University addresses: ${(authConfig.allowedEmailDomains || [authConfig.allowedEmailDomain]).map((d) => `@${d}`).join(', ')}.`);
+      `Registration is limited to Sai University addresses: ${acceptedDomains().map((d) => `@${d}`).join(', ')}.`);
   }
   if (password.length < 6) return showError('register-error', 'Password must be at least 6 characters.');
   if (password !== confirm) return showError('register-error', 'The two passwords do not match.');
@@ -185,9 +200,28 @@ document.getElementById('form-register').addEventListener('submit', async (event
 
   try {
     const data = await api('/auth/register', { method: 'POST', body: { name, email, password } });
+
+    // A faculty application is not a session: say so, leave the form usable.
+    if (data.pendingApproval) {
+      showError('register-error', data.message
+        || 'Your faculty application is waiting for administrator approval.');
+      btn.disabled = false;
+      btn.textContent = 'Create account';
+      return;
+    }
+
+    if (data.verificationRequired) {
+      showError('register-error',
+        'Account created. Check your university email for the verification link before signing in.');
+      btn.disabled = false;
+      btn.textContent = 'Create account';
+      return;
+    }
+
     finish(data.token, data.user);
   } catch (err) {
-    showError('register-error', err.message);
+    // Never swallowed: the API's safe message is shown as-is.
+    showError('register-error', err.message || 'Registration failed. Please try again.');
     btn.disabled = false;
     btn.textContent = 'Create account';
   }

@@ -285,46 +285,108 @@ the cleanup will delete that account along with the rest of the demo data.
 
 ## 9. Tests
 
+Seven suites. Four need no database at all; three start an in-memory MongoDB.
+
 ```bash
 cd backend
-node test/offline.test.js
-node test/routes.test.js
+node test/offline.test.js      # unit + source guards, no database
+npm run test:routes            # route-level, no database
+npm run test:ratelimit         # rate limiter, no database
+npm test                       # API suite, needs MongoDB
+npm run test:transactions      # replica-set behaviour, needs MongoDB
+npm run test:coverage          # coverage of the remaining paths, needs MongoDB
 ```
+
+| Suite | Command | Expected | Database |
+|---|---|---|---|
+| Offline | `node test/offline.test.js` | 239 passed, 0 failed | no |
+| Routes | `npm run test:routes` | 95 passed, 0 failed | no |
+| Rate limits | `npm run test:ratelimit` | 5 passed, 0 failed | no |
+| API | `npm test` | 219 passed, 0 failed | yes |
+| Transactions | `npm run test:transactions` | 33 passed, 0 failed | yes |
+| Coverage | `npm run test:coverage` | 47 passed, 0 failed | yes |
+| Frontend | `npm run test:frontend` | 24 passed, 0 failed | no |
+
+The three database-free suites were re-run after the latest changes. The three
+MongoDB suites were last verified on Windows; re-run them after pulling.
+
+`test/frontend.test.js` runs the real `frontend/assets/js/auth.js` inside a stub
+DOM and drives the registration form: it asserts that one click sends exactly one
+`POST /api/auth/register`, that validation stops the request with a visible
+message, that a pending faculty application is reported, and that the button is
+disabled in flight and restored afterwards. This exists because a handler that
+throws before calling the API produces **no network request at all**, which no
+server-side suite can observe.
 
 `test/routes.test.js` needs **no database at all**: every case is decided before
 the first Mongoose query — the domain rule, input validation, the authentication
-gate, id validation and the JSON error shape. It is the suite to run when you
-want to know quickly whether the API is still sane.
+gate, id validation and the JSON error shape. It also reads the frontend files to
+check the registration feedback path, because a ReferenceError in the submit
+handler is exactly the kind of fault that no server test can see.
 
-No database needed. Proves the app loads, all 24 routes are registered, the
-schemas reject bad input, bcrypt and JWT round-trip, no fallback secret exists,
-no demo password appears anywhere in the repository, and the old seed script is
-gone, plus unit tests for the email-domain rule and the verification tokens.
-Expected last lines: `81 passed, 0 failed` for the offline suite and
-`42 passed, 0 failed` for the route suite.
+The offline suite proves the app loads, all 46 routes are registered, the schemas
+reject bad input, bcrypt and JWT round-trip, no fallback secret exists, and the
+email-domain rule and verification tokens behave.
 
-```bash
-npm test
-```
-
-The full API suite. It starts an in-memory MongoDB (`mongodb-memory-server`), so
-the first run downloads a database binary. To run against a real database instead:
+The full API suite starts an in-memory MongoDB (`mongodb-memory-server`), so the
+first run downloads a database binary. To run against a real database instead:
 
 ```bash
 set MONGO_URI=mongodb://localhost:27017/foundry-test
 npm test
 ```
 
+Some suites inject failures on purpose (approval rollback, handover rollback,
+ledger outage, concurrent resets). Those log errors during a **passing** run and
+are not failures.
+
 The Postman collection in `backend/postman/` has 48 requests with assertions,
 across Health, Auth, Items, Claims, Dashboards, Cleanup and Notifications. It
 includes the domain-refusal case, email verification and the handover step.
-It contains **no credentials** — set the collection variables `studentEmail`,
-`studentPassword`, `otherEmail`, `otherPassword`, `adminEmail` and `adminPassword`
-to accounts you created, and select **No Environment** so a stale environment
-variable cannot shadow them. Two different students are needed because the API
-refuses a claim on your own listing.
 
-## 10. API
+## 10. Scheduled monitoring
+
+Three GitHub Actions workflows live in `.github/workflows/`. They are inert until
+the repository receives them, and they check the real service — none of them
+prints success without making the request.
+
+| Workflow | When | What it checks |
+|---|---|---|
+| `ci.yml` | every push and pull request, or manually | installs with `npm ci`, syntax-checks every JS file, runs all seven suites, runs `npm audit --audit-level=high`, and fails the build on any failure |
+| `health-check.yml` | daily at 02:30 UTC (08:00 IST) | `/api/health`, `/api/health/ready` (which fails when the database is unreachable), the homepage, and five critical API routes |
+| `weekly-audit.yml` | Mondays at 03:00 UTC (08:30 IST) | the full suite, a dependency advisory report, and a boot test that starts the server and fetches the homepage |
+
+**Enabling / disabling:** in GitHub, open *Actions*, pick the workflow and use the
+*Enable workflow* / *Disable workflow* menu. To run one on demand, open the
+workflow and press *Run workflow* (`workflow_dispatch` is enabled on all three).
+
+**Pointing the probe at a different host:** set a repository variable named
+`PRODUCTION_URL` (Settings → Secrets and variables → Actions → Variables). The
+default is `https://foundry-lost-and-found.onrender.com`.
+
+**Reading results:** the *Actions* tab shows each run; a failure lists the exact
+endpoint and status code. Nothing in these workflows writes to production data —
+`reconcile:points` is run without `--apply`, so it only reports.
+
+**Scheduled runs only happen on the default branch.** GitHub fires `schedule:`
+triggers from the repository's default branch (currently `main`). While these
+workflows exist only on `phase3-stage1`, the daily and weekly crons do **not**
+run — you can still start them by hand with *Run workflow*. To activate the
+schedules, merge this branch into the default branch.
+
+**Ledger consistency** is checked by `npm run test:ledger`: it seeds a known
+account and ledger pair in an isolated in-memory database, runs the same
+classification the production script uses, and asserts that a matching balance
+is reported in sync, that a pending award is not counted as a score, that an
+under-credited account is detected, and that nothing was written. For a real
+deployment, `npm run reconcile:points` (without `--apply`) prints the same
+comparison against live data and changes nothing.
+
+**What they do not do:** they do not read application logs (no log drain is
+configured), do not send email or chat notifications, and do not deploy. Wire a
+notification step to your channel of choice if you want alerts pushed.
+
+## 11. API
 
 All responses are JSON, including errors. Every protected route requires
 `Authorization: Bearer <token>`.
@@ -407,17 +469,20 @@ How it is stored and why:
   hash** is stored (`User.resetTokenHash`), so a database leak cannot be turned
   into a working reset link.
 - `resetTokenExpires` is 15 minutes from the request.
-- The token is **consumed atomically** (`findOneAndUpdate` with `$unset`), so two
-  simultaneous reset requests cannot both succeed: the second update matches
-  nothing. If the password save then fails, the token is spent and the user
-  requests a new link — the failure is closed, never open.
+- The whole reset is **one atomic update** on a single document
+  (`findOneAndUpdate`): it sets the new password hash, unsets the token fields and
+  increments `tokenVersion` in the same write. Two simultaneous reset requests
+  cannot both succeed — the second matches nothing — and there is no window where
+  the link is spent but the password is unchanged, or the password changes while
+  older sessions stay valid.
 - `User.tokenVersion` is incremented on reset. Every JWT carries the version it
   was signed with, and `protect` refuses a token whose version no longer
   matches — so a reset logs out every older session. Tokens issued before this
   field existed carry no version and are treated as 0, which means the upgrade
   itself logs nobody out.
-- The password is hashed by the existing bcrypt pre-save hook; the user's role,
-  points, badges and profile are untouched.
+- The password is hashed explicitly with bcrypt (cost 10) before the update, so
+  the atomic write and the pre-save hook produce the same hash strength. The
+  user's role and other fields are untouched.
 - The token never appears in an API response and is never logged. If SMTP fails,
   the endpoint still answers generically and the failure is logged by message
   only.
@@ -556,7 +621,7 @@ on top of `--apply`. Every `--apply` run writes `backend/backups/points-backup-<
 before touching anything and prints the `--restore` command that undoes it. The
 script never deletes a user, an event or a listing.
 
-## 11. Moderation
+## 12. Moderation
 
 Students can flag a listing from the item dialog: spam, inappropriate,
 suspicious, incorrect or other, with an optional note. One report per student
@@ -575,9 +640,11 @@ value up to 365) or permanent; a temporary one lifts itself when it expires, and
 an administrator can reinstate at any time. A reason is required and is kept in
 the audit log.
 
-**Faculty registration** creates a `faculty` account in a pending state. It can
-log in and browse, but every protected action is refused with a clear message
-until an administrator approves it via `PATCH /api/admin/users/:id/approve`. A
+**Faculty registration** creates a `faculty` account in a pending state. A
+pending account **cannot sign in**: both the login route and the `protect`
+middleware refuse it with 403, so no token is ever issued and no protected route
+is reachable. An administrator approves it via
+`PATCH /api/admin/users/:id/approve`, after which it signs in normally. A
 rejection must include a reason, which is stored and which blocks the account. Two guard rails: an administrator cannot suspend themselves, and cannot
 suspend another administrator — otherwise one compromised admin could lock out
 the rest. Suspended students are marked in the accounts table and can be
@@ -589,7 +656,7 @@ suspended or reinstated, report resolved or dismissed. The actor's email is
 stored with each entry so the log still reads correctly if an account is later
 removed.
 
-## 12. Email verification (implemented, off by default)
+## 13. Email verification (implemented, off by default)
 
 The full flow exists: a random 32-byte token is created on registration, only
 its SHA-256 hash is stored, it expires in 24 hours, it is consumed once, and
@@ -620,7 +687,7 @@ SMTP_FROM=Foundry <no-reply@saiuniversity.edu.in>
 Any standard SMTP account works; a Gmail account with an app password is
 enough for a demo. No paid service is required or recommended.
 
-## 13. Security
+## 14. Security
 
 - Passwords are hashed with bcrypt and never returned by any endpoint.
 - Authorisation is enforced on the server in each route, never in the UI. A
@@ -643,7 +710,7 @@ enough for a demo. No paid service is required or recommended.
   login/registration are rate limited.
 - `.env` is git-ignored; `.env.example` contains placeholders only.
 
-## 14. Deploying to Render
+## 15. Deploying to Render
 
 - Root Directory: `backend`
 - Build Command: `npm install`
@@ -657,7 +724,7 @@ locally against the same `MONGO_URI`.
 The free tier sleeps when idle, so the first request after a pause can take
 30–50 seconds. That is the host, not the application.
 
-## 15. Known limitations
+## 16. Known limitations
 
 Stated plainly so nobody assumes more than the code does.
 

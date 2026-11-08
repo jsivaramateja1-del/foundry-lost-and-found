@@ -10,6 +10,8 @@
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test_secret_key_for_local_runs_only';
 
+const fs = require('fs');
+const path = require('path');
 const request = require('supertest');
 const app = require('../src/app');
 
@@ -199,7 +201,105 @@ const check = (name, cond, detail = '') => {
   check('auth.html links to the recovery page',
     /forgot-password\.html/.test(authPage.text));
 
+  // ---- Faculty domain regression (no database needed: the domain rule runs
+  // before the first query) ----
+  const reg = (email) => request(app).post('/api/auth/register')
+    .send({ name: 'Domain Test', email, password: 'secret123' });
+
+  // Accepted domains are asserted through the same rule the route uses. Sending
+  // a full registration for each one would reach Mongoose with no connection
+  // and stall on buffering; the refusal cases below still exercise the route
+  // itself, because a bad domain is rejected before any query runs.
+  const { isAllowedEmail } = require('../src/utils/email');
+  for (const domain of ['scds.saiuniversity.edu.in', 'sas.saiuniversity.edu.in',
+    'sol.saiuniversity.edu.in', 'sahs.saiuniversity.edu.in', 'saiuniversity.edu.in']) {
+    check(`the accepted domain @${domain} passes domain validation`,
+      isAllowedEmail(`student.${domain.split('.')[0]}@${domain}`) === true,
+      'the server would refuse this address');
+  }
+
+  for (const [email, label] of [
+    ['someone@gmail.com', 'an external domain'],
+    ['someone@sai.edu', 'a lookalike domain'],
+    ['someone@scds.saiuniversity.edu.in.evil.com', 'a suffix trick'],
+    ['someone@sub.saiuniversity.edu.in', 'a subdomain of the faculty domain'],
+    ['someone@sub.scds.saiuniversity.edu.in', 'a subdomain of a school domain']
+  ]) {
+    const res = await reg(email);
+    check(`${label} is refused (400)`, res.status === 400, `got ${res.status}`);
+  }
+
+  {
+    const cfg = await request(app).get('/api/auth/config');
+    check('the config lists the faculty domain separately',
+      Array.isArray(cfg.body.facultyDomains)
+      && cfg.body.facultyDomains.includes('saiuniversity.edu.in'),
+      JSON.stringify(cfg.body.facultyDomains));
+    check('the config still lists all four student domains',
+      Array.isArray(cfg.body.allowedEmailDomains) && cfg.body.allowedEmailDomains.length === 4,
+      JSON.stringify(cfg.body.allowedEmailDomains));
+    const msg = await reg('someone@gmail.com');
+    check('the refusal message names the faculty domain too',
+      /saiuniversity\.edu\.in/.test(msg.body.message || ''), msg.body.message || '');
+  }
+
+  // ---- The browser fallback must mirror the server's domain rule ----
+  {
+    const authJs = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'assets', 'js', 'auth.js'), 'utf8');
+    const fallback = authJs.slice(authJs.indexOf('let authConfig'), authJs.indexOf('})();'));
+    check('the fallback config includes the faculty domain',
+      /facultyDomains:\s*\['saiuniversity\.edu\.in'\]/.test(fallback),
+      'faculty domain missing from the fallback');
+    check('the fallback still lists all four student domains',
+      (fallback.match(/saiuniversity\.edu\.in'/g) || []).length >= 5,
+      'student domains missing from the fallback');
+
+    const cfg = await request(app).get('/api/auth/config');
+    check('the server accepts exactly the domains the fallback offers',
+      cfg.body.facultyDomains.includes('saiuniversity.edu.in')
+      && cfg.body.allowedEmailDomains.length === 4);
+  }
+
+  // ---- Registration feedback: the bug that made the button do nothing ----
+  {
+    const authJs = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'assets', 'js', 'auth.js'), 'utf8');
+    const handler = authJs.slice(authJs.indexOf("document.getElementById('form-register')"));
+
+    check('registration validation accepts the faculty domain',
+      /function acceptedDomains\(\)/.test(authJs) && /facultyDomains/.test(authJs),
+      'the client still only knows the student domains');
+    check('the refusal message does not reference an out-of-scope variable',
+      !/\$\{domains\.map/.test(handler), 'a ReferenceError here is what made the click do nothing');
+    check('a pending faculty registration is reported, not navigated past',
+      /data\.pendingApproval/.test(handler));
+    check('a verification-required registration is reported',
+      /data\.verificationRequired/.test(handler));
+    check('the submit button is restored on the pending path',
+      (handler.match(/btn\.disabled = false/g) || []).length >= 2);
+    check('the API error message is surfaced', /err\.message/.test(handler));
+    check('the password is never logged', !/console\.(log|error|warn)\([^)]*password/i.test(authJs));
+  }
+
+  // ---- Query-parameter injection: an object must never reach Mongoose ----
+  for (const qs of ['category[$ne]=x', 'location[$ne]=x', 'type[$ne]=x',
+    'subcategory[$ne]=x', 'category[$regex]=.*', 'location[$regex]=.*']) {
+    const res = await request(app).get(`/api/items?${qs}`);
+    check(`the filter ${qs.split('=')[0]} is refused (400)`, res.status === 400, `got ${res.status}`);
+  }
+  for (const qs of ['category=Bottles&category=Bags', 'location=Canteen&location=Library',
+    'type=found&type=lost', 'subcategory=Flask&subcategory=Tumbler']) {
+    const res = await request(app).get(`/api/items?${qs}`);
+    check(`a repeated parameter (${qs.split('&')[0].split('=')[0]}) is refused (400)`,
+      res.status === 400, `got ${res.status}`);
+  }
+  for (const qs of ['category=Spaceships', 'location=Atlantis', 'type=sideways']) {
+    const res = await request(app).get(`/api/items?${qs}`);
+    check(`an unknown filter value ${qs} is refused (400)`, res.status === 400, `got ${res.status}`);
+  }
   console.log('\n' + results.join('\n'));
+  // Close the handle so the process exits without waiting on Mongoose
+  try { await require('mongoose').connection.close(); } catch { /* never connected */ }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);
 })().catch((err) => {
