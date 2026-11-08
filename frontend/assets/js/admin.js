@@ -125,7 +125,7 @@
               ui.esc(i.reportedBy?.name || '—'),
               ui.date(i.date),
               `<select class="select" data-admin-status="${i.id}" aria-label="Status for ${ui.esc(i.title)}">
-                 ${['open', 'claimed', 'returned', 'closed'].filter((s) => s !== 'returned' || s === i.status).map((s) => `<option value="${s}"${s === i.status ? ' selected' : ''}>${s}</option>`).join('')}
+                 ${['open', 'claimed', 'returned'].filter((s) => s !== 'returned' || s === i.status).map((s) => `<option value="${s}"${s === i.status ? ' selected' : ''}>${s}</option>`).join('')}
                </select>`,
               `<button class="btn btn--ghost" data-admin-delete="${i.id}">Delete</button>`
             ])).join('')
@@ -272,8 +272,26 @@
       const suspend = event.target.closest('[data-suspend]');
       const reinstate = event.target.closest('[data-unsuspend]');
       const verify = event.target.closest('[data-verify-found]');
-      const button = remove || role || resolve || dismiss || suspend || reinstate || verify;
+      const approveUser = event.target.closest('[data-approve-user]');
+      const rejectUser = event.target.closest('[data-reject-user]');
+      const button = remove || role || resolve || dismiss || suspend || reinstate || verify
+        || approveUser || rejectUser;
       if (!button) return;
+
+      if (approveUser || rejectUser) {
+        button.disabled = true;
+        try {
+          const id = (approveUser || rejectUser).dataset[approveUser ? 'approveUser' : 'rejectUser'];
+          const body = approveUser
+            ? { approved: true }
+            : { approved: false, note: (window.prompt('Reason for rejecting this application?') || '').trim() };
+          if (!approveUser && !body.note) { button.disabled = false; return; }
+          await api(`/admin/users/${id}/approve`, { method: 'PATCH', body, auth: true });
+          ui.toast(approveUser ? 'Account approved' : 'Application rejected');
+          loadAdmin();
+        } catch (err) { ui.toast(err.message); button.disabled = false; }
+        return;
+      }
 
       if (verify) {
         button.disabled = true;

@@ -102,10 +102,10 @@ const update = async (id, data) =>
   toItem(await one(
     `update items set title=$2, description=$3, category=$4, subcategory=$5,
                       custom_category=$6, location=$7, custom_location=$8, date=$9,
-                      image_url=$10
+                      image_url=$10, type=$11
       where id=$1 returning *`,
     [id, data.title, data.description, data.category, data.subcategory, data.customCategory,
-     data.location, data.customLocation, data.date, data.imageUrl]));
+     data.location, data.customLocation, data.date, data.imageUrl, data.type]));
 
 const setStatus = async (id, status) =>
   toItem(await one('update items set status=$2 where id=$1 returning *', [id, status]));

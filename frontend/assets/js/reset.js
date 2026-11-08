@@ -31,7 +31,7 @@ form.addEventListener('submit', async (event) => {
   const password = document.getElementById('reset-password').value;
   const confirmPassword = document.getElementById('reset-confirm').value;
 
-  if (password.length < 8) return showError('Password must be at least 6 characters.');
+  if (password.length < 8) return showError('Password must be at least 8 characters.');
   if (password !== confirmPassword) return showError('The two passwords do not match.');
 
   const button = document.getElementById('reset-submit');

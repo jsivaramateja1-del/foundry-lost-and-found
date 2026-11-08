@@ -406,6 +406,11 @@ async function openItem(id) {
     if (mine) {
       claimBtn.disabled = true;
       claimBtn.textContent = 'This is your listing';
+    } else if (item.type !== 'found') {
+      // Only found items can be claimed; the server rejects the rest, so do not
+      // offer the button and let the user write a message for nothing.
+      claimBtn.disabled = true;
+      claimBtn.textContent = 'Only found items can be claimed';
     } else if (item.status !== 'open') {
       claimBtn.disabled = true;
       claimBtn.textContent = `Already ${item.status}`;
@@ -734,8 +739,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           item: state.activeItemId,
           reason: document.getElementById('ri-reason').value,
           details: document.getElementById('ri-details').value.trim()
-        },
-        auth: true
+        }
       });
       reportForm.reset();
       showFormMessage('report-item-success', 'Thank you. An administrator will review this listing.');
@@ -766,11 +770,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 });
 
-/**
- * Fill the report form's location datalist from the campus registry, so a user
- * picks a real place instead of typing one that no map can place. Failure is
- * silent: typing a location by hand must still work.
- */
 // Campus Explorer location names are not in the server's fixed location list,
 // so appending them to the report form's select made every such listing fail
 // validation with 'Unknown location'. The Explorer page is the place to browse

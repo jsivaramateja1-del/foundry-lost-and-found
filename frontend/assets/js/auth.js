@@ -115,7 +115,7 @@ document.querySelectorAll('[data-toggle-password]').forEach((button) => {
  * 0 = too short, 1 = weak, 2 = fair, 3 = good, 4 = strong.
  */
 function scorePassword(value) {
-  if (!value) return { score: 0, label: 'Use at least 6 characters' };
+  if (!value) return { score: 0, label: 'Use at least 8 characters' };
   if (value.length < 6) return { score: 0, label: 'Too short — at least 6 characters' };
 
   let score = 1;

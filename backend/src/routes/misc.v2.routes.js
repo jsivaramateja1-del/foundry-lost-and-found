@@ -59,11 +59,11 @@ dashboard.get('/me', protect, async (req, res, next) => {
     const unread = await one(
       'select count(*)::int as n from notifications where user_id=$1 and read=false', [req.user.id]);
     const claimsMade = await many(
-      `select c.id, c.status, c.message, c.created_at, i.title as item_title
+      `select c.id, c.item, c.claimant, c.status, c.message, c.created_at, i.title as item_title
          from claims c join items i on i.id = c.item
         where c.claimant = $1 order by c.created_at desc limit 50`, [req.user.id]);
     const claimsReceived = await many(
-      `select c.id, c.status, c.message, c.created_at, u.name as claimant_name
+      `select c.id, c.item, c.claimant, c.status, c.message, c.created_at, u.name as claimant_name
          from claims c join items i on i.id = c.item join users u on u.id = c.claimant
         where i.reported_by = $1 order by c.created_at desc limit 50`, [req.user.id]);
 
@@ -177,7 +177,8 @@ reports.post('/', protect, async (req, res, next) => {
   try {
     const itemId = typeof req.body.item === 'string' ? req.body.item : '';
     const reason = typeof req.body.reason === 'string' ? req.body.reason : '';
-    if (!['spam','inappropriate','fake','other'].includes(reason)) {
+    // Must cover every option the report form offers, or two of them 400.
+    if (!['spam','inappropriate','suspicious','incorrect','fake','other'].includes(reason)) {
       return res.status(400).json({ message: 'Unknown report reason' });
     }
     const item = await items.findById(itemId);
@@ -212,7 +213,9 @@ admin.get('/users', protect, requireRole('admin','superadmin'), async (req, res,
       users: rows.map((r) => ({ ...users.toSafeObject(users.toUser(r)),
                                 pendingApproval: r.pending_approval,
                                 approvalNote: r.approval_note,
-                                emailVerified: r.email_verified }))
+                                emailVerified: r.email_verified,
+                                suspended: r.suspended,
+                                suspendedReason: r.suspended_reason }))
     });
   } catch (err) { next(err); }
 });

@@ -151,7 +151,8 @@ router.put('/:id', protect, async (req, res, next) => {
       location: LOCATIONS.includes(oneValue(b.location)) ? oneValue(b.location) : existing.location,
       customLocation: b.customLocation !== undefined ? oneValue(b.customLocation) : existing.customLocation,
       date: /^\d{4}-\d{2}-\d{2}$/.test(oneValue(b.date)) ? oneValue(b.date) : existing.date,
-      imageUrl: b.imageUrl !== undefined ? oneValue(b.imageUrl) : existing.imageUrl
+      imageUrl: b.imageUrl !== undefined ? oneValue(b.imageUrl) : existing.imageUrl,
+      type: TYPES.includes(oneValue(b.type)) ? oneValue(b.type) : existing.type
     });
     res.status(200).json({ item: updated });
   } catch (err) { next(err); }
@@ -195,6 +196,13 @@ router.patch('/:id/status', protect, async (req, res, next) => {
     // An owner moves their listing through its lifecycle; only staff may hide.
     if (next_ === 'hidden' && !isStaff) {
       return res.status(403).json({ message: 'Only a moderator can hide a listing' });
+    }
+    // An owner must not be able to undo a moderation decision: a listing that
+    // staff hid stays hidden until staff restore it.
+    if (!isStaff && existing.status === 'hidden') {
+      return res.status(403).json({
+        message: 'This listing was hidden by a moderator and cannot be reopened by its owner'
+      });
     }
     const allowed = next_ === 'hidden' ? STAFF_STATUSES : OWNER_STATUSES;
     if (!allowed.includes(next_)) {

@@ -82,10 +82,22 @@
         : '<tr><td colspan="6" style="color:var(--muted)">You have not posted anything yet.</td></tr>';
 
       // --- claims you made ---
+      // The six-digit handover code is returned only by /claims/mine. Without
+      // this the claimant never sees it and the owner's prompt cannot be met.
+      try {
+        const mine = await api('/claims/mine', { auth: true });
+        const codes = {};
+        (mine.claims || []).forEach((c) => { if (c.handoverCode) codes[c.id] = c.handoverCode; });
+        data.claims.forEach((c) => { if (codes[c.id]) c.handoverCode = codes[c.id]; });
+      } catch (err) { /* the table still renders, just without codes */ }
+
       document.getElementById('claims-body').innerHTML = data.claims.length
         ? data.claims.map((c) => row([
             ui.esc(c.itemTitle || c.item?.title || 'Item removed'),
-            ui.esc(String(c.message).slice(0, 80)),
+            ui.esc(String(c.message).slice(0, 80))
+              + (c.handoverCode
+                  ? ` <strong>Handover code: ${ui.esc(c.handoverCode)}</strong>`
+                  : ''),
             statusTag(c.status),
             ui.date(c.createdAt || c.created_at)
           ])).join('')
