@@ -156,7 +156,13 @@ const { connectDB, closeDB, many, one, transaction } = require('../src/config/pg
     check('a verified but unapproved faculty account still cannot sign in (403)',
       pendingLogin.status === 403, `got ${pendingLogin.status}`);
 
+    // Approving must also verify the address: an applicant whose verification
+    // email never arrived would otherwise be approved and still unable to sign in.
     await users.approve(profRow.id);
+    const afterApproval = await users.findById(profRow.id);
+    check('approving an account also marks its address verified',
+      afterApproval.emailVerified === true, `emailVerified=${afterApproval.emailVerified}`);
+
     const approvedLogin = await request(app).post('/api/auth/login')
       .send({ email: 'prof@saiuniversity.edu.in', password: 'secret123' });
     check('an approved faculty account can sign in (200)',

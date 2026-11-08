@@ -29,7 +29,7 @@ Built as a B.Tech Computer Science project.
 
 | Layer | Choice |
 | --- | --- |
-| Database | **PostgreSQL 17** on Supabase, accessed with `pg` (node-postgres) |
+| Database | **PostgreSQL** on Supabase, accessed with `pg` (node-postgres) |
 | Backend | Node.js 20, Express 4 |
 | Auth | JWT with a `token_version` check, bcrypt password hashing |
 | Email | **Brevo** HTTP API (transactional email) |
@@ -40,7 +40,8 @@ Built as a B.Tech Computer Science project.
 
 > **MongoDB is gone.** The project was originally built on MongoDB with Mongoose
 > and was migrated completely to PostgreSQL. No Mongoose code, dependency or
-> test remains, and CI fails if one is reintroduced.
+> test remains, and CI fails if `require('mongoose')` reappears anywhere under
+> `backend/src`, `backend/scripts` or `backend/test`.
 
 ---
 
@@ -88,8 +89,8 @@ frontend/
 
 ## 4. Setup
 
-You need **Node.js 20** and a **PostgreSQL database** (Supabase free tier is
-enough).
+You need **Node.js 20**, a **PostgreSQL database** (Supabase free tier is enough),
+and the **`psql` client** on your PATH — `npm run db:init` shells out to it.
 
 ```bash
 cd backend
@@ -124,6 +125,11 @@ the sender address at boot so you can see whether email is configured.
 | `PG_CA_CERT_PATH` | recommended | Path to `prod-ca-2021.crt` for verified TLS |
 | `PG_SSL_NO_VERIFY` | fallback | `true` accepts any certificate. Logs a warning |
 | `PG_POOL_MAX` | optional | Pool size **per process** (default 10) |
+| `PG_NO_SSL` | testing only | `true` disables TLS entirely — stronger than `PG_SSL_NO_VERIFY` |
+| `JWT_EXPIRES_IN` | optional | Session lifetime (default `7d`) |
+| `PORT` | optional | Listen port (default 5000) |
+| `BREVO_SENDER_NAME` | optional | Display name on outgoing mail |
+| `RATE_LIMIT_*` | optional | `AUTH_MAX`, `ITEMS_IP_MAX`, `ITEMS_MAX`, `CLAIMS_IP_MAX`, `CLAIMS_MAX`, `REPORTS_IP_MAX`, `REPORTS_MAX` |
 
 ### Why the pooler string
 
@@ -141,8 +147,12 @@ works. The code warns at startup if `DATABASE_URL` points at the direct host.
 | --- | --- |
 | `…@scds.saiuniversity.edu.in` | student |
 | `…@sas`, `…@sol`, `…@sahs.saiuniversity.edu.in` | student |
+| **any other subdomain**, e.g. `…@cs.saiuniversity.edu.in` | student — the server accepts any subdomain |
 | `…@saiuniversity.edu.in` (no subdomain) | **pending faculty application** |
-| anything else | refused |
+| anything not under `saiuniversity.edu.in` | refused |
+
+The browser form offers only the four school domains, but the API accepts any
+subdomain of the university domain. A test asserts this.
 
 Any subdomain of `saiuniversity.edu.in` is a student address. The bare parent
 domain is staff, and staff are not self-service: the account is created with
@@ -176,9 +186,12 @@ A faculty applicant goes through the same steps, plus an administrator decision.
 | --- | --- |
 | `student` | post, edit and delete their own listings; claim; confirm their own handover |
 | `faculty` | the same as a student. It is a label, **not** a staff role |
-| `moderator` | hide a listing; restore a hidden listing to `open` — never their own, and never one that is visible |
-| `admin` | moderation, suspend and reinstate accounts, approve applications, verify found listings |
-| `superadmin` | everything above, plus changing roles and creating campus locations |
+| `moderator` | hide any listing including their own; restore a hidden listing to `open` — but not their own, and only one that is actually hidden. Also verify found listings (not their own), read the stats, listing, report and audit panels, and resolve or dismiss reports |
+| `admin` | everything a moderator can, plus suspend and reinstate accounts, approve applications, change a listing's status or delete it, and create campus locations |
+| `superadmin` | everything above, plus changing a user's role |
+
+The self-dealing and visibility restrictions apply to **restore**, not to hide —
+taking a visible listing down is the point of moderation.
 
 Authorization is enforced on the server. The UI hides controls it knows will be
 refused, but nothing depends on that.
@@ -228,6 +241,7 @@ All responses are JSON, including errors. Authenticated routes need
 | POST | `/forgot-password` | always answers the same way |
 | POST | `/reset-password` | retires all existing sessions |
 | PATCH | `/preferences` | leaderboard opt-out (students only) |
+| POST | `/preferences` | alias of the PATCH |
 | POST | `/logout` | acknowledgement; tokens are stateless |
 | GET | `/me` | the signed-in user |
 
@@ -241,9 +255,12 @@ All responses are JSON, including errors. Authenticated routes need
 `PATCH /:id/review`, `POST /:id/complete`.
 
 ### Everything else
-`GET/PATCH /api/notifications` (`/read-all`, `/:id/read`), `GET /api/dashboard/me`,
+`GET /api/health` (liveness) and `GET /api/health/ready` (503 when the database
+is unreachable), `GET/PATCH /api/notifications` (`/read-all`, `/:id/read`),
+`GET /api/dashboard/me`,
 `GET /api/leaderboard?period=week|month|all`, `GET/POST /api/campus/locations`,
-`POST /api/reports`, and the admin surface under `/api/admin`: `GET /stats`,
+`POST /api/reports` (any signed-in user) and `GET /api/reports` (the pending
+queue, moderators and above), and the admin surface under `/api/admin`: `GET /stats`,
 `/items`, `/claims`, `/reports`, `/audit`, `/users`; `PATCH /items/:id/verify`,
 `/items/:id/status`, `/users/:id/approve`, `/users/:id/suspend`,
 `/users/:id/role`, `/reports/:id`; `DELETE /items/:id`.
@@ -285,14 +302,19 @@ npm run test:browser     # Playwright against the real UI
 `TEST_DATABASE_URL` must point at a **disposable** database: the suites truncate
 their tables.
 
-Two suites refuse to skip when `CI=true`. A skip in CI is a lie — the workflow is
-supposed to provide a database.
+Three suites refuse to skip when `CI=true` — `test:pg`, `test:boot-v2` and
+`test:deploy`. A skip in CI is a lie: the workflow is supposed to provide a
+database.
+
+`test:deploy` without `TEST_DATABASE_URL` still runs five static checks (the
+scripts and files a deploy needs) but skips the live boot, so it does **not**
+prove the server serves. The browser suite needs `npm run seed:browser` first.
 
 ---
 
 ## 13. Continuous integration
 
-One job, against a real `postgres:16` service:
+`ci.yml` runs one job against a real `postgres:16` service:
 
 1. `npm ci`
 2. syntax-check every JavaScript file, including `server.v2.js`
@@ -307,6 +329,10 @@ One job, against a real `postgres:16` service:
 
 Step 8 exists because CI once tested the code and never the deployment, and two
 outages reached production with a green pipeline.
+
+Two further workflows: `health-check.yml` probes the live service daily, and
+`weekly-audit.yml` repeats the dependency audit, schema, integration and boot
+tests every Monday.
 
 ---
 
@@ -337,18 +363,23 @@ Stated plainly, because they are real:
 
 - **Email deliverability.** Brevo flags a `gmail.com` sender as a freemail domain
   that fails DMARC alignment, so Gmail and Yahoo may spam-filter or reject
-  verification mail. A domain with SPF, DKIM and DMARC fixes it. The resend link
-  and an administrator's ability to verify an account are the workarounds.
+  verification mail. A domain with SPF, DKIM and DMARC fixes it. The workarounds
+  are the resend link, and an administrator approving the account — approval also
+  marks the address verified, so an applicant whose mail never arrived can still
+  be let in.
 - **No campus seeder.** `campus_locations` is created but never populated; the
   Explorer page is empty until an administrator adds each location.
-- **No ledger reconciliation tool.** There is no script to compare
-  `users.points` against the sum of `point_events`.
+- **No ledger reconciliation *script*.** The comparison itself exists —
+  `points.auditUser()` returns `storedPoints`, `ledgerPoints` and `inSync`, and
+  the dashboard shows it as `pointsAudit` — but there is no CLI to sweep every
+  user and repair drift.
 - **No reapplication after rejection.** A rejected faculty account keeps its row,
   and the unique email index means re-registering returns 409.
 - **TLS is not exercised in CI.** The deploy check uses a local plain Postgres,
   so the Supabase certificate path is verified only in production.
-- **The Render Start Command is not recorded in the repository.** If it is edited
-  in the dashboard, nothing in CI notices.
+- **The Render Start Command is not pinned in the repository.** It is documented
+  in `test/deploy.test.js` and above, but if it is edited in the dashboard to
+  something else, CI keeps passing because it runs the repo's own script.
 
 ---
 

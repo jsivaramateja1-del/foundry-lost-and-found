@@ -120,7 +120,12 @@ const setPasswordAndBumpVersion = async (id, hash) =>
 
 const approve = async (id) =>
   toUser(await one(
-    `update users set pending_approval = false, suspended = false, approval_note = ''
+    // An administrator approving an application is vouching for the person, so
+    // the address is marked verified too. Without this an approved applicant
+    // whose verification email never arrived is still refused at login, which
+    // leaves the approval with no effect.
+    `update users set pending_approval = false, suspended = false, approval_note = '',
+                      email_verified = true
       where id = $1 returning *`, [id]));
 
 const reject = async (id, note) =>
