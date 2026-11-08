@@ -576,6 +576,21 @@ ul { margin: 0; padding: 0; list-style: none; }
 /* forms */
 .form-grid { display: grid; gap: 1rem; }
 .form-grid .two { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.link-button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+.link-button:disabled { opacity: .6; cursor: default; }
+
 .form-note { font-size: 0.78rem; color: var(--muted); }
 .form-error {
   display: none;

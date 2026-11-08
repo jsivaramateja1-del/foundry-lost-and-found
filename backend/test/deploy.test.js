@@ -70,7 +70,10 @@ const base = `http://127.0.0.1:${PORT}`;
       CLIENT_ORIGIN: base
     },
     stdio: ['ignore', 'pipe', 'pipe'],
-    shell: process.platform === 'win32'
+    shell: process.platform === 'win32',
+    // npm spawns the real server as a grandchild. Killing npm leaves it
+    // running and holding the port, so start a new process group and kill that.
+    detached: process.platform !== 'win32'
   });
 
   let out = '';
@@ -78,6 +81,7 @@ const base = `http://127.0.0.1:${PORT}`;
   child.stdout.on('data', (d) => { out += d.toString(); });
   child.stderr.on('data', (d) => { out += d.toString(); });
   child.on('exit', (code) => { exited = true; out += `\n[exited ${code}]`; });
+  child.on('error', (err) => { exited = true; out += `\n[spawn error ${err.code || err.message}]`; });
 
   let health = null;
   for (let i = 0; i < 60; i += 1) {
@@ -89,20 +93,44 @@ const base = `http://127.0.0.1:${PORT}`;
     await new Promise((r) => setTimeout(r, 500));
   }
 
-  check('`npm run start:pg` serves /api/health', Boolean(health),
-    exited ? `process exited. Output:\n${out.slice(0, 800)}` : 'no response within 30s');
-  if (health) {
-    check('/api/health reports the database connected', health.db && health.db.ok === true,
-      JSON.stringify(health.db));
-    const ready = await fetch(`${base}/api/health/ready`);
-    check('/api/health/ready returns 200', ready.status === 200, `status ${ready.status}`);
-    const items = await fetch(`${base}/api/items`);
-    check('/api/items answers 200 (schema applied)', items.status === 200, `status ${items.status}`);
-  }
+  /** Signals the whole process group, falling back to the direct child. */
+  const killGroup = (signal) => {
+    try { process.kill(-child.pid, signal); }
+    catch { try { child.kill(signal); } catch { /* already gone */ } }
+  };
+  const stillRunning = () => {
+    try { process.kill(-child.pid, 0); return true; } catch { return false; }
+  };
 
-  child.kill('SIGTERM');
-  await new Promise((r) => setTimeout(r, 800));
-  if (!exited) child.kill('SIGKILL');
+  try {
+    check('`npm run start:pg` serves /api/health', Boolean(health),
+      exited ? `process exited. Output:\n${out.slice(0, 800)}` : 'no response within 30s');
+
+    if (health) {
+      check('/api/health reports the database connected', health.db && health.db.ok === true,
+        JSON.stringify(health.db));
+
+      try {
+        const ready = await fetch(`${base}/api/health/ready`);
+        check('/api/health/ready returns 200', ready.status === 200, `status ${ready.status}`);
+      } catch (err) {
+        check('/api/health/ready returns 200', false, err.message);
+      }
+
+      try {
+        const items = await fetch(`${base}/api/items`);
+        check('/api/items answers 200 (schema applied)', items.status === 200, `status ${items.status}`);
+      } catch (err) {
+        check('/api/items answers 200 (schema applied)', false, err.message);
+      }
+    }
+  } finally {
+    // Always reap the server, including on the failure paths above — a leaked
+    // process holds the port and the inherited stdout pipe.
+    killGroup('SIGTERM');
+    await new Promise((r) => setTimeout(r, 800));
+    if (stillRunning()) killGroup('SIGKILL');
+  }
 
   console.log('\n' + results.join('\n'));
   console.log(`\n${passed} passed, ${failed} failed`);

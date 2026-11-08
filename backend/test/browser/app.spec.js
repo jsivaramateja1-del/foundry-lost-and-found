@@ -97,6 +97,15 @@ test.describe('registration validation', () => {
     await expect(page.locator('#register-error')).toBeVisible({ timeout: 10000 });
   });
 
+  test('the resend link is reachable without registering first', async ({ page }) => {
+    await page.goto('/auth.html');
+    await page.getByRole('tab', { name: /create account/i }).click().catch(() => {});
+    // A returning applicant whose email never arrived must be able to ask for a
+    // new one. The link used to be hidden until a registration succeeded in the
+    // same session, which excluded exactly the person it was written for.
+    await expect(page.locator('#resend-verification')).toBeVisible();
+  });
+
   test('a school subdomain is accepted by client validation', async ({ page }) => {
     await page.goto('/auth.html');
     await page.getByRole('tab', { name: /create account/i }).click().catch(() => {});

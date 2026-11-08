@@ -144,12 +144,16 @@ registerPassword.addEventListener('input', () => {
 const resendBtn = document.getElementById('resend-verification');
 if (resendBtn) {
   resendBtn.addEventListener('click', async () => {
-    // Whichever address the user has already typed, on either tab.
-    const email = (document.getElementById('register-email')?.value
-      || document.getElementById('login-email')?.value || '').trim();
+    // Use the tab the user is actually on, so a leftover value from the other
+    // form cannot win over the address they just typed.
+    const onRegister = document.getElementById('tab-register')?.getAttribute('aria-selected') === 'true';
+    const slot = onRegister ? 'register-error' : 'login-error';
+    const email = ((onRegister
+      ? document.getElementById('register-email')
+      : document.getElementById('login-email'))?.value || '').trim();
 
     if (!email) {
-      showError('register-error', 'Enter your university email address first.');
+      showError(slot, 'Enter your university email address first.');
       return;
     }
     resendBtn.disabled = true;
@@ -159,7 +163,7 @@ if (resendBtn) {
       const result = await api('/auth/resend-verification', { method: 'POST', body: { email } });
       showNotice(result.message || 'If that address needs verifying, a new link is on its way.');
     } catch (err) {
-      showError('register-error', err.message);
+      showError(slot, err.message);
     } finally {
       resendBtn.disabled = false;
       resendBtn.textContent = original;
