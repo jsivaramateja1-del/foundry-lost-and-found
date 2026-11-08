@@ -465,8 +465,8 @@ admin.patch('/users/:id/suspend', protect, requireRole('admin', 'superadmin'), a
 admin.patch('/users/:id/role', protect, requireRole('superadmin'), async (req, res, next) => {
   try {
     const role = typeof req.body.role === 'string' ? req.body.role.trim() : '';
-    if (!['student', 'moderator', 'admin'].includes(role)) {
-      return res.status(400).json({ message: 'role must be student, moderator or admin' });
+    if (!['student', 'faculty', 'moderator', 'admin'].includes(role)) {
+      return res.status(400).json({ message: 'role must be student, faculty, moderator or admin' });
     }
     const target = await users.findById(req.params.id);
     if (!target) return res.status(404).json({ message: 'User not found' });

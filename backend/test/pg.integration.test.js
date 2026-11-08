@@ -97,6 +97,43 @@ const { connectDB, closeDB, many, one, transaction } = require('../src/config/pg
       .send({ email: 'integration@scds.saiuniversity.edu.in', password: 'wrong' });
     check('a wrong password is refused (401)', wrongPw.status === 401, `got ${wrongPw.status}`);
 
+    // ---------- faculty applications ----------
+    const facultyReg = await request(app).post('/api/auth/register')
+      .send({ name: 'Prof Applicant', email: 'prof@saiuniversity.edu.in', password: 'secret123' });
+    check('a faculty address registers (201)', facultyReg.status === 201, `got ${facultyReg.status}`);
+    check('a faculty address is flagged as a pending application',
+      facultyReg.body.pendingApproval === true, JSON.stringify(facultyReg.body));
+    check('a faculty address gets the faculty role', facultyReg.body.role === 'faculty');
+
+    const studentReg = await request(app).post('/api/auth/register')
+      .send({ name: 'Student Applicant', email: 'kid@scds.saiuniversity.edu.in', password: 'secret123' });
+    check('a school subdomain is NOT a pending application',
+      studentReg.body.pendingApproval === false, JSON.stringify(studentReg.body));
+    check('a school subdomain gets the student role', studentReg.body.role === 'student');
+
+    const profRow = await users.findByEmail('prof@saiuniversity.edu.in');
+    check('the faculty application is stored as pending', profRow.pendingApproval === true);
+    check('the faculty application is stored with the faculty role', profRow.role === 'faculty');
+
+    // Verify the address, then confirm approval is still required.
+    const profToken = crypto.randomBytes(32).toString('hex');
+    await users.setVerificationToken(profRow.id,
+      crypto.createHash('sha256').update(profToken).digest('hex'),
+      new Date(Date.now() + 60000));
+    await request(app).get(`/api/auth/verify?token=${profToken}`);
+
+    const pendingLogin = await request(app).post('/api/auth/login')
+      .send({ email: 'prof@saiuniversity.edu.in', password: 'secret123' });
+    check('a verified but unapproved faculty account still cannot sign in (403)',
+      pendingLogin.status === 403, `got ${pendingLogin.status}`);
+
+    await users.approve(profRow.id);
+    const approvedLogin = await request(app).post('/api/auth/login')
+      .send({ email: 'prof@saiuniversity.edu.in', password: 'secret123' });
+    check('an approved faculty account can sign in (200)',
+      approvedLogin.status === 200 && Boolean(approvedLogin.body.token),
+      `got ${approvedLogin.status}`);
+
     // ---------- items ----------
     const auth = { Authorization: `Bearer ${login.body.token}` };
     const created = await request(app).post('/api/items').set(auth).send({

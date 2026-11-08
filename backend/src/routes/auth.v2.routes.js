@@ -22,6 +22,17 @@ const appUrl = () => (process.env.APP_URL || 'http://localhost:5000').replace(/\
 const sha256 = (v) => crypto.createHash('sha256').update(v).digest('hex');
 const newToken = () => crypto.randomBytes(32).toString('hex');
 
+/**
+ * True when the address is on the parent domain itself, with no subdomain.
+ * School addresses (scds., sas., sol., sahs.) are students; staff sit on the
+ * parent domain. This mirrors isFacultyEmail in the retired Mongo code.
+ */
+const isFacultyEmail = (email) => {
+  const at = String(email || '').toLowerCase().lastIndexOf('@');
+  if (at < 1) return false;
+  return String(email).toLowerCase().slice(at + 1) === PARENT_DOMAIN;
+};
+
 /** True for saiuniversity.edu.in itself or any subdomain of it — never a lookalike. */
 const isUniversityEmail = (email) => {
   const at = String(email || '').toLowerCase().lastIndexOf('@');
@@ -76,8 +87,16 @@ router.post('/register', authLimiter, async (req, res, next) => {
     }
     if (password.length < 8) return res.status(400).json({ message: 'Password must be at least 8 characters' });
 
+    // Staff are not self-service: a faculty address creates a pending
+    // application that an administrator must approve before it can be used.
+    const faculty = isFacultyEmail(email);
+
     const hash = await bcrypt.hash(password, 10);
-    const user = await users.create({ name, email, password: hash });
+    const user = await users.create({
+      name, email, password: hash,
+      role: faculty ? 'faculty' : 'student',
+      pendingApproval: faculty
+    });
     if (!user) return res.status(409).json({ message: 'An account with that email already exists' });
 
     const token = newToken();
@@ -101,6 +120,10 @@ router.post('/register', authLimiter, async (req, res, next) => {
         : 'Your account was created, but we could not send the verification email. Please contact an administrator.',
       pendingVerification: true,
       verificationRequired: true,
+      // The sign-in page branches on this to explain the application state
+      // rather than telling the applicant to simply check their email.
+      pendingApproval: faculty,
+      role: user.role,
       emailSent: sent.ok === true
     });
   } catch (err) {
@@ -271,3 +294,4 @@ router.get('/me', protect, async (req, res) => {
 
 module.exports = router;
 module.exports.isUniversityEmail = isUniversityEmail;
+module.exports.isFacultyEmail = isFacultyEmail;
