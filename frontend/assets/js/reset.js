@@ -50,3 +50,9 @@ form.addEventListener('submit', async (event) => {
     button.textContent = 'Save new password';
   }
 });
+
+/* Wire the theme toggle. Without this the button on this page does nothing,
+   because initTheme() is only called from the pages that load a page script. */
+document.addEventListener('DOMContentLoaded', function () {
+  if (typeof initTheme === 'function') initTheme();
+});
