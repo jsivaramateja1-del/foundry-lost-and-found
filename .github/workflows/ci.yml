@@ -94,3 +94,69 @@ jobs:
           name: test-output
           path: backend/*.log
           if-no-files-found: ignore
+
+  # The PostgreSQL backend is what production actually runs, so it gets its own
+  # job against a real database. Before this existed, every other step tested
+  # the retired MongoDB code and a broken Postgres build passed CI.
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: foundry
+          POSTGRES_PASSWORD: foundry_ci_only
+          POSTGRES_DB: foundry_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      TEST_DATABASE_URL: postgres://foundry:foundry_ci_only@localhost:5432/foundry_test
+      CI: 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies (reproducible)
+        working-directory: backend
+        run: npm ci
+
+      - name: Apply the schema
+        working-directory: backend
+        run: psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f db/schema.sql
+
+      - name: Apply the schema a second time (it must be idempotent)
+        working-directory: backend
+        run: psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f db/schema.sql
+
+      - name: Auth unit tests (no database needed)
+        working-directory: backend
+        run: npm run test:auth-v2
+
+      - name: PostgreSQL integration tests
+        working-directory: backend
+        run: npm run test:pg
+
+      - name: Boot the real server against Postgres
+        working-directory: backend
+        run: npm run test:boot-v2
+
+      - name: Keep the output when something fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-job-output
+          path: backend/*.log
+          if-no-files-found: ignore

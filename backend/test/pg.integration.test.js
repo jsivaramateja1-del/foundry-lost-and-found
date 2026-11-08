@@ -26,6 +26,13 @@ const check = (name, cond, detail = '') => {
 };
 
 if (!URL) {
+  if (process.env.CI === 'true') {
+    // In CI a skip is a lie: the workflow is supposed to provide a database,
+    // so a missing URL means the job is misconfigured, not that there is
+    // nothing to test.
+    console.error('\n  FAILED — TEST_DATABASE_URL is required in CI.\n');
+    process.exit(1);
+  }
   console.log('\n  SKIPPED — TEST_DATABASE_URL is not set.');
   console.log('  These tests need a real Postgres database and will not run without one.');
   console.log('\n0 passed, 0 failed, SUITE SKIPPED\n');
