@@ -21,7 +21,11 @@
     "test:boot": "node test/boot.test.js",
     "test:ledger": "node test/ledger.test.js",
     "seed:campus": "node scripts/seed-campus-locations.js",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "start:pg": "node server.v2.js",
+    "dev:pg": "nodemon server.v2.js",
+    "test:auth-v2": "node test/auth-v2.test.js",
+    "test:pg": "node test/pg.integration.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -32,7 +36,8 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.6.1",
-    "nodemailer": "^10.3.1"
+    "nodemailer": "^10.3.1",
+    "pg": "^8.13.1"
   },
   "devDependencies": {
     "mongodb-memory-server": "^10.0.2",
