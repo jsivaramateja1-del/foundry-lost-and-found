@@ -1508,7 +1508,7 @@ const check = (name, condition, detail = '') => {
 
     const facultyUserDoc = await User.findOne({ email: 'faculty-applicant@saiuniversity.edu.in' });
     check('FACULTY-LIFECYCLE: the account is faculty and awaiting approval',
-      Boolean(facultyUserDoc) && facultyUser.role === 'faculty' && facultyUserDoc.pendingApproval === true,
+      Boolean(facultyUserDoc) && facultyUserDoc.role === 'faculty' && facultyUserDoc.pendingApproval === true,
       facultyUserDoc ? `${facultyUserDoc.role} pending=${facultyUserDoc.pendingApproval}` : 'user missing');
 
     // --- 3. login is refused while pending ---
