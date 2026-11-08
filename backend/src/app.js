@@ -17,6 +17,14 @@ const app = express();
 
 // Security headers. crossOriginResourcePolicy is relaxed so the frontend
 // can load images from this API.
+// Render terminates TLS at its own proxy and forwards the client address in
+// X-Forwarded-For. Without this, req.ip is the proxy's address, so every
+// anonymous visitor shares one rate-limit bucket and one attacker can lock out
+// everyone. Exactly ONE hop is trusted: Express then takes the address that
+// Render itself appended and ignores anything a client puts further left, so a
+// spoofed X-Forwarded-For cannot be used to dodge the limiter.
+app.set('trust proxy', 1);
+
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
 // CORS - allow the configured frontend origins, or everything in development

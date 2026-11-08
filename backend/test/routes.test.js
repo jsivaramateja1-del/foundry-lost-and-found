@@ -320,6 +320,34 @@ const check = (name, cond, detail = '') => {
       'the permissive fallback is still present');
   }
 
+  // ---- Render proxy: exactly one hop trusted, spoofing cannot bypass ----
+  {
+    const appSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
+    check('the app trusts exactly one proxy hop',
+      /app\.set\('trust proxy', 1\)/.test(appSrc),
+      'trust proxy is missing or set to a blanket true');
+
+    // Prove the hop semantics with the same Express version the app uses: with
+    // one trusted hop, the address Render appends wins and a client-supplied
+    // prefix is ignored.
+    const express = require('express');
+    const mini = express();
+    mini.set('trust proxy', 1);
+    mini.get('/ip', (req, res) => res.json({ ip: req.ip }));
+
+    const spoofed = await request(mini).get('/ip')
+      .set('X-Forwarded-For', '9.9.9.9, 203.0.113.7');
+    check('a spoofed X-Forwarded-For prefix is ignored',
+      spoofed.body.ip === '203.0.113.7', `got ${spoofed.body.ip}`);
+
+    const second = await request(mini).get('/ip')
+      .set('X-Forwarded-For', '198.51.100.4');
+    check('a different real client gets a different IP',
+      second.body.ip === '198.51.100.4', `got ${second.body.ip}`);
+    check('the two clients are therefore in different rate-limit buckets',
+      spoofed.body.ip !== second.body.ip);
+  }
+
   console.log('\n' + results.join('\n'));
   // Close the handle so the process exits without waiting on Mongoose
   try { await require('mongoose').connection.close(); } catch { /* never connected */ }
