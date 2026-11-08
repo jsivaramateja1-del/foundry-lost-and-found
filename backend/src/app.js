@@ -25,7 +25,22 @@ const app = express();
 // spoofed X-Forwarded-For cannot be used to dodge the limiter.
 app.set('trust proxy', 1);
 
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  // The Campus Explorer loads Leaflet from unpkg and map tiles from
+  // OpenStreetMap. helmet's default policy allows scripts from 'self' only, so
+  // without these entries the map silently fails to draw — the browser blocks
+  // the library and the page shows an empty box. Nothing else is widened.
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      'script-src': ["'self'", 'https://unpkg.com'],
+      'style-src': ["'self'", "'unsafe-inline'", 'https://unpkg.com'],
+      'img-src': ["'self'", 'data:', 'https://*.tile.openstreetmap.org', 'https://unpkg.com'],
+      'connect-src': ["'self'", 'https://*.tile.openstreetmap.org']
+    }
+  }
+}));
 
 // CORS - allow the configured frontend origins, or everything in development
 const origins = (process.env.CLIENT_ORIGIN || '')
