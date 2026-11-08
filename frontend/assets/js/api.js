@@ -10,12 +10,22 @@
  * to the local backend port.
  */
 const API_BASE = (() => {
-  const { protocol, hostname, port } = window.location;
+  const { protocol } = window.location;
+
+  // Opened straight off disk: there is no origin, so fall back to the dev port.
   if (protocol === 'file:') return 'http://localhost:5000/api';
-  // Served by our own Express server (port 5000 by default)
-  if (port === '5000' || port === '') return `${window.location.origin}/api`;
-  // Live Server / any other static preview
-  return `http://${hostname || 'localhost'}:5000/api`;
+
+  // An explicit override wins (useful for a static preview against a separate
+  // backend): set window.FOUNDRY_API_BASE before this script loads.
+  if (typeof window.FOUNDRY_API_BASE === 'string' && window.FOUNDRY_API_BASE) {
+    return window.FOUNDRY_API_BASE.replace(/\/+$/, '');
+  }
+
+  // Otherwise the API is on the same origin that served this page. Hardcoding
+  // port 5000 for every other port meant the app silently called nothing
+  // whenever it ran on any other port — which is how it behaved under the
+  // browser tests, and would have on any deployment not using the default port.
+  return `${window.location.origin}/api`;
 })();
 
 const TOKEN_KEY = 'foundry.token';
