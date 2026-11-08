@@ -48,13 +48,22 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-app.get('/api/health/ready', (req, res) => {
+app.get('/api/health/ready', async (req, res) => {
+  // Must do a real round-trip. Checking that the pool object exists returns 200
+  // for the whole life of the process, so a dead database would look healthy.
   const { db } = require('./config/pg');
   let ok = false;
-  try { ok = Boolean(db()); } catch { ok = false; }
+  let reason = 'not connected';
+  try {
+    const pool = db();
+    if (pool) { await pool.query('select 1'); ok = true; reason = 'ok'; }
+  } catch (err) {
+    reason = err.code || err.message;
+  }
   res.status(ok ? 200 : 503).json({
     status: ok ? 'ready' : 'not-ready', service: 'foundry-api',
-    time: new Date().toISOString(), db: { state: ok ? 'connected' : 'disconnected', ok }
+    time: new Date().toISOString(),
+    db: { state: ok ? 'connected' : 'disconnected', ok, reason }
   });
 });
 

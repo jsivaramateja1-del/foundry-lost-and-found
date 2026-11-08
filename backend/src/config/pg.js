@@ -80,7 +80,7 @@ const connectDB = async (connectionString = process.env.DATABASE_URL) => {
   if (pool) return pool;
 
   pool = new Pool({
-    connectionString,
+    connectionString: connectTarget,
     max: Number(process.env.PG_POOL_MAX || 10),
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
@@ -91,6 +91,24 @@ const connectDB = async (connectionString = process.env.DATABASE_URL) => {
   pool.on('error', (err) => {
     console.error('Unexpected PostgreSQL pool error:', err.message);
   });
+
+  // pg-connection-string lets an `sslmode` parameter in the URL override the
+  // explicit `ssl` option we pass to the Pool. That silently defeats the TLS
+  // settings above: ?sslmode=disable gives plaintext, ?sslmode=no-verify drops
+  // verification, and ?sslmode=require discards the CA from PG_CA_CERT_PATH.
+  // Strip it so sslConfig() is authoritative.
+  let connectTarget = connectionString;
+  try {
+    const parsed = new URL(connectionString);
+    if (parsed.searchParams.has('sslmode')) {
+      console.warn(
+        'WARNING: sslmode in DATABASE_URL was ignored — TLS is controlled by ' +
+        'PG_CA_CERT_PATH / PG_SSL_NO_VERIFY instead. Remove sslmode to avoid confusion.'
+      );
+      parsed.searchParams.delete('sslmode');
+      connectTarget = parsed.toString();
+    }
+  } catch { /* an unparseable URL will fail at connect anyway */ }
 
   // Catch the IPv6 trap before it produces an unexplained failure.
   try {

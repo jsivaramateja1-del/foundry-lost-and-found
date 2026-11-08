@@ -23,9 +23,23 @@ const PORT = process.env.PORT || 5000;
       console.warn('Email: NOT configured — set BREVO_API_KEY and BREVO_SENDER. ' +
         'Registration will create accounts but no verification email will be sent.');
     }
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT} (PostgreSQL)`);
     });
+
+    // Without this, every restart abandons up to PG_POOL_MAX open pooler
+    // connections. On a free tier that spins down often, they accumulate.
+    const { closeDB } = require('./src/config/pg');
+    const shutdown = async (signal) => {
+      console.log(`${signal} received, shutting down`);
+      server.close(async () => {
+        await closeDB().catch(() => {});
+        process.exit(0);
+      });
+      setTimeout(() => process.exit(1), 10000).unref();
+    };
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
   } catch (err) {
     console.error('Failed to start server:', err.message);
     process.exit(1);

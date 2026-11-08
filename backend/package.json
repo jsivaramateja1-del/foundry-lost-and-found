@@ -25,7 +25,9 @@
     "start:pg": "node server.v2.js",
     "dev:pg": "nodemon server.v2.js",
     "test:auth-v2": "node test/auth-v2.test.js",
-    "test:pg": "node test/pg.integration.test.js"
+    "test:pg": "node test/pg.integration.test.js",
+    "create-admin:pg": "node scripts/create-admin-pg.js",
+    "db:init": "psql \"$DATABASE_URL\" -f db/schema.sql"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
