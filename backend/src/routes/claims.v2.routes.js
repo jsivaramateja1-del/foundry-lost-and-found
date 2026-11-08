@@ -4,6 +4,7 @@ const claims = require('../repositories/claims');
 const items = require('../repositories/items');
 const { protect } = require('../middleware/auth.v2');
 const mailer = require('../lib/brevo');
+const notify = require('../repositories/notify');
 const users = require('../repositories/users');
 const { claimIpLimit, claimAccountLimit } = require('../middleware/rateLimit');
 
@@ -38,6 +39,12 @@ router.post('/', claimIpLimit, protect, claimAccountLimit, async (req, res, next
 
     // Tell the finder someone has claimed their item. Fire-and-forget: a mail
     // outage must not undo a claim that is already stored.
+    notify.create(null, {
+      userId: item.reportedBy, type: 'claim_received',
+      message: `Someone claimed your listing "${item.title}"`,
+      link: 'dashboard.html', relatedType: 'claim', relatedId: claim.id
+    }).catch(() => {});
+
     users.findById(item.reportedBy)
       .then((owner) => owner && mailer.send('itemClaimed', owner.email, {
         name: owner.name, title: item.title, link: `${process.env.APP_URL || ''}/dashboard.html`
@@ -111,6 +118,15 @@ router.patch('/:id/review', claimIpLimit, protect, claimAccountLimit, async (req
         .catch(() => {});
     }
 
+    notify.create(null, {
+      userId: claim.claimant,
+      type: decision === 'approve' ? 'claim_approved' : 'claim_rejected',
+      message: decision === 'approve'
+        ? `Your claim on "${item.title}" was approved. Check your dashboard for the handover code.`
+        : `Your claim on "${item.title}" was not approved.`,
+      link: 'dashboard.html', relatedType: 'claim', relatedId: claim.id
+    }).catch(() => {});
+
     const label = decision === 'approve' ? 'approved' : 'rejected';
     res.status(200).json({ message: `Claim ${label}`, ...result });
   } catch (err) { next(err); }
@@ -141,6 +157,17 @@ router.post('/:id/complete', claimIpLimit, protect, claimAccountLimit, async (re
       return res.status(409).json({ message: 'That listing is not in a claimable state' });
     }
     if (result.error === 'not-found') return res.status(404).json({ message: 'Claim not found' });
+
+    notify.create(null, {
+      userId: claim.claimant, type: 'return_completed',
+      message: `The return of "${item.title}" was confirmed. Points have been credited.`,
+      link: 'dashboard.html', relatedType: 'claim', relatedId: claim.id
+    }).catch(() => {});
+    notify.create(null, {
+      userId: item.reportedBy, type: 'return_completed',
+      message: `You confirmed the return of "${item.title}". Points have been credited.`,
+      link: 'dashboard.html', relatedType: 'claim', relatedId: claim.id
+    }).catch(() => {});
 
     res.status(200).json({ message: 'Handover complete. The item is marked returned.', ...result });
   } catch (err) { next(err); }

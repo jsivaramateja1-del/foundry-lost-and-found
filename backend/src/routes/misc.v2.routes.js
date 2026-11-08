@@ -9,6 +9,7 @@ const points = require('../repositories/points');
 const users = require('../repositories/users');
 const { protect, requireRole } = require('../middleware/auth.v2');
 const mailer = require('../lib/brevo');
+const notify = require('../repositories/notify');
 
 const appUrl = () => (process.env.APP_URL || 'http://localhost:5000').replace(/\/+$/, '');
 
@@ -203,49 +204,169 @@ reports.get('/', protect, requireRole('moderator','admin','superadmin'), async (
 // ---------- admin ----------
 const admin = express.Router();
 
-admin.get('/users', protect, requireRole('admin','superadmin'), async (req, res, next) => {
+const STAFF = ['moderator', 'admin', 'superadmin'];
+const pageOf = (q) => Math.max(1, parseInt(q.page, 10) || 1);
+const limitOf = (q, d = 12) => Math.min(100, Math.max(1, parseInt(q.limit, 10) || d));
+
+/** GET /api/admin/stats — totals, by category, and the last 7 days. */
+admin.get('/stats', protect, requireRole(...STAFF), async (req, res, next) => {
   try {
-    const rows = await many('select * from users order by created_at desc limit 100');
-    // Mapped through the shared mapper: the page reads pendingApproval,
-    // approvalNote and createdAt, which raw snake_case columns do not provide.
+    const totals = await one(`
+      select
+        (select count(*) from items)::int as items,
+        (select count(*) from items where type='lost')::int as lost,
+        (select count(*) from items where type='found')::int as found,
+        (select count(*) from items where status='open')::int as open,
+        (select count(*) from items where status='claimed')::int as claimed,
+        (select count(*) from items where status='returned')::int as returned,
+        (select count(*) from items where status='hidden')::int as hidden,
+        (select count(*) from users)::int as users,
+        (select count(*) from users where suspended)::int as suspendedUsers,
+        (select count(*) from users where pending_approval)::int as pendingUsers,
+        (select count(*) from claims)::int as claims,
+        (select count(*) from claims where status='pending')::int as pendingClaims,
+        (select count(*) from reports where status='pending')::int as openReports`);
+
+    const byCategory = await many(
+      `select category, count(*)::int as count from items
+        where status <> 'hidden' group by category order by count desc`);
+
+    const perDay = await many(`
+      select to_char(d.day, 'YYYY-MM-DD') as date, count(i.id)::int as count
+        from generate_series(current_date - interval '6 days', current_date, interval '1 day') d(day)
+        left join items i on i.created_at::date = d.day
+       group by d.day order by d.day`);
+
+    res.status(200).json({ totals, byCategory, perDay });
+  } catch (err) { next(err); }
+});
+
+/** GET /api/admin/items — every listing, hidden included. */
+admin.get('/items', protect, requireRole(...STAFF), async (req, res, next) => {
+  try {
+    const page = pageOf(req.query), limit = limitOf(req.query);
+    const params = [];
+    const clauses = [];
+    // Moderators work the verification queue, so they see found items only.
+    if (req.user.role === 'moderator') clauses.push("i.type = 'found'");
+    const where = clauses.length ? `where ${clauses.join(' and ')}` : '';
+
+    const total = (await one(`select count(*)::int as n from items i ${where}`, params)).n;
+    const rows = await many(
+      `select i.*, r.name as reporter_name, v.name as verifier_name
+         from items i
+         left join users r on r.id = i.reported_by
+         left join users v on v.id = i.verified_by
+         ${where}
+        order by i.created_at desc
+        limit $${params.length + 1} offset $${params.length + 2}`,
+      [...params, limit, (page - 1) * limit]);
+
     res.status(200).json({
-      count: rows.length,
-      users: rows.map((r) => ({ ...users.toSafeObject(users.toUser(r)),
-                                pendingApproval: r.pending_approval,
-                                approvalNote: r.approval_note,
-                                emailVerified: r.email_verified,
-                                suspended: r.suspended,
-                                suspendedReason: r.suspended_reason }))
+      count: rows.length, total, page, pages: Math.ceil(total / limit) || 1,
+      items: rows.map((r) => ({
+        ...items.toItem(r),
+        // The admin table renders nested names, not bare uuids.
+        reportedBy: { id: r.reported_by, name: r.reporter_name },
+        verifiedBy: r.verified_by ? { id: r.verified_by, name: r.verifier_name } : null
+      }))
     });
   } catch (err) { next(err); }
 });
 
-admin.patch('/users/:id/approve', protect, requireRole('admin','superadmin'), async (req, res, next) => {
+/** GET /api/admin/claims */
+admin.get('/claims', protect, requireRole(...STAFF), async (req, res, next) => {
   try {
-    const target = await users.findById(req.params.id);
-    if (!target) return res.status(404).json({ message: 'User not found' });
-
-    if (req.body.approved === false) {
-      const note = typeof req.body.note === 'string' ? req.body.note.trim() : '';
-      if (note.length < 3) return res.status(400).json({ message: 'A reason is required to reject an application' });
-      return res.status(200).json({ user: users.toSafeObject(await users.reject(target.id, note)) });
-    }
-    res.status(200).json({ user: users.toSafeObject(await users.approve(target.id)) });
+    const page = pageOf(req.query), limit = limitOf(req.query);
+    const total = (await one('select count(*)::int as n from claims')).n;
+    const rows = await many(
+      `select c.*, i.title as item_title, u.name as claimant_name
+         from claims c
+         join items i on i.id = c.item
+         join users u on u.id = c.claimant
+        order by c.created_at desc limit $1 offset $2`, [limit, (page - 1) * limit]);
+    res.status(200).json({
+      count: rows.length, total, page, pages: Math.ceil(total / limit) || 1,
+      claims: rows.map((c) => ({
+        id: c.id, message: c.message, status: c.status, createdAt: c.created_at,
+        item: { id: c.item, title: c.item_title },
+        claimant: { id: c.claimant, name: c.claimant_name }
+      }))
+    });
   } catch (err) { next(err); }
 });
 
-/** Verifying a found listing is what earns the finder points — and the email. */
-admin.patch('/items/:id/verify', protect, requireRole('moderator','admin','superadmin'), async (req, res, next) => {
+/** GET /api/admin/reports */
+admin.get('/reports', protect, requireRole(...STAFF), async (req, res, next) => {
+  try {
+    const rows = await many(
+      `select r.*, i.title as item_title, u.name as reporter_name
+         from reports r
+         join items i on i.id = r.item
+         left join users u on u.id = r.reported_by
+        where r.status = 'pending'
+        order by r.created_at desc limit 100`);
+    res.status(200).json({
+      count: rows.length,
+      reports: rows.map((r) => ({
+        id: r.id, reason: r.reason, details: r.details,
+        // The page tests for 'open'; the schema calls it 'pending'.
+        status: r.status === 'pending' ? 'open' : r.status,
+        createdAt: r.created_at,
+        item: { id: r.item, title: r.item_title },
+        reportedBy: { id: r.reported_by, name: r.reporter_name }
+      }))
+    });
+  } catch (err) { next(err); }
+});
+
+/** GET /api/admin/audit */
+admin.get('/audit', protect, requireRole(...STAFF), async (req, res, next) => {
+  try {
+    const rows = await notify.trail(50);
+    res.status(200).json({
+      count: rows.length,
+      entries: rows.map((r) => ({
+        action: r.action, actor: r.actor_email, note: r.note, createdAt: r.created_at
+      }))
+    });
+  } catch (err) { next(err); }
+});
+
+/** PATCH /api/admin/items/:id/verify — verifying a found listing earns points. */
+admin.patch('/items/:id/verify', protect, requireRole(...STAFF), async (req, res, next) => {
   try {
     const item = await items.findByIdRaw(req.params.id);
     if (!item) return res.status(404).json({ message: 'Listing not found' });
-    if (item.type !== 'found') return res.status(400).json({ message: 'Only found listings can be verified' });
-    if (item.verifiedAt) return res.status(409).json({ message: 'That listing is already verified' });
+    if (item.type !== 'found') {
+      return res.status(400).json({ message: 'Only found listings can be verified' });
+    }
+    if (item.verifiedAt) {
+      return res.status(409).json({ message: 'That listing is already verified' });
+    }
+    if (item.status === 'hidden') {
+      return res.status(409).json({ message: 'Restore the listing before verifying it' });
+    }
+    // A moderator must not verify their own listing: that is unbounded point
+    // farming, and it contradicts the self-dealing rule on the status route.
+    if (req.user.role === 'moderator' && item.reportedBy === req.user.id) {
+      return res.status(403).json({ message: 'A moderator cannot verify their own listing' });
+    }
 
     const verified = await items.verify(item.id, req.user.id);
     await points.awardOnce({
       userId: item.reportedBy, type: 'found_item',
       eventKey: `found:${item.id}`, itemId: item.id
+    });
+
+    notify.create(null, {
+      userId: item.reportedBy, type: 'item_verified',
+      message: `Your found listing "${item.title}" was verified.`,
+      link: 'dashboard.html', relatedType: 'item', relatedId: item.id
+    }).catch(() => {});
+    await notify.audit({
+      actor: req.user.id, actorEmail: req.user.email,
+      action: 'item.verify', targetType: 'item', targetId: item.id, note: item.title
     });
 
     const reporter = await users.findById(item.reportedBy);
@@ -255,6 +376,114 @@ admin.patch('/items/:id/verify', protect, requireRole('moderator','admin','super
       }).catch(() => {});
     }
     res.status(200).json({ item: verified });
+  } catch (err) { next(err); }
+});
+
+/** PATCH /api/admin/items/:id/status — staff may set any lifecycle state. */
+admin.patch('/items/:id/status', protect, requireRole('admin', 'superadmin'), async (req, res, next) => {
+  try {
+    const requested = typeof req.body.status === 'string' ? req.body.status.trim() : '';
+    const next_ = requested === 'closed' ? 'hidden' : requested;
+    if (!['open', 'claimed', 'returned', 'hidden'].includes(next_)) {
+      return res.status(400).json({ message: 'status must be open, claimed, returned or hidden' });
+    }
+    const existing = await items.findByIdRaw(req.params.id);
+    if (!existing) return res.status(404).json({ message: 'Listing not found' });
+
+    const updated = await items.setStatus(existing.id, next_);
+    await notify.audit({
+      actor: req.user.id, actorEmail: req.user.email,
+      action: `item.status.${next_}`, targetType: 'item', targetId: existing.id,
+      note: `was ${existing.status}`
+    });
+    res.status(200).json({ message: `Status set to ${next_}`, item: updated });
+  } catch (err) { next(err); }
+});
+
+/** DELETE /api/admin/items/:id */
+admin.delete('/items/:id', protect, requireRole('admin', 'superadmin'), async (req, res, next) => {
+  try {
+    const existing = await items.findByIdRaw(req.params.id);
+    if (!existing) return res.status(404).json({ message: 'Listing not found' });
+    await items.remove(existing.id);
+    await notify.audit({
+      actor: req.user.id, actorEmail: req.user.email,
+      action: 'item.delete', targetType: 'item', targetId: existing.id, note: existing.title
+    });
+    res.status(200).json({ message: 'Listing removed' });
+  } catch (err) { next(err); }
+});
+
+/** PATCH /api/admin/users/:id/suspend — suspend and reinstate. */
+admin.patch('/users/:id/suspend', protect, requireRole('admin', 'superadmin'), async (req, res, next) => {
+  try {
+    const suspended = req.body.suspended !== false;
+    const target = await users.findById(req.params.id);
+    if (!target) return res.status(404).json({ message: 'User not found' });
+    if (['admin', 'superadmin'].includes(target.role)) {
+      return res.status(403).json({ message: 'An administrator cannot be suspended here' });
+    }
+    const reason = typeof req.body.reason === 'string' ? req.body.reason.trim().slice(0, 300) : '';
+    if (suspended && reason.length < 3) {
+      return res.status(400).json({ message: 'A reason is required to suspend an account' });
+    }
+    const row = await one(
+      `update users set suspended = $2, suspended_reason = $3, suspended_at = case when $2 then now() else null end
+        where id = $1 returning *`, [target.id, suspended, suspended ? reason : '']);
+    await notify.audit({
+      actor: req.user.id, actorEmail: req.user.email,
+      action: suspended ? 'user.suspend' : 'user.reinstate',
+      targetType: 'user', targetId: target.id, note: reason
+    });
+    res.status(200).json({
+      message: suspended ? 'Account suspended' : 'Account reinstated',
+      user: users.toSafeObject(users.toUser(row))
+    });
+  } catch (err) { next(err); }
+});
+
+/** PATCH /api/admin/users/:id/role */
+admin.patch('/users/:id/role', protect, requireRole('superadmin'), async (req, res, next) => {
+  try {
+    const role = typeof req.body.role === 'string' ? req.body.role.trim() : '';
+    if (!['student', 'moderator', 'admin'].includes(role)) {
+      return res.status(400).json({ message: 'role must be student, moderator or admin' });
+    }
+    const target = await users.findById(req.params.id);
+    if (!target) return res.status(404).json({ message: 'User not found' });
+    if (target.role === 'superadmin') {
+      return res.status(403).json({ message: 'A superadmin role cannot be changed here' });
+    }
+    const row = await one('update users set role = $2 where id = $1 returning *', [target.id, role]);
+    await notify.audit({
+      actor: req.user.id, actorEmail: req.user.email,
+      action: 'user.role', targetType: 'user', targetId: target.id,
+      note: `${target.role} -> ${role}`
+    });
+    res.status(200).json({
+      message: `Role set to ${role}`, user: users.toSafeObject(users.toUser(row))
+    });
+  } catch (err) { next(err); }
+});
+
+/** PATCH /api/admin/reports/:id — resolve or dismiss. */
+admin.patch('/reports/:id', protect, requireRole(...STAFF), async (req, res, next) => {
+  try {
+    const requested = typeof req.body.status === 'string' ? req.body.status.trim() : '';
+    // The page sends 'resolved'; the schema stores 'reviewed'.
+    const status = requested === 'resolved' ? 'reviewed' : requested;
+    if (!['reviewed', 'dismissed', 'actioned'].includes(status)) {
+      return res.status(400).json({ message: 'status must be resolved, dismissed or actioned' });
+    }
+    const row = await one(
+      `update reports set status = $2, reviewed_by = $3, reviewed_at = now()
+        where id = $1 returning *`, [req.params.id, status, req.user.id]);
+    if (!row) return res.status(404).json({ message: 'Report not found' });
+    await notify.audit({
+      actor: req.user.id, actorEmail: req.user.email,
+      action: `report.${status}`, targetType: 'report', targetId: row.id
+    });
+    res.status(200).json({ message: `Report ${status}`, report: { id: row.id, status } });
   } catch (err) { next(err); }
 });
 
