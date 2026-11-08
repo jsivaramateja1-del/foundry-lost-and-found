@@ -15,7 +15,8 @@
     "test:pg": "node test/pg.integration.test.js",
     "test:boot-v2": "node test/boot-v2.test.js",
     "seed:browser": "node test/browser/seed.js",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "test:deploy": "node test/deploy.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

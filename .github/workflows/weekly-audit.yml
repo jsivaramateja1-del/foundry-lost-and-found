@@ -60,6 +60,10 @@ jobs:
         working-directory: backend
         run: npm run test:boot-v2
 
+      - name: Deploy command check
+        working-directory: backend
+        run: npm run test:deploy
+
       - name: No Mongoose may have crept back in
         working-directory: backend
         run: |

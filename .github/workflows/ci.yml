@@ -82,6 +82,13 @@ jobs:
         working-directory: backend
         run: npm run test:boot-v2
 
+      # Runs the literal command Render runs (`npm run start:pg`). Twice a
+      # missing or broken start script took production down while this pipeline
+      # stayed green, because nothing here executed the deploy command.
+      - name: Run the deploy command exactly as Render does
+        working-directory: backend
+        run: npm run test:deploy
+
       - name: Seed the database for the browser tests
         working-directory: backend
         run: npm run seed:browser
