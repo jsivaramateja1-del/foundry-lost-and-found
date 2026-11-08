@@ -11,7 +11,9 @@
     "test:auth-v2": "node test/auth-v2.test.js",
     "test:pg": "node test/pg.integration.test.js",
     "test:boot-v2": "node test/boot-v2.test.js",
-    "test": "npm run test:auth-v2 && npm run test:pg"
+    "test": "npm run test:auth-v2 && npm run test:pg",
+    "seed:browser": "node test/browser/seed.js",
+    "test:browser": "playwright test"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -25,7 +27,7 @@
     "supertest": "^7.0.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.47.2"
+    "@playwright/test": "^1.65.0"
   },
   "engines": {
     "node": ">=20.0.0 <21.0.0"
