@@ -47,6 +47,12 @@
           ${data.page >= data.pages ? 'disabled' : ''}>Next</button>`;
     }
 
+    /**
+     * Explain why the admin area is not available, naming the signed-in account
+     * and its role. A bare "this page is for admins" leaves the reader guessing
+     * whether they are signed out, signed in as the wrong account, or missing a
+     * role — which is exactly the confusion this page used to cause.
+     */
     function showGuard(reason) {
       const guard = document.getElementById('guard');
       if (!Auth.isLoggedIn) {
