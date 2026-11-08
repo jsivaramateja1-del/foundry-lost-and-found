@@ -394,6 +394,41 @@ const check = (name, cond, detail = '') => {
       /\^https\?:/.test(src), 'sourceUrl validation missing');
   }
 
+  // ---- The five university domains, and which one gets the faculty flow ----
+  {
+    const config = await request(app).get('/api/auth/config');
+    const allExposed = [
+      ...(config.body.allowedEmailDomains || []),
+      ...(config.body.facultyDomains || [])
+    ];
+    for (const domain of ['scds.saiuniversity.edu.in', 'sas.saiuniversity.edu.in',
+      'sol.saiuniversity.edu.in', 'sahs.saiuniversity.edu.in', 'saiuniversity.edu.in']) {
+      check(`/api/auth/config exposes @${domain} somewhere in its lists`,
+        allExposed.includes(domain),
+        `not found in ${JSON.stringify(allExposed)}`);
+    }
+
+    // The four school domains are STUDENT domains: an address there is accepted
+    // and signed in immediately. Only the parent domain is a FACULTY domain and
+    // goes to pending approval. This split is the whole reason the live config
+    // shows one entry under facultyDomains.
+    const { isFacultyEmail } = require('../src/utils/email');
+    for (const domain of ['scds.saiuniversity.edu.in', 'sas.saiuniversity.edu.in',
+      'sol.saiuniversity.edu.in', 'sahs.saiuniversity.edu.in']) {
+      check(`@${domain} is a student domain, not a faculty domain`,
+        isFacultyEmail(`person@${domain}`) === false,
+        'this address would be forced into pending faculty approval');
+    }
+    check('@saiuniversity.edu.in is the faculty domain',
+      isFacultyEmail('person@saiuniversity.edu.in') === true);
+
+    check('an external address is neither',
+      isFacultyEmail('person@gmail.com') === false);
+    check('the faculty list is exactly the parent domain',
+      JSON.stringify(config.body.facultyDomains) === JSON.stringify(['saiuniversity.edu.in']),
+      JSON.stringify(config.body.facultyDomains));
+  }
+
   console.log('\n' + results.join('\n'));
   // Close the handle so the process exits without waiting on Mongoose
   try { await require('mongoose').connection.close(); } catch { /* never connected */ }
