@@ -311,7 +311,10 @@ hr { border:0; border-top:2px solid var(--line-soft); margin:24px 0; }
 .hero__aside { background:var(--surface); border:2px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow-lg); padding:18px; }
 
 /* ---------- auth ---------- */
-.auth-shell { display:grid; grid-template-columns:1fr 1fr; gap:52px; padding:44px 0; align-items:start; }
+.auth-shell {
+  display:grid; grid-template-columns:1fr 1fr; gap:52px; align-items:start;
+  max-width:var(--max); margin:0 auto; padding:44px var(--pad);
+}
 .auth-panel { background:var(--surface); border:2px solid var(--line); border-radius:10px 16px 9px 14px; box-shadow:6px 6px 0 var(--line); position:relative; }
 .auth-panel::before { content:""; position:absolute; top:-12px; left:38px; transform:rotate(-3deg); width:92px; height:23px; background:var(--tape); }
 [data-theme="dark"] .auth-panel { box-shadow:none; }
@@ -390,7 +393,7 @@ hr { border:0; border-top:2px solid var(--line-soft); margin:24px 0; }
 .filters { margin-bottom:22px; }
 .filters__row { align-items:end; }
 .form-note { line-height:1.5; }
-.section { padding:30px 0 0; }
+
 .hero { padding:34px 0 22px; }
 .filters__row { display:flex; gap:10px; flex-wrap:wrap; }
 .filters__row > * { flex:0 1 auto; }
@@ -632,7 +635,41 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0); }
   .menu-toggle { display: none; }
   .nav[data-open="true"] {
     display: flex; flex-direction: column; flex-basis: 100%; gap: 4px;
-    order: 3; border-top: 2px solid var(--line-soft); padding-top: 10px; margin-top: 4px;
+    order: 3; border-top: 2px solid var(--line-soft); padding-top: 10px; margin: 4px 0 0;
   }
   .nav[data-open="true"] a { min-height: 44px; display: flex; align-items: center; }
 }
+
+/* ---------------------------------------------------------------------------
+   explorer.html was never migrated to the header component: it carries a bare
+   .brand and a bare <nav> with no .site-header__inner. These rules give that
+   page the same header, gutter and nav rhythm as the other six.
+   --------------------------------------------------------------------------- */
+header.site-header > .brand,
+header.site-header > nav:not(.nav) {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding-left: var(--pad);
+  padding-right: var(--pad);
+}
+header.site-header > .brand { padding-top: 14px; }
+header.site-header > .brand .logo,
+header.site-header > .brand { font-family: var(--serif); font-size: 24px; font-weight: 700; }
+header.site-header > nav:not(.nav) {
+  display: flex; gap: 22px; padding-bottom: 12px; flex-wrap: wrap;
+}
+header.site-header > nav:not(.nav) a {
+  font-size: 13.5px; font-weight: 500; color: var(--ink-2);
+  padding: 4px 0; white-space: nowrap; text-decoration: none;
+  border-bottom: 2.5px solid transparent;
+}
+header.site-header > nav:not(.nav) a:hover { color: var(--ink); border-bottom-color: var(--primary); }
+
+/* explorer.html's brand is an <a class="brand"> with the text inline, not a
+   .logo element — give it the wordmark treatment and ink colour. */
+header.site-header > .brand {
+  color: var(--ink); text-decoration: none;
+  font-family: var(--serif); font-size: 24px; font-weight: 700; letter-spacing: -.02em;
+  display: block; max-width: var(--max); margin: 0 auto; padding: 14px var(--pad) 0;
+}
+header.site-header > .brand:hover { text-decoration: none; }
