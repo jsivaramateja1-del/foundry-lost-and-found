@@ -547,3 +547,92 @@ input[type="search"] {
   border:2px solid var(--line); border-radius:8px 12px 7px 11px;
   font:inherit; font-size:14.5px; padding:9px 13px; min-height:46px;
 }
+
+/* ===========================================================================
+   Second review pass — fixes from the forms/a11y agent.
+   =========================================================================== */
+
+/* The UA [hidden] rule loses to any class that sets display. Without this,
+   auth-gated header buttons, "Load more" and the alerts pill all render. */
+[hidden] { display: none !important; }
+
+/* darker muted text: --ink-3 failed 4.5:1 on every background */
+:root { --ink-3: #6E6A62; }
+[data-theme="dark"] { --ink-3: #9A948B; }
+
+/* a visible focus ring that survives outline:none on the fields */
+:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+[data-theme="dark"] :focus-visible { outline-color: var(--mustard); }
+
+/* password field must leave room for the toggle */
+.password-field input { padding-right: 44px; }
+.password-field__toggle { width: 34px; height: 34px; display: grid; place-items: center; padding: 0; }
+
+/* strength meter actually fills */
+.strength__bar span { width: 0; background: var(--ink-3); transition: width .2s ease, background .2s ease; }
+[data-strength="1"] .strength__bar span { width: 25%; background: var(--danger); }
+[data-strength="2"] .strength__bar span { width: 50%; background: var(--mustard); }
+[data-strength="3"] .strength__bar span { width: 75%; background: var(--teal); }
+[data-strength="4"] .strength__bar span { width: 100%; background: var(--teal); }
+
+/* notifications drop down instead of inflating the header */
+.notifications { position: relative; }
+.notifications__panel {
+  position: absolute; top: calc(100% + 8px); right: 0; width: 320px; z-index: 80;
+  box-shadow: var(--shadow-lg);
+}
+[data-theme="dark"] .notifications__panel { box-shadow: 0 14px 34px -14px rgba(0,0,0,.8); }
+
+/* badge states the JS emits */
+.badge--earned { background: var(--teal); color: #FFFCF5; border-color: var(--teal); }
+[data-theme="dark"] .badge--earned { color: #0E1F1C; }
+.badge--locked { background: transparent; color: var(--ink-3); border-color: var(--line-soft); opacity: .75; }
+.badge__dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; margin-right: 6px; }
+
+/* primary action that was undefined */
+.btn--primary { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+[data-theme="dark"] .btn--primary { color: #1A1817; }
+
+/* status--open, emitted by dashboard.js */
+.status--open { color: var(--teal); font-weight: 700; }
+
+/* --accent no longer exists but pages still reference it */
+:root { --accent: var(--teal); }
+[data-theme="dark"] { --accent: var(--teal); }
+
+/* touch targets: nothing interactive below 44px */
+.header-actions .btn, .btn--sm, .btn.sm, .theme-toggle,
+.pager a, .pager button, .link-button, .auth-tab, .nav a { min-height: 44px; }
+.link-button { padding: 10px 0; }
+.modal__close { min-width: 44px; min-height: 44px; }
+.auth-tab { padding: 12px 16px; }
+
+/* native checkbox and date pickers follow the theme */
+input[type="checkbox"] { accent-color: var(--primary); width: 18px; height: 18px; }
+input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0); }
+[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); }
+::placeholder { color: var(--ink-3); opacity: 1; }
+
+/* ---------- mobile: the menu button must be reachable and usable ---------- */
+.menu-toggle {
+  display: none; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+  min-height: 44px; padding: 0 14px; background: var(--surface); color: var(--ink);
+  border: 2px solid var(--line); border-radius: 8px 12px 7px 11px;
+}
+@media (max-width: 900px) {
+  .site-header__inner { flex-wrap: wrap; height: auto; min-height: 60px; padding: 10px var(--pad); gap: 10px; }
+  .header-actions { margin-left: auto; flex-wrap: wrap; gap: 6px; }
+  /* The nav is shown, wrapped, rather than hidden behind a menu button that
+     is not reliably reachable at narrow widths. */
+  .nav {
+    display: flex; flex-wrap: wrap; flex-basis: 100%; gap: 4px 16px; order: 3;
+    margin: 4px 0 0; padding-top: 10px; border-top: 2px solid var(--line-soft);
+  }
+  .nav a { min-height: 44px; display: flex; align-items: center; font-size: 13px; }
+  .menu-toggle { display: none; }
+  .nav[data-open="true"] {
+    display: flex; flex-direction: column; flex-basis: 100%; gap: 4px;
+    order: 3; border-top: 2px solid var(--line-soft); padding-top: 10px; margin-top: 4px;
+  }
+  .nav[data-open="true"] a { min-height: 44px; display: flex; align-items: center; }
+}
