@@ -1,0 +1,170 @@
+/* ===========================================================================
+   Intro sequence — a stylised storyboard, not a video.
+
+   Deliberately abstract: figures are silhouettes with no faces, so the result
+   reads as deliberate design rather than cheap illustration. Everything is
+   inline SVG and CSS, so the whole sequence costs a few kilobytes instead of
+   the several megabytes a video would, and nothing is fetched from a third
+   party.
+
+   Never plays for a visitor who asked for reduced motion, and is skipped for
+   good once dismissed.
+   =========================================================================== */
+
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: grid;
+  place-items: center;
+  background: #0a0a0b;
+  opacity: 1;
+  transition: opacity .45s ease;
+}
+.intro[hidden] { display: none; }
+.intro--out { opacity: 0; pointer-events: none; }
+
+.intro__stage {
+  position: relative;
+  width: min(100vw, 1120px);
+  aspect-ratio: 16 / 9;
+  max-height: 100vh;
+  overflow: hidden;
+  background: #0e1013;
+}
+@media (max-width: 640px) {
+  .intro__stage { aspect-ratio: auto; height: 100vh; width: 100vw; }
+}
+
+.intro__scene {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity .5s ease;
+}
+.intro__scene--on { opacity: 1; }
+
+.intro__svg { display: block; width: 100%; height: 100%; }
+
+/* --- camera: a slow push-in reads as a camera move without any 3D --- */
+@keyframes pushIn {
+  from { transform: scale(1); }
+  to   { transform: scale(1.07); }
+}
+.intro__camera {
+  transform-origin: 50% 62%;
+  animation: pushIn 6s ease-out forwards;
+}
+
+/* --- walking figures --- */
+@keyframes walkAcross {
+  from { transform: translateX(-140px); }
+  to   { transform: translateX(1180px); }
+}
+@keyframes walkAcrossShort {
+  from { transform: translateX(1180px); }
+  to   { transform: translateX(300px); }
+}
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+.fig { transform-box: fill-box; transform-origin: center bottom; }
+.fig--walk  { animation: walkAcross 3.6s linear forwards; }
+.fig--enter { animation: walkAcrossShort 2.4s ease-out forwards; }
+.fig--bob   { animation: bob .5s ease-in-out infinite; }
+
+/* --- the falling card --- */
+@keyframes cardFall {
+  0%   { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+  15%  { opacity: 1; }
+  100% { transform: translate(-38px, 96px) rotate(-24deg); opacity: 1; }
+}
+@keyframes cardLift {
+  0%   { transform: translate(-38px, 96px) rotate(-24deg) scale(1); opacity: 1; }
+  60%  { transform: translate(0, 10px) rotate(0deg) scale(1.35); opacity: 1; }
+  100% { transform: translate(0, -6px) rotate(0deg) scale(1.35); opacity: 0; }
+}
+.card--fall { animation: cardFall 1.1s ease-in forwards; }
+.card--lift { animation: cardLift 1.2s ease-in-out forwards; }
+
+/* --- UI beats: the post, the claim, the message --- */
+@keyframes riseFade {
+  from { transform: translateY(16px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.beat { opacity: 0; transform-box: fill-box; }
+.beat--on { animation: riseFade .55s ease-out forwards; }
+
+@keyframes pulseOnce {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+.beat--pulse { animation: riseFade .4s ease-out forwards, pulseOnce 1.2s ease-in-out .4s; }
+
+/* --- the handover check --- */
+@keyframes checkPop {
+  0%   { transform: scale(.4); opacity: 0; }
+  70%  { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.check--pop { animation: checkPop .6s cubic-bezier(.2,1.3,.4,1) forwards; }
+
+/* --- chrome --- */
+.intro__skip {
+  position: absolute;
+  right: clamp(12px, 3vw, 32px);
+  bottom: clamp(12px, 3vw, 28px);
+  z-index: 2;
+  padding: 10px 20px;
+  border: 1px solid rgba(242,240,234,.35);
+  border-radius: 999px;
+  background: rgba(10,10,11,.55);
+  color: #f2f0ea;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.intro__skip:hover { border-color: #d8ff5f; color: #d8ff5f; }
+.intro__skip:focus-visible { outline: 2px solid #d8ff5f; outline-offset: 3px; }
+
+.intro__dots {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(14px, 3vw, 30px);
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 2;
+}
+.intro__dot {
+  width: 26px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(242,240,234,.22);
+  transition: background .3s ease;
+}
+.intro__dot--on { background: #d8ff5f; }
+
+.intro__caption {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(48px, 8vw, 76px);
+  transform: translateX(-50%);
+  z-index: 2;
+  width: min(88%, 620px);
+  text-align: center;
+  color: #f2f0ea;
+  font-size: clamp(14px, 2.2vw, 18px);
+  line-height: 1.5;
+  opacity: 0;
+  transition: opacity .4s ease;
+}
+.intro__caption--on { opacity: 1; }
+
+/* Anyone who asked for less motion gets no sequence at all. */
+@media (prefers-reduced-motion: reduce) {
+  .intro { display: none !important; }
+}
