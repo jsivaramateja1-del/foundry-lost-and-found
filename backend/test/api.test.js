@@ -1470,6 +1470,133 @@ const check = (name, condition, detail = '') => {
 
     const delOwner = await request(app).delete(`/api/items/${itemId}`).set(auth);
     check('owner can delete their item (200)', delOwner.status === 200, `got ${delOwner.status}`);
+    // ---------- 24. Faculty registration and approval lifecycle ----------
+    // A dedicated administrator: the shared account is promoted to admin only
+    // for its own block and demoted afterwards, so reusing its token here would
+    // authenticate as a student and the approval route would rightly answer 403.
+    const approverReg = await request(app).post('/api/auth/register').send({
+      name: 'Faculty Approver',
+      email: 'faculty-approver@scds.saiuniversity.edu.in',
+      password: 'secret123'
+    });
+    await User.updateOne(
+      { _id: approverReg.body.user.id },
+      { $set: { role: 'admin' } }
+    );
+    const approverLogin = await request(app).post('/api/auth/login').send({
+      email: 'faculty-approver@scds.saiuniversity.edu.in', password: 'secret123'
+    });
+    const approverAuth = { Authorization: `Bearer ${approverLogin.body.token}` };
+    check('FACULTY-LIFECYCLE setup: an administrator signed in',
+      approverLogin.status === 200 && Boolean(approverLogin.body.token),
+      `got ${approverLogin.status}`);
+
+    // --- 1. register on the allowed faculty parent domain ---
+    const facultyReg = await request(app).post('/api/auth/register').send({
+      name: 'Faculty Applicant',
+      email: 'faculty-applicant@saiuniversity.edu.in',
+      password: 'secret123'
+    });
+    check('FACULTY-LIFECYCLE: registration on the faculty domain is accepted (201)',
+      facultyReg.status === 201, `got ${facultyReg.status}: ${JSON.stringify(facultyReg.body)}`);
+
+    // --- 2. the response says pending and issues no JWT ---
+    check('FACULTY-LIFECYCLE: the response reports pending approval',
+      facultyReg.body.pendingApproval === true, JSON.stringify(facultyReg.body));
+    check('FACULTY-LIFECYCLE: no token is issued to a pending application',
+      !facultyReg.body.token, `token present: ${Boolean(facultyReg.body.token)}`);
+
+    const facultyUserDoc = await User.findOne({ email: 'faculty-applicant@saiuniversity.edu.in' });
+    check('FACULTY-LIFECYCLE: the account is faculty and awaiting approval',
+      Boolean(facultyUserDoc) && facultyUser.role === 'faculty' && facultyUserDoc.pendingApproval === true,
+      facultyUserDoc ? `${facultyUserDoc.role} pending=${facultyUserDoc.pendingApproval}` : 'user missing');
+
+    // --- 3. login is refused while pending ---
+    const pendingLogin = await request(app).post('/api/auth/login').send({
+      email: 'faculty-applicant@saiuniversity.edu.in', password: 'secret123'
+    });
+    check('FACULTY-LIFECYCLE: a pending account cannot sign in (403)',
+      pendingLogin.status === 403, `got ${pendingLogin.status}`);
+    check('FACULTY-LIFECYCLE: the refusal issues no token',
+      !pendingLogin.body.token, `token present: ${Boolean(pendingLogin.body.token)}`);
+
+    // --- a student must not be able to approve ---
+    const studentApprove = await request(app)
+      .patch(`/api/admin/users/${facultyUserDoc._id}/approve`)
+      .set(auth).send({ approved: true });
+    check('FACULTY-LIFECYCLE: an ordinary student cannot approve an account (403)',
+      studentApprove.status === 403, `got ${studentApprove.status}`);
+
+    // --- 4. an administrator approves ---
+    const approveFaculty = await request(app)
+      .patch(`/api/admin/users/${facultyUserDoc._id}/approve`)
+      .set(approverAuth).send({ approved: true });
+    check('FACULTY-LIFECYCLE: an administrator approves the application (200)',
+      approveFaculty.status === 200, `got ${approveFaculty.status}: ${JSON.stringify(approveFaculty.body)}`);
+
+    const approvedUserDoc = await User.findById(facultyUserDoc._id);
+    check('FACULTY-LIFECYCLE: approval clears pendingApproval',
+      approvedUserDoc.pendingApproval === false, `${approvedUserDoc.pendingApproval}`);
+
+    // --- 5. login now succeeds ---
+    const approvedLogin = await request(app).post('/api/auth/login').send({
+      email: 'faculty-applicant@saiuniversity.edu.in', password: 'secret123'
+    });
+    check('FACULTY-LIFECYCLE: an approved account can sign in (200)',
+      approvedLogin.status === 200 && Boolean(approvedLogin.body.token),
+      `got ${approvedLogin.status}`);
+
+    // --- 6. that token reaches a protected route ---
+    const facultyMe = await request(app).get('/api/auth/me')
+      .set({ Authorization: `Bearer ${approvedLogin.body.token}` });
+    check('FACULTY-LIFECYCLE: the approved token reaches a protected route (200)',
+      facultyMe.status === 200 && facultyMe.body.user.role === 'faculty',
+      `got ${facultyMe.status}`);
+
+    // --- 7. a second application is rejected, with a reason ---
+    const rejectReg = await request(app).post('/api/auth/register').send({
+      name: 'Rejected Applicant',
+      email: 'faculty-rejected@saiuniversity.edu.in',
+      password: 'secret123'
+    });
+    check('FACULTY-LIFECYCLE: a second application is accepted (201)',
+      rejectReg.status === 201, `got ${rejectReg.status}`);
+
+    const rejectUserFaculty = await User.findOne({ email: 'faculty-rejected@saiuniversity.edu.in' });
+    const noReasonFaculty = await request(app)
+      .patch(`/api/admin/users/${rejectUserFaculty._id}/approve`)
+      .set(approverAuth).send({ approved: false });
+    check('FACULTY-LIFECYCLE: a rejection without a reason is refused (400)',
+      noReasonFaculty.status === 400, `got ${noReasonFaculty.status}`);
+
+    const rejectFaculty = await request(app)
+      .patch(`/api/admin/users/${rejectUserFaculty._id}/approve`)
+      .set(approverAuth).send({ approved: false, note: 'Not a member of staff' });
+    check('FACULTY-LIFECYCLE: an administrator rejects with a reason (200)',
+      rejectFaculty.status === 200, `got ${rejectFaculty.status}: ${JSON.stringify(rejectFaculty.body)}`);
+
+    const rejectedUserDoc = await User.findById(rejectUserFaculty._id);
+    check('FACULTY-LIFECYCLE: the rejection records the reason and suspends the account',
+      rejectedUserDoc.suspended === true
+      && /Not a member of staff/.test(rejectedUserDoc.approvalNote || ''),
+      `suspended=${rejectedUserDoc.suspended} note=${rejectedUserDoc.approvalNote}`);
+
+    // --- 8. the rejected account cannot sign in ---
+    const rejectedLogin = await request(app).post('/api/auth/login').send({
+      email: 'faculty-rejected@saiuniversity.edu.in', password: 'secret123'
+    });
+    check('FACULTY-LIFECYCLE: a rejected account cannot sign in (403)',
+      rejectedLogin.status === 403, `got ${rejectedLogin.status}`);
+
+    // --- cleanup: remove the accounts this block created ---
+    const removed = await User.deleteMany({
+      email: { $in: ['faculty-approver@scds.saiuniversity.edu.in',
+        'faculty-applicant@saiuniversity.edu.in',
+        'faculty-rejected@saiuniversity.edu.in'] }
+    });
+    check('FACULTY-LIFECYCLE: the test accounts were removed',
+      removed.deletedCount === 3, `deleted ${removed.deletedCount}`);
+
   } catch (err) {
     failed++;
     results.push(`  FAIL  unexpected error: ${err.message}`);

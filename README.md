@@ -710,7 +710,41 @@ enough for a demo. No paid service is required or recommended.
   login/registration are rate limited.
 - `.env` is git-ignored; `.env.example` contains placeholders only.
 
-## 15. Deploying to Render
+## 15. When the database is unavailable
+
+Two public listing routes check the connection before querying and answer
+immediately:
+
+| Route | Database down |
+|---|---|
+| `GET /api/items` | **503** straight away, JSON body |
+| `GET /api/items/stats` | **503** straight away, JSON body |
+
+```json
+{ "message": "The service is temporarily unavailable. Please try again shortly." }
+```
+
+**This is deliberately partial.** Every other database-backed route — claims,
+dashboard, leaderboard, notifications, the admin surface, item detail, and the
+authenticated mutations — has **no such guard yet**. When MongoDB is unreachable
+they still let Mongoose buffer for its default 10 seconds and then return a
+**500** with a logged stack trace. A caller waits ten seconds and gets an
+unhelpful status.
+
+That behaviour is honest but not ideal, and it is documented here rather than
+hidden: do not assume the whole API answers 503 when the database is down. Only
+the two routes above do.
+
+The health endpoints are unaffected and are the right thing to probe:
+`GET /api/health` always answers 200 and reports the database state, while
+`GET /api/health/ready` answers 200 only when the database is connected.
+
+Extending the guard to the remaining routes is a small, mechanical change — the
+same `mongoose.connection.readyState !== 1` check placed before the first query
+— but it changes production status codes, so it is a decision rather than a
+silent edit.
+
+## 16. Deploying to Render
 
 - Root Directory: `backend`
 - Build Command: `npm install`
@@ -724,7 +758,7 @@ locally against the same `MONGO_URI`.
 The free tier sleeps when idle, so the first request after a pause can take
 30–50 seconds. That is the host, not the application.
 
-## 16. Known limitations
+## 17. Known limitations
 
 Stated plainly so nobody assumes more than the code does.
 
