@@ -10,7 +10,7 @@
  */
 const { one, many } = require('../config/pg');
 
-const toUser = (row) => row && {
+const toUser = (row) => (row ? {
   id: row.id,
   name: row.name,
   email: row.email,
@@ -32,7 +32,7 @@ const toUser = (row) => row && {
   tokenVersion: row.token_version,
   createdAt: row.created_at,
   updatedAt: row.updated_at
-};
+} : null);
 
 /** What is safe to send to a client. Never includes the password or tokens. */
 const toSafeObject = (user) => user && {

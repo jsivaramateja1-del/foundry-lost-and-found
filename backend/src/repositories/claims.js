@@ -8,7 +8,7 @@
 const { one, many, transaction } = require('../config/pg');
 const points = require('./points');
 
-const toClaim = (row) => row && {
+const toClaim = (row) => (row ? {
   id: row.id,
   item: row.item,
   claimant: row.claimant,
@@ -19,7 +19,7 @@ const toClaim = (row) => row && {
   reviewedAt: row.reviewed_at,
   handoverConfirmedAt: row.handover_confirmed_at,
   createdAt: row.created_at
-};
+} : null);
 
 const COLUMNS = 'c.*, u.name as claimant_name';
 

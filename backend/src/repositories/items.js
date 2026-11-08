@@ -8,7 +8,7 @@
  */
 const { one, many, db } = require('../config/pg');
 
-const toItem = (row) => row && {
+const toItem = (row) => (row ? {
   id: row.id,
   title: row.title,
   description: row.description,
@@ -27,7 +27,7 @@ const toItem = (row) => row && {
   reporterName: row.reporter_name,
   createdAt: row.created_at,
   updatedAt: row.updated_at
-};
+} : null);
 
 const SORTS = {
   newest: 'i.created_at desc',
