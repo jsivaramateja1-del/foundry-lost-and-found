@@ -27,6 +27,49 @@ const { Pool } = require('pg');
 let pool = null;
 
 /**
+ * TLS settings for the database connection.
+ *
+ * Supabase's pooler presents a chain signed by Supabase's own CA, which Node's
+ * bundled trust store does not contain — connecting with the default settings
+ * fails with "self-signed certificate in certificate chain".
+ *
+ * Three modes, in order of preference:
+ *
+ *   1. PG_CA_CERT_PATH — path to Supabase's prod-ca-2021.crt (Settings ->
+ *      Database -> SSL Configuration). Full verification, nothing weakened.
+ *   2. PG_SSL_NO_VERIFY=true — accept the chain without verifying it. Works
+ *      immediately, but a machine in the middle could impersonate the database.
+ *      Use it to unblock, not as the permanent answer.
+ *   3. Default — verify. Correct, and fails loudly until 1 or 2 is configured.
+ */
+const sslConfig = () => {
+  if (process.env.PG_NO_SSL === 'true') return false;
+
+  const caPath = process.env.PG_CA_CERT_PATH;
+  if (caPath) {
+    try {
+      const fs = require('fs');
+      const ca = fs.readFileSync(caPath, 'utf8');
+      console.log(`PostgreSQL TLS: verifying against ${caPath}`);
+      return { ca, rejectUnauthorized: true };
+    } catch (err) {
+      console.error(`PG_CA_CERT_PATH is set but unreadable (${err.message}); falling through`);
+    }
+  }
+
+  if (process.env.PG_SSL_NO_VERIFY === 'true') {
+    console.warn(
+      'WARNING: PG_SSL_NO_VERIFY is set — the database TLS certificate is NOT verified. ' +
+      'This accepts any certificate the server presents. Set PG_CA_CERT_PATH to ' +
+      'Supabase prod-ca-2021.crt to restore verification.'
+    );
+    return { rejectUnauthorized: false };
+  }
+
+  return { rejectUnauthorized: true };
+};
+
+/**
  * Opens the pool and proves the connection works. Mirrors connectDB(): it
  * throws rather than returning a dead handle, so startup fails loudly.
  */
@@ -41,9 +84,7 @@ const connectDB = async (connectionString = process.env.DATABASE_URL) => {
     max: Number(process.env.PG_POOL_MAX || 10),
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
-    // Supabase requires TLS; the pooler presents a certificate the default
-    // trust store validates, so no `rejectUnauthorized: false` is needed.
-    ssl: process.env.PG_NO_SSL === 'true' ? false : { rejectUnauthorized: true }
+    ssl: sslConfig()
   });
 
   // A pool error must never crash the process silently.
