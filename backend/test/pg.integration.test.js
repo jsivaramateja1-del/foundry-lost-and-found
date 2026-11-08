@@ -162,6 +162,16 @@ const { connectDB, closeDB, many, one, transaction } = require('../src/config/pg
       `update items set verified_at = now() where reported_by = $1`, [u3.id]);
     earned = await badges.evaluate(null, u3.id);
     check('verifying the first found listing earns first_found', earned.includes('first_found'));
+    check('one verified listing does not earn helpful_finder',
+      !earned.includes('helpful_finder'));
+
+    // Two more verified found listings reach the Helpful Finder threshold.
+    await many(
+      `insert into items (title, description, category, location, date, type, reported_by, status, verified_at)
+       values ('Badge Item 2','x','Bags','Library','2026-11-01','found',$1,'open', now()),
+              ('Badge Item 3','x','Bags','Library','2026-11-01','found',$1,'open', now())`, [u3.id]);
+    const third = await badges.evaluate(null, u3.id);
+    check('three verified found listings earns helpful_finder', third.includes('helpful_finder'));
 
     const again = await badges.evaluate(null, u3.id);
     check('evaluating twice awards nothing new', again.length === 0);
