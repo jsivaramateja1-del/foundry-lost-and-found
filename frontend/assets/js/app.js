@@ -480,7 +480,8 @@ function prepareReportForm(meta) {
     if (!isOther) document.getElementById('rf-custom-location').value = '';
   });
 
-  document.getElementById('rf-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('rf-date').value = (() => { const d = new Date(); return [d.getFullYear(),
+      String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-'); })();
 
   // Photo picker: shrink the image as soon as it is chosen, so the submit
   // handler only has to send a ready-made data URL.
@@ -557,7 +558,8 @@ async function submitReport(event) {
     state.pendingImage = '';
     document.getElementById('rf-image-preview').hidden = true;
     document.getElementById('rf-image-preview').innerHTML = '';
-    document.getElementById('rf-date').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('rf-date').value = (() => { const d = new Date(); return [d.getFullYear(),
+      String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-'); })();
     document.getElementById('rf-custom-category-field').hidden = true;
     document.getElementById('rf-custom-location-field').hidden = true;
     fillSubcategories(document.getElementById('rf-subcategory'), document.getElementById('rf-category').value);

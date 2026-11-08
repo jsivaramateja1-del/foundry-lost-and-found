@@ -125,7 +125,7 @@
               ui.esc(i.reportedBy?.name || '—'),
               ui.date(i.date),
               `<select class="select" data-admin-status="${i.id}" aria-label="Status for ${ui.esc(i.title)}">
-                 ${['open', 'claimed', 'returned'].filter((s) => s !== 'returned' || s === i.status).map((s) => `<option value="${s}"${s === i.status ? ' selected' : ''}>${s}</option>`).join('')}
+                 ${['open', 'claimed', 'returned', 'hidden'].filter((s) => s !== 'returned' || s === i.status).map((s) => `<option value="${s}"${s === i.status ? ' selected' : ''}>${s}</option>`).join('')}
                </select>`,
               `<button class="btn btn--ghost" data-admin-delete="${i.id}">Delete</button>`
             ])).join('')

@@ -150,7 +150,7 @@ CREATE TABLE IF NOT EXISTS reports (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   item             UUID        NOT NULL REFERENCES items(id) ON DELETE CASCADE,
   reported_by      UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  reason           TEXT        NOT NULL CHECK (reason IN ('spam','inappropriate','fake','other')),
+  reason           TEXT        NOT NULL CHECK (reason IN ('spam','inappropriate','suspicious','incorrect','fake','other')),
   details          TEXT        NOT NULL DEFAULT '',
   status           TEXT        NOT NULL DEFAULT 'pending'
                    CHECK (status IN ('pending','reviewed','dismissed','actioned')),

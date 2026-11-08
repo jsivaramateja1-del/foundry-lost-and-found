@@ -90,6 +90,14 @@ app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   if (err && err.code === '23505') {
     return res.status(409).json({ message: 'That record already exists' });
   }
+  // A CHECK constraint rejecting a value is the client's fault, not ours.
+  // Without this a bad value surfaces as a 500 and logs a stack trace.
+  if (err && err.code === '23514') {
+    return res.status(400).json({ message: 'One of those values is not allowed' });
+  }
+  if (err && err.code === '22P02') {
+    return res.status(400).json({ message: 'Invalid id' });
+  }
   const status = err.statusCode || 500;
   if (status >= 500) console.error(err);
   res.status(status).json({

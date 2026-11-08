@@ -116,7 +116,7 @@ document.querySelectorAll('[data-toggle-password]').forEach((button) => {
  */
 function scorePassword(value) {
   if (!value) return { score: 0, label: 'Use at least 8 characters' };
-  if (value.length < 6) return { score: 0, label: 'Too short — at least 6 characters' };
+  if (value.length < 6) return { score: 0, label: 'Too short — at least 8 characters' };
 
   let score = 1;
   if (value.length >= 10) score += 1;
@@ -211,7 +211,7 @@ document.getElementById('form-register').addEventListener('submit', async (event
     return showError('register-error',
       `Registration is limited to Sai University addresses: ${acceptedDomains().map((d) => `@${d}`).join(', ')}.`);
   }
-  if (password.length < 8) return showError('register-error', 'Password must be at least 6 characters.');
+  if (password.length < 8) return showError('register-error', 'Password must be at least 8 characters.');
   if (password !== confirm) return showError('register-error', 'The two passwords do not match.');
 
   const btn = document.getElementById('register-submit');
