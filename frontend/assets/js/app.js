@@ -763,3 +763,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 });
+
+/**
+ * Fill the report form's location datalist from the campus registry, so a user
+ * picks a real place instead of typing one that no map can place. Failure is
+ * silent: typing a location by hand must still work.
+ */
+(function loadCampusLocations() {
+  var list = document.getElementById('campus-locations-list');
+  if (!list || typeof fetch !== 'function') return;
+  fetch('/api/campus/locations', { headers: { Accept: 'application/json' } })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (data) {
+      (data && data.locations ? data.locations : []).forEach(function (loc) {
+        var opt = document.createElement('option');
+        opt.value = loc.name;
+        list.appendChild(opt);
+      });
+    })
+    .catch(function () { /* keep manual entry working */ });
+})();

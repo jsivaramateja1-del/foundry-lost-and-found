@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Campus Explorer — Foundry</title>
+  <link rel="stylesheet" href="assets/css/styles.css" />
+  <!-- Leaflet is loaded from a CDN: no API key, and the map tiles are
+       OpenStreetMap's own. If the CDN is unreachable the page says so instead of
+       showing a blank grey box. -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    #map { height: 460px; border-radius: 12px; border: 1px solid rgba(255,255,255,.12); }
+    .explorer-layout { display: grid; grid-template-columns: 320px 1fr; gap: 20px; align-items: start; }
+    @media (max-width: 860px) { .explorer-layout { grid-template-columns: 1fr; } #map { height: 360px; } }
+    .loc-card { padding: 12px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; margin-bottom: 10px; cursor: pointer; }
+    .loc-card:hover, .loc-card:focus { border-color: var(--accent, #4ade80); outline: none; }
+    .loc-card h3 { margin: 0 0 4px; font-size: 15px; }
+    .loc-card p { margin: 0; font-size: 13px; opacity: .75; }
+    .loc-source { font-size: 11px; opacity: .55; margin-top: 6px; }
+    .state-box { padding: 16px; border: 1px dashed rgba(255,255,255,.2); border-radius: 10px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <a href="index.html" class="brand">Foundry</a>
+    <nav><a href="index.html">Board</a><a href="explorer.html" aria-current="page">Campus Explorer</a><a href="dashboard.html">Dashboard</a></nav>
+  </header>
+
+  <main class="container" style="padding:24px 16px;">
+    <h1>Campus Explorer</h1>
+    <p style="opacity:.8;max-width:70ch;">
+      Find where a lost or found item was seen. Locations are added by university
+      administrators and each one records where its coordinate came from.
+    </p>
+
+    <div class="explorer-layout">
+      <section>
+        <label for="loc-search" class="sr-only">Search campus locations</label>
+        <input id="loc-search" type="search" placeholder="Search buildings and locations…"
+               style="width:100%;padding:10px;border-radius:10px;margin-bottom:14px;" />
+        <div id="loc-list" aria-live="polite">
+          <div class="state-box" id="loc-loading">Loading campus locations…</div>
+        </div>
+      </section>
+
+      <section>
+        <div id="map" role="region" aria-label="Campus map"></div>
+        <div id="map-state" class="state-box" style="margin-top:12px;display:none;"></div>
+        <div id="loc-detail" style="margin-top:14px;"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="assets/js/explorer.js"></script>
+</body>
+</html>

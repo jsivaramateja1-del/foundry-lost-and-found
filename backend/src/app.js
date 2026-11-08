@@ -99,6 +99,7 @@ app.use('/api/claims', claimRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
+app.use('/api/campus', require('./routes/campus.routes'));
 app.use('/api/notifications', notificationRoutes);
 
 // Serve the frontend from ../frontend when it exists (single-service deploy)

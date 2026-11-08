@@ -348,6 +348,24 @@ const check = (name, cond, detail = '') => {
       spoofed.body.ip !== second.body.ip);
   }
 
+  // ---- Campus Explorer ----
+  {
+    const noDb = await request(app).get('/api/campus/locations');
+    check('campus locations answer 503 when the database is down',
+      noDb.status === 503, `got ${noDb.status}`);
+
+    const anonPost = await request(app).post('/api/campus/locations')
+      .send({ name: 'Library', lat: 12.65, lng: 80.15, source: 'survey' });
+    check('an anonymous user cannot add a campus location (401)',
+      anonPost.status === 401, `got ${anonPost.status}`);
+
+    const studentPost = await request(app).post('/api/campus/locations')
+      .set('Authorization', 'Bearer not-a-real-token')
+      .send({ name: 'Library', lat: 12.65, lng: 80.15, source: 'survey' });
+    check('a request without a valid token cannot add a location (401)',
+      studentPost.status === 401, `got ${studentPost.status}`);
+  }
+
   console.log('\n' + results.join('\n'));
   // Close the handle so the process exits without waiting on Mongoose
   try { await require('mongoose').connection.close(); } catch { /* never connected */ }

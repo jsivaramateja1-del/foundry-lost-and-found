@@ -80,6 +80,8 @@ const mountPrefix = (src) => {
     'GET /api/items/:id/similar',
     'GET /api/items/meta',
     'GET /api/items/stats',
+    'GET /api/campus/locations',
+    'POST /api/campus/locations',
     'GET /api/leaderboard',
     'GET /api/notifications',
     'PATCH /api/admin/items/:id/status',
