@@ -67,6 +67,22 @@ jobs:
         working-directory: backend
         run: npm run test:ledger
 
+      - name: Install the browser used by the browser tests
+        working-directory: backend
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser tests (real Chromium against the real server)
+        working-directory: backend
+        run: npm run test:browser
+
+      - name: Keep browser artefacts when something fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: backend/test-results
+          if-no-files-found: ignore
+
       - name: Dependency vulnerability audit
         working-directory: backend
         run: npm audit --audit-level=high
