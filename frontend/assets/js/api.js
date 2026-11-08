@@ -185,25 +185,17 @@ function applyTheme(theme) {
 }
 
 function initTheme() {
-  let stored = 'dark';
-  try {
-    stored = localStorage.getItem(THEME_KEY) || 'dark';
-  } catch {
-    /* private mode: just use the default */
+  // theme-init.js already resolved stored -> OS preference -> Paper before
+  // first paint. Trust that decision instead of re-deriving it with a
+  // different rule, which caused a flash of the wrong theme and ignored the
+  // operating system setting entirely.
+  var decided = document.documentElement.getAttribute('data-theme');
+  if (decided === 'light' || decided === 'dark') {
+    applyTheme(decided);
+  } else {
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    applyTheme(prefersDark ? 'dark' : 'light');
   }
-  applyTheme(stored);
-
-  document.querySelectorAll('[data-theme-toggle]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
-      try {
-        localStorage.setItem(THEME_KEY, next);
-      } catch {
-        /* the theme simply will not persist */
-      }
-      applyTheme(next);
-    });
-  });
 }
 
 /** Reveal elements as they scroll into view. */
