@@ -45,7 +45,13 @@ const ipLimiter = (envName, fallback) =>
 const accountLimiter = (envName, fallback) =>
   rateLimit({
     ...options(positiveInt(envName, fallback), 'You are doing that too often. Please try again later.'),
-    keyGenerator: (req) => String(req.user._id)
+    keyGenerator: (req) => {
+      // The Postgres user object exposes `id`; the Mongo one used `_id`. Keying
+      // on the wrong field collapses every account into one shared bucket.
+      const id = req.user && (req.user.id || req.user._id);
+      if (!id) throw new Error('accountLimiter must be mounted after protect()');
+      return String(id);
+    }
   });
 
 /* One instance per route, so the three write paths cannot exhaust each other. */

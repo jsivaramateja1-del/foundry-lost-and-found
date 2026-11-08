@@ -5,6 +5,7 @@ const items = require('../repositories/items');
 const { protect } = require('../middleware/auth.v2');
 const mailer = require('../lib/brevo');
 const users = require('../repositories/users');
+const { claimIpLimit, claimAccountLimit } = require('../middleware/rateLimit');
 
 const router = express.Router();
 
@@ -15,7 +16,7 @@ const handoverCode = (claimId) => {
   return (parseInt(h.slice(0, 8), 16) % 900000 + 100000).toString();
 };
 
-router.post('/', protect, async (req, res, next) => {
+router.post('/', claimIpLimit, protect, claimAccountLimit, async (req, res, next) => {
   try {
     const itemId = typeof req.body.item === 'string' ? req.body.item : '';
     const message = typeof req.body.message === 'string' ? req.body.message.trim().slice(0, 500) : '';
@@ -74,7 +75,7 @@ router.get('/received', protect, async (req, res, next) => {
 });
 
 /** Owner approves or rejects. Approving auto-rejects siblings in one transaction. */
-router.patch('/:id/review', protect, async (req, res, next) => {
+router.patch('/:id/review', claimIpLimit, protect, claimAccountLimit, async (req, res, next) => {
   try {
     const claim = await claims.findById(req.params.id);
     if (!claim) return res.status(404).json({ message: 'Claim not found' });
@@ -84,7 +85,10 @@ router.patch('/:id/review', protect, async (req, res, next) => {
       return res.status(403).json({ message: 'Only the person who posted the item can review claims' });
     }
 
-    const decision = req.body.decision === 'approve' ? 'approve' : 'reject';
+    const decision = req.body.decision;
+    if (!['approve', 'reject'].includes(decision)) {
+      return res.status(400).json({ message: 'decision must be approve or reject' });
+    }
     const note = typeof req.body.note === 'string' ? req.body.note.trim().slice(0, 300) : '';
 
     const result = decision === 'approve'
@@ -93,6 +97,9 @@ router.patch('/:id/review', protect, async (req, res, next) => {
 
     if (result.error === 'not-found') return res.status(404).json({ message: 'Claim not found' });
     if (result.error === 'not-pending') return res.status(409).json({ message: 'That claim was already reviewed' });
+    if (result.error === 'item-not-open') {
+      return res.status(409).json({ message: 'That listing is no longer open for claims' });
+    }
 
     // Tell the claimant the outcome. Only an approval needs the handover code
     // explained, so only an approval sends mail.
@@ -104,12 +111,13 @@ router.patch('/:id/review', protect, async (req, res, next) => {
         .catch(() => {});
     }
 
-    res.status(200).json({ message: `Claim ${decision}d`, ...result });
+    const label = decision === 'approve' ? 'approved' : 'rejected';
+    res.status(200).json({ message: `Claim ${label}`, ...result });
   } catch (err) { next(err); }
 });
 
 /** Owner enters the six-digit code to complete the handover. */
-router.post('/:id/complete', protect, async (req, res, next) => {
+router.post('/:id/complete', claimIpLimit, protect, claimAccountLimit, async (req, res, next) => {
   try {
     const claim = await claims.findById(req.params.id);
     if (!claim) return res.status(404).json({ message: 'Claim not found' });
@@ -129,6 +137,9 @@ router.post('/:id/complete', protect, async (req, res, next) => {
     const result = await claims.complete(claim.id, req.user.id, matches);
     if (result.error === 'bad-code') return res.status(400).json({ message: 'That handover code is not correct' });
     if (result.error === 'not-approved') return res.status(409).json({ message: 'That claim is not approved' });
+    if (result.error === 'item-not-claimed') {
+      return res.status(409).json({ message: 'That listing is not in a claimable state' });
+    }
     if (result.error === 'not-found') return res.status(404).json({ message: 'Claim not found' });
 
     res.status(200).json({ message: 'Handover complete. The item is marked returned.', ...result });

@@ -56,6 +56,15 @@ const approve = (claimId, reviewerId, note = '') => transaction(async (client) =
   if (!claim) return { error: 'not-found' };
   if (claim.status !== 'pending') return { error: 'not-pending' };
 
+  // Lock the ITEM too, and require it to still be open. Without this two
+  // different claims on one listing can both be approved, the item is marked
+  // claimed twice, and a stale pending claim can drag a returned or
+  // moderator-hidden listing back onto the board.
+  const itemRow = (await client.query(
+    'select status from items where id=$1 for update', [claim.item])).rows[0];
+  if (!itemRow) return { error: 'not-found' };
+  if (itemRow.status !== 'open') return { error: 'item-not-open' };
+
   await client.query(
     `update claims set status='approved', reviewed_by=$2, review_note=$3, reviewed_at=now()
       where id=$1`, [claimId, reviewerId, note]);
@@ -94,16 +103,20 @@ const complete = (claimId, confirmerId, codeMatches) => transaction(async (clien
   await client.query(
     `update claims set status='completed', handover_confirmed_by=$2, handover_confirmed_at=now()
       where id=$1`, [claimId, confirmerId]);
-  await client.query("update items set status='returned' where id=$1", [claim.item]);
+  const done = await client.query(
+    "update items set status='returned' where id=$1 and status='claimed' returning id", [claim.item]);
+  if (done.rowCount === 0) return { error: 'item-not-claimed' };
 
   const itemRow = (await client.query('select * from items where id=$1', [claim.item])).rows[0];
+  // Keys are ITEM-scoped, not claim-scoped. Two claims on one item must not be
+  // able to pay the same person twice; this was the Mongo guarantee.
   await points.award(client, {
     userId: itemRow.reported_by, type: 'return',
-    eventKey: `return:${claim.id}:owner`, itemId: claim.item, claimId: claim.id
+    eventKey: `return:${claim.item}:${itemRow.reported_by}`, itemId: claim.item, claimId: claim.id
   });
   await points.award(client, {
     userId: claim.claimant, type: 'return',
-    eventKey: `return:${claim.id}:claimant`, itemId: claim.item, claimId: claim.id
+    eventKey: `return:${claim.item}:${claim.claimant}`, itemId: claim.item, claimId: claim.id
   });
 
   return { completed: claimId };
