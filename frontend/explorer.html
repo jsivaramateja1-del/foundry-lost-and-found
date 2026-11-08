@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Campus Explorer — Foundry</title>
   <link rel="stylesheet" href="assets/css/styles.css" />
-  <!-- Leaflet is loaded from a CDN: no API key, and the map tiles are
-       OpenStreetMap's own. If the CDN is unreachable the page says so instead of
-       showing a blank grey box. -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Leaflet is served from this application (assets/vendor), not a CDN: the
+       map then works offline, needs no CSP exception and cannot fail because a
+       third party is slow. Tiles still come from OpenStreetMap. -->
+  <link rel="stylesheet" href="assets/vendor/leaflet.css" />
   <style>
     #map { height: 460px; border-radius: 12px; border: 1px solid rgba(255,255,255,.12); }
     .explorer-layout { display: grid; grid-template-columns: 320px 1fr; gap: 20px; align-items: start; }
@@ -52,7 +52,7 @@
     </div>
   </main>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="assets/vendor/leaflet.js"></script>
   <script src="assets/js/explorer.js"></script>
 </body>
 </html>

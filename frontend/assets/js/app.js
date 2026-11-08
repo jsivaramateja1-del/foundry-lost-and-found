@@ -770,16 +770,25 @@ document.addEventListener('DOMContentLoaded', async () => {
  * silent: typing a location by hand must still work.
  */
 (function loadCampusLocations() {
-  var list = document.getElementById('campus-locations-list');
+  // The report form uses a <select id="rf-location"> filled from the fixed
+  // LOCATIONS list. Real campus places are appended as their own group, so a
+  // user can pick somewhere the map actually knows about.
+  var list = document.getElementById('rf-location');
   if (!list || typeof fetch !== 'function') return;
   fetch('/api/campus/locations', { headers: { Accept: 'application/json' } })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (data) {
-      (data && data.locations ? data.locations : []).forEach(function (loc) {
+      var locs = (data && data.locations) ? data.locations : [];
+      if (!locs.length) return;
+      var group = document.createElement('optgroup');
+      group.label = 'Campus Explorer locations';
+      locs.forEach(function (loc) {
         var opt = document.createElement('option');
         opt.value = loc.name;
-        list.appendChild(opt);
+        opt.textContent = loc.name;
+        group.appendChild(opt);
       });
+      list.appendChild(group);
     })
     .catch(function () { /* keep manual entry working */ });
 })();

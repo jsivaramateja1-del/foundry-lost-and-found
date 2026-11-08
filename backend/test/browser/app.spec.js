@@ -128,8 +128,8 @@ test('selecting a location offers walking directions', async ({ page }) => {
 
 test('the report form offers campus locations', async ({ page }) => {
   await page.goto('/');
-  const options = page.locator('#campus-locations-list option');
-  await expect(options.first()).toHaveAttribute('value', /Sai University Main Campus/, { timeout: 20000 });
+  const option = page.locator('#rf-location option[value="Sai University Main Campus"]');
+  await expect(option).toHaveCount(1, { timeout: 20000 });
 });
 
 test('the registration form rejects a non-university address', async ({ page }) => {

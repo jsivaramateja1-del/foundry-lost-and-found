@@ -34,9 +34,11 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-      'script-src': ["'self'", 'https://unpkg.com'],
-      'style-src': ["'self'", "'unsafe-inline'", 'https://unpkg.com'],
-      'img-src': ["'self'", 'data:', 'https://*.tile.openstreetmap.org', 'https://unpkg.com'],
+      // Leaflet is served from this application now, so scripts and styles stay
+      // same-origin; only the map tiles need an external host.
+      'script-src': ["'self'"],
+      'style-src': ["'self'", "'unsafe-inline'"],
+      'img-src': ["'self'", 'data:', 'https://*.tile.openstreetmap.org'],
       'connect-src': ["'self'", 'https://*.tile.openstreetmap.org']
     }
   }
