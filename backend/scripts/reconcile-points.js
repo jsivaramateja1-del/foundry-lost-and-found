@@ -1,0 +1,239 @@
+/**
+ * Reconcile user point totals against the PointEvent ledger.
+ *
+ * The ledger is the record of truth. This script reports every account whose
+ * running total disagrees with the sum of its events — the residue of a failed
+ * compensating write, or of points that existed before the ledger did.
+ *
+ * It never deletes an event and never touches anything but `points` and
+ * `returns`. Dry run by default; nothing changes without --apply.
+ *
+ *   npm run reconcile:points            (report only)
+ *   npm run reconcile:points -- --apply (write the ledger totals onto users)
+ */
+require('dotenv').config();
+const mongoose = require('mongoose');
+const connectDB = require('../src/config/db');
+const fs = require('fs');
+const path = require('path');
+const User = require('../src/models/User');
+const PointEvent = require('../src/models/PointEvent');
+const { classifyBalance, planChange, leaseClaimFilter } = require('../src/utils/reconcile');
+const { prepareRestore, describeRestore, RestoreError } = require('../src/utils/restore');
+const { applyRestore } = require('../src/utils/restore-apply');
+const { settleClaimed, CLAIM_LEASE_MS } = require('../src/utils/gamification');
+
+const APPLY = process.argv.includes('--apply');
+// --restore <file> puts a backup back, which is the documented undo for --apply
+const RESTORE_INDEX = process.argv.indexOf('--restore');
+const RESTORE_FILE = RESTORE_INDEX > -1 ? process.argv[RESTORE_INDEX + 1] : null;
+// Reductions can destroy a balance that predates the ledger, so they need a
+// second, explicit switch on top of --apply.
+const ALLOW_DECREASE = process.argv.includes('--allow-decrease');
+const COMPLETE_PENDING = process.argv.includes('--complete-pending');
+const BACKUP_DIR = path.join(__dirname, '..', 'backups');
+
+(async () => {
+  try {
+  // ---- restore: validate and authorise BEFORE opening a connection ----
+  // A malformed file or an unauthorised restore must never reach the database.
+  let restorePlan = null;
+  if (RESTORE_INDEX > -1) {
+    try {
+      restorePlan = prepareRestore({ file: RESTORE_FILE, force: process.argv.includes('--force') });
+    } catch (err) {
+      if (err instanceof RestoreError) {
+        console.error(`\n${err.message}`);
+        process.exit(1);
+      }
+      throw err;
+    }
+    console.log(`\n${describeRestore(restorePlan)}`);
+  }
+
+    const conn = await connectDB();
+    console.log(`\nConnected to host=${conn.connection.host} database=${conn.connection.name}`);
+
+    if (restorePlan) {
+      const restored = await applyRestore({ plan: restorePlan, User, mongoose });
+
+      console.log(`\nBalances restored atomically for ${restored} account(s).`);
+      console.log('Nothing was deleted. Ledger rows and credit markers were left untouched,');
+      console.log('so this is a balance restore, not a full rollback of the run.');
+      await mongoose.connection.close();
+      process.exit(0);
+    }
+
+    const ledger = await PointEvent.aggregate([
+      { $match: { status: 'completed' } },
+      {
+        $group: {
+          _id: '$user',
+          points: { $sum: '$points' },
+          returns: { $sum: { $cond: [{ $eq: ['$type', 'return'] }, 1, 0] } },
+          events: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const pendingByUser = await PointEvent.aggregate([
+      { $match: { status: { $in: ['pending', 'claimed'] } } },
+      { $group: { _id: '$user', pending: { $sum: 1 }, points: { $sum: '$points' } } }
+    ]);
+
+    const byUser = new Map(ledger.map((row) => [String(row._id), row]));
+    const pendingMap = new Map(pendingByUser.map((row) => [String(row._id), row]));
+    const users = await User.find().select('name email points returns');
+
+    const rows = users.map((user) => {
+      const entry = byUser.get(String(user._id)) || { points: 0, returns: 0, events: 0 };
+      const pending = pendingMap.get(String(user._id)) || { pending: 0, points: 0 };
+      const base = {
+        id: String(user._id),
+        name: user.name,
+        email: user.email,
+        storedPoints: user.points,
+        storedReturns: user.returns,
+        ledgerPoints: entry.points,
+        ledgerReturns: entry.returns,
+        events: entry.events,
+        pendingEvents: pending.pending,
+        pendingPoints: pending.points
+      };
+      return { ...base, ...classifyBalance(base) };
+    });
+
+    console.log(`\nUsers scanned: ${users.length}`);
+    console.log(`Completed ledger events: ${ledger.reduce((sum, r) => sum + r.events, 0)}`);
+    console.log(`Pending ledger events:   ${pendingByUser.reduce((sum, r) => sum + r.pending, 0)}`);
+
+    const interesting = rows.filter((r) => r.state !== 'in-sync' || r.pendingEvents > 0);
+    if (!interesting.length) {
+      console.log('\nEvery balance is explained by the ledger. Nothing to do.');
+      await mongoose.connection.close();
+      process.exit(0);
+    }
+
+    console.log('\n--- Accounts that need a decision ---');
+    interesting.forEach((r) => {
+      console.log(`\n  ${r.name} <${r.email}>  [${r.state}]`);
+      console.log(`    stored      points ${r.storedPoints}   returns ${r.storedReturns}`);
+      console.log(`    ledger      points ${r.ledgerPoints}   returns ${r.ledgerReturns}   (${r.events} completed events)`);
+      console.log(`    pre-ledger  points ${r.preLedgerPoints}   returns ${r.preLedgerReturns}`);
+      if (r.pendingEvents) {
+        console.log(`    pending     ${r.pendingEvents} event(s) worth ${r.pendingPoints} points`);
+      }
+    });
+
+    const plans = interesting.map((row) => ({ row, plan: planChange(row, { allowDecrease: ALLOW_DECREASE }) }));
+    const writes = plans.filter((p) => p.plan && p.plan.action !== 'skip');
+
+    console.log('\n--- What would change ---');
+    if (!writes.length) {
+      console.log('  Nothing. Historical balances are left alone by default.');
+    }
+    writes.forEach(({ row, plan }) => {
+      console.log(`  ${row.name}: ${plan.action}  points ${plan.from.points} -> ${plan.to.points}, `
+        + `returns ${plan.from.returns} -> ${plan.to.returns}  (${plan.reason})`);
+    });
+    plans.filter((p) => p.plan && p.plan.action === 'skip').forEach(({ row, plan }) => {
+      console.log(`  ${row.name}: SKIPPED — ${plan.reason}`);
+    });
+
+    if (!APPLY) {
+      console.log('\nDRY RUN - nothing was written.');
+      if (!ALLOW_DECREASE) {
+        console.log('Historical balances are never overwritten by a plain --apply.');
+        console.log('To overwrite them as well: --apply --allow-decrease  (a backup is taken first)');
+      }
+      if (COMPLETE_PENDING) {
+        console.log('--complete-pending would credit the pending events listed above.');
+      }
+      await mongoose.connection.close();
+      process.exit(0);
+    }
+
+    // A backup is written before anything is changed, every time
+    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupFile = path.join(BACKUP_DIR, `points-backup-${stamp}.json`);
+    const envelope = {
+      format: 'foundry-points-backup/2',
+      createdAt: new Date().toISOString(),
+      host: conn.connection.host,
+      database: conn.connection.name,
+      flags: {
+        apply: APPLY,
+        allowDecrease: ALLOW_DECREASE,
+        completePending: COMPLETE_PENDING
+      },
+      // What --restore can and cannot put back. Written here, at the moment the
+      // backup is taken, because only this run knows which flags were used.
+      reversibility: {
+        balances: 'restored by --restore',
+        ledgerStatus: COMPLETE_PENDING
+          ? 'NOT reversible: --complete-pending marked events completed'
+          : 'no ledger status was changed by this run',
+        creditedMarkers: COMPLETE_PENDING
+          ? 'NOT reversible: credit markers were added by --complete-pending'
+          : 'no credit markers were added by this run'
+      },
+      accounts: rows.map((r) => ({
+        id: r.id, email: r.email, points: r.storedPoints, returns: r.storedReturns
+      }))
+    };
+    fs.writeFileSync(backupFile, JSON.stringify(envelope, null, 2));
+    console.log(`\nBackup written to ${backupFile}`);
+    console.log('It records balances only. See "what --restore cannot undo" below.');
+    console.log('To put the balances back: node scripts/reconcile-points.js --restore ' + backupFile);
+
+    for (const { row, plan } of writes) {
+      await User.updateOne(
+        { _id: row.id },
+        { $set: { points: plan.to.points, returns: plan.to.returns } }
+      );
+    }
+
+    let creditedPending = 0;
+    if (COMPLETE_PENDING) {
+      // Same path the application uses: claim, credit idempotently, complete.
+      // A live claim is skipped unless its lease has expired, so a running
+      // request is never raced.
+      const stuck = await PointEvent.find({
+        $or: [
+          { status: 'pending' },
+          { status: 'claimed', claimedAt: { $lt: new Date(Date.now() - CLAIM_LEASE_MS) } }
+        ]
+      });
+      for (const event of stuck) {
+        // The filter carries the exact lease we observed, so a lease renewed
+        // between the query above and this update cannot be stolen.
+        const claimed = await PointEvent.findOneAndUpdate(
+          leaseClaimFilter(event),
+          { $set: { status: 'claimed', claimedAt: new Date() } },
+          { new: true }
+        );
+        if (!claimed) continue;              // renewed, completed, or taken by someone else
+        const result = await settleClaimed(claimed);
+        if (result.awarded) creditedPending += 1;
+      }
+      console.log(`Settled ${creditedPending} stuck event(s).`);
+    }
+
+    console.log(`\nUpdated ${writes.length} account(s).`);
+    await mongoose.connection.close();
+    process.exit(0);
+  } catch (err) {
+    console.error('Reconciliation failed:', err.message);
+
+    try {
+      if (mongoose.connection.readyState !== 0) {
+        await mongoose.connection.close();
+      }
+    } catch (closeErr) {
+      console.error('Database connection cleanup failed:', closeErr.message);
+    }
+
+    process.exit(1);
+  }
+})();

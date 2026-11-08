@@ -1,0 +1,73 @@
+name: Weekly audit
+
+# Full suite, dependency review and a data-consistency read. Runs against an
+# in-memory database only: it never touches production data.
+# NOTE: GitHub only runs `schedule:` triggers from the repository's DEFAULT branch
+# (currently `main`). While this file exists only on `phase3-stage1`, the cron
+# below does NOT fire — use "Run workflow" (workflow_dispatch) to try it, or merge
+# to the default branch to activate the schedule.
+on:
+  schedule:
+    - cron: '0 3 * * 1'       # Mondays 03:00 UTC = 08:30 IST
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Full test suite
+        working-directory: backend
+        run: |
+          npm run test:offline
+          npm run test:routes
+          npm run test:ratelimit
+          npm run test:frontend
+          npm test
+          npm run test:transactions
+          npm run test:coverage
+
+      - name: Dependency vulnerability report
+        working-directory: backend
+        run: npm audit --json > /tmp/audit.json || true
+        # Reported, not blocking: a new advisory should be triaged, not silently
+        # break the build.
+
+      - name: Show advisories that need attention
+        run: |
+          node -e "
+            const a = require('/tmp/audit.json');
+            const v = a.vulnerabilities || {};
+            const rows = Object.entries(v).filter(([,x]) => ['high','critical'].includes(x.severity));
+            if (!rows.length) { console.log('No high or critical advisories.'); process.exit(0); }
+            for (const [name, x] of rows) console.log(x.severity.toUpperCase(), name, x.via && x.via[0] && (x.via[0].title || x.via[0]));
+            console.log(rows.length + ' advisor(y/ies) need review.');
+          "
+
+      - name: Ledger consistency audit (isolated in-memory database, read-only)
+        working-directory: backend
+        # test:ledger seeds a known account/ledger pair in an in-memory database,
+        # runs the same classification the production script uses, and asserts
+        # that (a) a matching balance is reported in sync, (b) a pending award is
+        # not counted as a score, (c) an under-credited account is detected, and
+        # (d) nothing was written. It never connects to production.
+        run: npm run test:ledger
+
+      - name: Boot test — the real server against an isolated database
+        working-directory: backend
+        # test:boot starts its own in-memory MongoDB and passes its URI to the
+        # server, so this never needs a production database and never writes to
+        # one. It asserts /api/health, /api/health/ready, the homepage and two
+        # API routes actually answer.
+        run: npm run test:boot

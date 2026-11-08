@@ -1,7 +1,9 @@
 const express = require('express');
 const Item = require('../models/Item');
 const Claim = require('../models/Claim');
+const PointEvent = require('../models/PointEvent');
 const { protect } = require('../middleware/auth');
+const { BADGES } = require('../utils/gamification');
 
 const router = express.Router();
 
@@ -30,7 +32,42 @@ router.get('/me', protect, async (req, res, next) => {
         ])
       : [0, 0];
 
+    // Personal impact: the ledger is the source of truth, so these numbers
+    // describe verified contributions only
+    // Only completed events are contributions. A pending or in-flight award is
+    // reported separately, so the summary never claims credit that has not
+    // landed on the account.
+    const [recentEvents, totalEvents, pendingEvents] = await Promise.all([
+      PointEvent.find({ user: req.user._id, status: 'completed' })
+        .sort({ createdAt: -1 }).limit(10).lean(),
+      PointEvent.countDocuments({ user: req.user._id, status: 'completed' }),
+      PointEvent.countDocuments({ user: req.user._id, status: { $in: ['pending', 'claimed'] } })
+    ]);
+
+    const earned = new Set((req.user.badges || []).map((b) => b.id));
+    const badges = BADGES.map((b) => ({
+      id: b.id,
+      label: b.label,
+      description: b.description,
+      earned: earned.has(b.id),
+      earnedAt: (req.user.badges || []).find((e) => e.id === b.id)?.earnedAt || null
+    }));
+
     res.status(200).json({
+      impact: {
+        points: req.user.points,
+        returns: req.user.returns,
+        contributions: totalEvents,
+        // Not yet credited: shown so a stuck award is visible, never counted
+        pendingAwards: pendingEvents,
+        badgesEarned: badges.filter((b) => b.earned).length,
+        recent: recentEvents.map((e) => ({
+          type: e.type,
+          points: e.points,
+          createdAt: e.createdAt
+        }))
+      },
+      badges,
       stats: {
         listings: items.length,
         lost: items.filter((i) => i.type === 'lost').length,

@@ -26,7 +26,11 @@ const origins = (process.env.CLIENT_ORIGIN || '')
   .filter(Boolean);
 app.use(
   cors({
-    origin: origins.length && process.env.NODE_ENV === 'production' ? origins : true,
+    // In production the browser talks to this same origin, so cross-origin
+    // access is not needed at all. Reflecting every origin when CLIENT_ORIGIN is
+    // unset would silently allow any site to call the API with credentials, so
+    // the default there is to allow none rather than all.
+    origin: process.env.NODE_ENV === 'production' ? (origins.length ? origins : false) : true,
     credentials: true
   })
 );

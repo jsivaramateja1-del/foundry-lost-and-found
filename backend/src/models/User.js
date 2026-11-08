@@ -36,6 +36,9 @@ const userSchema = new mongoose.Schema(
     // Simple gamification: points are awarded when a return is completed
     points: { type: Number, default: 0, min: 0 },
     returns: { type: Number, default: 0, min: 0 },
+    // Students may keep their name off the public leaderboard. Defaults to
+    // false, so every existing account keeps its current visibility.
+    leaderboardOptOut: { type: Boolean, default: false },
     // Email verification. Only used when EMAIL_VERIFICATION=enabled; accounts
     // created while it is disabled are verified immediately.
     emailVerified: { type: Boolean, default: false },
@@ -52,7 +55,32 @@ const userSchema = new mongoose.Schema(
     // Only the hash of the token is stored, so a database leak cannot be used
     // to verify somebody else's address
     verificationTokenHash: { type: String, select: false },
-    verificationTokenExpires: { type: Date, select: false }
+    verificationTokenExpires: { type: Date, select: false },
+    // Password reset. Only the hash is stored, exactly like verification.
+    resetTokenHash: { type: String, select: false },
+    resetTokenExpires: { type: Date, select: false },
+    // Bumped on every password reset. Tokens carry the value they were signed
+    // with, so a reset silently logs out every older session.
+    tokenVersion: { type: Number, default: 0 },
+    // Ids of the point events already credited to this account. The credit
+    // update is guarded on this list, which is what makes applying a credit
+    // idempotent — a retry after a crash matches nothing and pays nothing.
+    //
+    // These markers are PERMANENT and are never pruned. A worker can be paused
+    // for an unbounded time: it can hold a claim, lose its lease to another
+    // worker, and only resume after that worker has finished. Removing a marker
+    // would let that delayed or stale worker credit the same event a second
+    // time. The array therefore grows by one id per award for the life of the
+    // account — roughly 24 bytes each. That is the intended trade-off: do NOT
+    // add automatic pruning, and do not treat this list as a short-lived cache.
+    creditedEvents: { type: [String], default: [] },
+    // Badges are earned once and keep the date they were awarded
+    badges: [
+      {
+        id: { type: String, required: true },
+        earnedAt: { type: Date, default: Date.now }
+      }
+    ]
   },
   { timestamps: true }
 );
@@ -78,6 +106,8 @@ userSchema.methods.toSafeObject = function () {
     role: this.role,
     points: this.points,
     returns: this.returns,
+    leaderboardOptOut: Boolean(this.leaderboardOptOut),
+    badges: (this.badges || []).map((b) => ({ id: b.id, earnedAt: b.earnedAt })),
     emailVerified: Boolean(this.emailVerified),
     pendingApproval: Boolean(this.pendingApproval),
     approvalNote: this.approvalNote || '',

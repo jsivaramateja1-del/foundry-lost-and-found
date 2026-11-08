@@ -140,11 +140,21 @@
             <input class="input" type="search" id="search" placeholder="Bottle, ID card, backpack…" autocomplete="off" />
           </div>
           <div class="field">
-            <label for="filter-type">Status</label>
+            <label for="filter-type">Type</label>
             <select class="select" id="filter-type">
               <option value="all">Lost &amp; found</option>
               <option value="lost">Lost only</option>
               <option value="found">Found only</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="filter-status">Status</label>
+            <select class="select" id="filter-status">
+              <option value="all">Any status</option>
+              <option value="open">Open</option>
+              <option value="claimed">Claimed</option>
+              <option value="returned">Returned</option>
+              <option value="closed">Closed</option>
             </select>
           </div>
           <div class="field">
@@ -195,8 +205,8 @@
           <h3 id="empty-title">Nothing matches that yet</h3>
           <p id="empty-text">Try a different keyword, or widen the filters. You can also report the item yourself.</p>
           <div class="empty__actions">
-            <button class="btn btn--solid" data-open-report="lost">Report a lost item</button>
-            <button class="btn" data-open-report="found">Report a found item</button>
+            <button class="btn btn--solid" data-open-report="lost">Report a Lost Item</button>
+            <button class="btn" data-open-report="found">Report a Found Item</button>
             <button class="btn btn--ghost" id="clear-from-empty">Clear filters</button>
           </div>
         </div>

@@ -77,7 +77,7 @@ async function api(path, { method = 'GET', body, auth = false, signal } = {}) {
     });
   } catch (err) {
     if (err.name === 'AbortError') throw err;
-    throw new Error('Cannot reach the server. Is the backend running on port 5000?');
+    throw new Error('Cannot reach Foundry. Check your connection and try again.');
   }
 
   let data = null;

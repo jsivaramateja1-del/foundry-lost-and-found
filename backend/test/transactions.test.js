@@ -25,6 +25,7 @@ const User = require('../src/models/User');
 const Item = require('../src/models/Item');
 const Claim = require('../src/models/Claim');
 const Notification = require('../src/models/Notification');
+const { applyRestore } = require('../src/utils/restore-apply');
 
 let passed = 0;
 let failed = 0;
@@ -83,6 +84,86 @@ const makeListing = async (auth, title) => {
     if (!transactional) {
       throw new Error('Refusing to continue: this suite is meaningless without transactions');
     }
+    // ---------- Atomic points restore rollback ----------
+    const restoreA = await makeUser('Restore A', 'restore-a@example.com');
+    const restoreB = await makeUser('Restore B', 'restore-b@example.com');
+
+    await User.updateOne(
+      { _id: restoreA.user._id },
+      { $set: { points: 11, returns: 1 } }
+    );
+    await User.updateOne(
+      { _id: restoreB.user._id },
+      { $set: { points: 22, returns: 2 } }
+    );
+
+    const restorePlan = {
+      accounts: [
+        { id: String(restoreA.user._id), points: 100, returns: 10 },
+        { id: String(restoreB.user._id), points: 200, returns: 20 }
+      ]
+    };
+
+    const originalUpdateOne = User.updateOne;
+    let restoreWriteCount = 0;
+    let restoreFailed = false;
+
+    User.updateOne = async function (...args) {
+      restoreWriteCount += 1;
+      if (restoreWriteCount === 2) {
+        throw new Error('simulated restore failure on second account');
+      }
+      return originalUpdateOne.apply(this, args);
+    };
+
+    try {
+      await applyRestore({ plan: restorePlan, User, mongoose });
+    } catch (err) {
+      restoreFailed = err.message.includes('simulated restore failure');
+    } finally {
+      User.updateOne = originalUpdateOne;
+    }
+
+    check(
+      'restore failure on the second account is reported',
+      restoreFailed,
+      'the simulated failure was not reported'
+    );
+
+    const restoreAAfterFailure = await User.findById(restoreA.user._id);
+    const restoreBAfterFailure = await User.findById(restoreB.user._id);
+
+    check(
+      'restore transaction rolls back the first account update',
+      restoreAAfterFailure.points === 11 && restoreAAfterFailure.returns === 1,
+      `got ${restoreAAfterFailure.points} points and ${restoreAAfterFailure.returns} returns`
+    );
+    check(
+      'restore transaction leaves the second account unchanged after failure',
+      restoreBAfterFailure.points === 22 && restoreBAfterFailure.returns === 2,
+      `got ${restoreBAfterFailure.points} points and ${restoreBAfterFailure.returns} returns`
+    );
+
+    const restoredCount = await applyRestore({ plan: restorePlan, User, mongoose });
+    check(
+      'restore succeeds atomically when all account updates succeed',
+      restoredCount === 2,
+      `restored ${restoredCount} account(s)`
+    );
+
+    const restoreAAfterSuccess = await User.findById(restoreA.user._id);
+    const restoreBAfterSuccess = await User.findById(restoreB.user._id);
+
+    check(
+      'successful restore applies the first account balance',
+      restoreAAfterSuccess.points === 100 && restoreAAfterSuccess.returns === 10,
+      `got ${restoreAAfterSuccess.points} points and ${restoreAAfterSuccess.returns} returns`
+    );
+    check(
+      'successful restore applies the second account balance',
+      restoreBAfterSuccess.points === 200 && restoreBAfterSuccess.returns === 20,
+      `got ${restoreBAfterSuccess.points} points and ${restoreBAfterSuccess.returns} returns`
+    );
 
     const owner = await makeUser('Owner Student', 'owner@scds.saiuniversity.edu.in');
     const alice = await makeUser('Alice Claimant', 'alice@scds.saiuniversity.edu.in');

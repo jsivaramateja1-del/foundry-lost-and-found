@@ -14,22 +14,54 @@
     const statusTag = (s) => `<span class="status status--${s}">${ui.esc(s)}</span>`;
 
     /** Load everything and paint the three tables. */
-    async function refresh() {
+    /**
+     * Reload everything the dashboard shows.
+     *
+     * Returns { ok: true } or { ok: false, message } so a caller that has just
+     * changed something can report both outcomes in one message. Pass
+     * { silent: true } when the caller will do the reporting itself.
+     */
+    async function refresh({ silent = false } = {}) {
       let data;
       try {
         data = await api('/dashboard/me', { auth: true });
       } catch (err) {
         // If the user just logged out, stay quiet instead of bouncing them back
-        if (!Auth.isLoggedIn) return;
-        if (err.status === 401) return Auth.requireLogin('dashboard.html');
-        ui.toast(err.message);
-        return;
+        if (!Auth.isLoggedIn) return { ok: false, message: 'You have been signed out.' };
+        if (err.status === 401) {
+          Auth.requireLogin('dashboard.html');
+          return { ok: false, message: 'Your session expired.' };
+        }
+        if (!silent) ui.toast(err.message);
+        return { ok: false, message: err.message };
       }
 
       Object.entries(data.stats).forEach(([key, value]) => {
         const node = document.querySelector(`[data-metric="${key}"]`);
         if (node) node.textContent = value;
       });
+
+      // Personal impact and badges come from the same response, so they can
+      // never disagree with the counters above
+      const summary = document.getElementById('impact-summary');
+      if (summary && data.impact) {
+        const c = data.impact.contributions;
+        const r = data.impact.returns;
+        summary.textContent = `${c} verified contribution${c === 1 ? '' : 's'}`
+          + ` · ${r} successful return${r === 1 ? '' : 's'}`
+          + ` · ${data.impact.points} points`;
+      }
+      const badgeList = document.getElementById('badges-list');
+      if (badgeList && Array.isArray(data.badges)) {
+        badgeList.innerHTML = data.badges.map((b) => `
+          <li class="badge ${b.earned ? 'badge--earned' : 'badge--locked'}">
+            <span class="badge__dot" aria-hidden="true"></span>
+            <span class="badge__body">
+              <strong>${ui.esc(b.label)}</strong>
+              <span class="form-note">${ui.esc(b.description)}${b.earned && b.earnedAt ? ' · earned ' + ui.date(b.earnedAt) : ''}</span>
+            </span>
+          </li>`).join('');
+      }
 
       // --- your listings ---
       document.getElementById('listings-body').innerHTML = data.items.length
@@ -42,7 +74,7 @@
             [
               i.status === 'returned'
                 ? '<span class="form-note">Returned</span>'
-                : `<button class="btn btn--ghost" data-return="${i.id}">Mark returned</button>`,
+                : '',
               `<button class="btn btn--ghost" data-edit="${i.id}">Edit</button>`,
               `<button class="btn btn--ghost" data-delete="${i.id}">Delete</button>`
             ].join(' ')
@@ -87,12 +119,76 @@
                 : '<span class="form-note">Reviewed</span>'
           ])).join('')
         : '<tr><td colspan="5" style="color:var(--muted)">Nobody has claimed any of your items yet.</td></tr>';
+
+      return { ok: true };
     }
+
+    /* ---------------- community leaderboard ---------------- */
+    let leaderboardPeriod = 'all';
+
+    async function loadLeaderboard(period = leaderboardPeriod) {
+      const list = document.getElementById('leaderboard-list');
+      if (!list) return;
+      leaderboardPeriod = period;
+      try {
+        const data = await api(`/leaderboard?period=${encodeURIComponent(period)}`);
+        list.innerHTML = data.leaderboard.length
+          ? data.leaderboard.map((r) => `<li class="leaderboard__row">
+               <span class="leaderboard__rank">${r.rank}</span>
+               <strong>${ui.esc(r.name)}</strong>
+               <span class="form-note">${r.points} pts · ${r.returns} return${r.returns === 1 ? '' : 's'}</span>
+             </li>`).join('')
+          : `<li class="form-note">No points earned ${period === 'all' ? 'yet' : 'in this period'}. Complete a return to start the board.</li>`;
+      } catch {
+        list.innerHTML = '<li class="form-note">Could not load the leaderboard.</li>';
+      }
+    }
+
+    const leaderboardVisible = document.getElementById('leaderboard-visible');
+    if (leaderboardVisible && Auth.user?.role !== 'student') {
+      const preferenceLabel = leaderboardVisible.closest('label');
+      if (preferenceLabel) preferenceLabel.hidden = true;
+    }
+    if (leaderboardVisible && Auth.user?.role === 'student') {
+      // The API stores an opt-out; the checkbox reads as "show me"
+      leaderboardVisible.checked = !(Auth.user && Auth.user.leaderboardOptOut);
+      leaderboardVisible.addEventListener('change', async () => {
+        const wanted = leaderboardVisible.checked;
+        leaderboardVisible.disabled = true;
+        try {
+          const res = await api('/auth/preferences', {
+            method: 'PATCH',
+            body: { leaderboardOptOut: !wanted },
+            auth: true
+          });
+          Auth.save(Auth.token, res.user);
+          ui.toast(res.message);
+          await loadLeaderboard();
+        } catch (err) {
+          leaderboardVisible.checked = !wanted;   // put the switch back
+          ui.toast(err.message);
+        } finally {
+          leaderboardVisible.disabled = false;
+        }
+      });
+    }
+
+    document.querySelectorAll('[data-leaderboard-period]').forEach((button) => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('[data-leaderboard-period]').forEach((b) => {
+          b.setAttribute('aria-pressed', String(b === button));
+        });
+        loadLeaderboard(button.dataset.leaderboardPeriod);
+      });
+    });
+
+    loadLeaderboard();
 
     /* ---------------- edit and delete ---------------- */
     const editModal = document.getElementById('modal-edit');
     const meta = { categories: [], locations: [] };
     let editingId = null;
+    let editingStatus = '';   // the status the listing had when the modal opened
 
     function openModalEl(node) {
       node.dataset.open = 'true';
@@ -127,7 +223,25 @@
         document.getElementById('ef-title').value = item.title;
         document.getElementById('ef-description').value = item.description;
         document.getElementById('ef-date').value = new Date(item.date).toISOString().slice(0, 10);
-        document.getElementById('ef-status').value = item.status;
+        editingStatus = item.status;
+        // A moderated listing's status is not one of the editable options.
+        // Show it, disabled, so the select cannot silently misrepresent it.
+        const statusSelect = document.getElementById('ef-status');
+        // Remove any placeholder left over from a listing opened earlier, so
+        // options never accumulate and a stale one can never be shown
+        statusSelect.querySelectorAll('option[data-temporary-status]').forEach((o) => o.remove());
+        const known = [...statusSelect.options].some((o) => o.value === item.status);
+        if (!known) {
+          const extra = document.createElement('option');
+          extra.value = item.status;
+          extra.textContent = item.status.charAt(0).toUpperCase() + item.status.slice(1);
+          extra.disabled = true;
+          extra.dataset.temporaryStatus = 'true';
+          statusSelect.appendChild(extra);
+        }
+        // Set after the options are settled, so the select shows this listing's
+        // real status rather than whatever the previous listing left behind
+        statusSelect.value = item.status;
         fillSelect(document.getElementById('ef-category'), meta.categories, item.category);
         fillSelect(document.getElementById('ef-location'), meta.locations, item.location);
         document.getElementById('ef-custom-category').value = item.customCategory || '';
@@ -169,8 +283,7 @@
         category: document.getElementById('ef-category').value,
         location: document.getElementById('ef-location').value,
         date: document.getElementById('ef-date').value,
-        description: document.getElementById('ef-description').value.trim(),
-        status: document.getElementById('ef-status').value
+        description: document.getElementById('ef-description').value.trim()
       };
       if (payload.category === 'Other') {
         payload.customCategory = document.getElementById('ef-custom-category').value.trim();
@@ -188,27 +301,64 @@
       btn.disabled = true;
       btn.textContent = 'Saving…';
       try {
-        await api(`/items/${editingId}`, { method: 'PUT', body: payload, auth: true });
+        try {
+          await api(`/items/${editingId}`, { method: 'PUT', body: payload, auth: true });
+        } catch (err) {
+          // Nothing was saved, so the modal stays open for the user to correct it
+          showError(err.message);
+          return;
+        }
+
+        // From here the details ARE saved. A status failure below is a partial
+        // success and must never be reported as "nothing was saved".
+        // Status is managed by its own endpoint, so its guards (terminal states,
+        // takedowns, one-off points and notifications) always apply. Only call
+        // it when the value actually changed, or it would 400 on "already open".
+        const wantedStatus = document.getElementById('ef-status').value;
+        const statusChanged = Boolean(wantedStatus) && wantedStatus !== editingStatus;
+        let statusError = null;
+
+        if (statusChanged) {
+          try {
+            await api(`/items/${editingId}/status`, { method: 'PATCH', body: { status: wantedStatus }, auth: true });
+          } catch (err) {
+            statusError = err;
+          }
+        }
+
+        // Close and reload either way: the table must show what the server
+        // holds, not what the user hoped for. The reload reports its own
+        // failure instead of toasting it, so one message can cover both.
         closeModalEl(editModal);
-        ui.toast('Listing updated');
-        await refresh();
-      } catch (err) {
-        showError(err.message);
+        const reload = await refresh({ silent: true });
+        const reloadFailed = !reload.ok;
+
+        // Exactly one toast, because the toast element is reused and a second
+        // message would overwrite the first. Every combination is covered, so
+        // a failed reload can never hide a failed status change.
+        if (statusError && reloadFailed) {
+          ui.toast(`Listing details saved, but the status could not be changed to "${wantedStatus}" (${statusError.message}), and the dashboard could not be refreshed (${reload.message}). Reload the page to see the latest state.`);
+        } else if (statusError) {
+          ui.toast(`Listing details saved, but the status could not be changed to "${wantedStatus}": ${statusError.message}`);
+        } else if (reloadFailed) {
+          ui.toast(`Listing updated, but the dashboard could not be refreshed (${reload.message}). Reload the page to see the latest state.`);
+        } else {
+          ui.toast('Listing updated');
+        }
       } finally {
         btn.disabled = false;
         btn.textContent = 'Save changes';
       }
     });
 
-    // Approve / reject / mark returned / edit / delete — one delegated listener
+    // Approve / reject / handover / edit / delete — one delegated listener
     document.addEventListener('click', async (event) => {
       const approve = event.target.closest('[data-approve]');
       const reject = event.target.closest('[data-reject]');
-      const markReturned = event.target.closest('[data-return]');
       const edit = event.target.closest('[data-edit]');
       const remove = event.target.closest('[data-delete]');
       const handover = event.target.closest('[data-handover]');
-      const button = approve || reject || markReturned || edit || remove || handover;
+      const button = approve || reject || edit || remove || handover;
       if (!button) return;
 
       if (edit) return openEdit(edit.dataset.edit);
@@ -233,9 +383,6 @@
         } else if (remove) {
           await api(`/items/${remove.dataset.delete}`, { method: 'DELETE', auth: true });
           ui.toast('Listing deleted');
-        } else {
-          await api(`/items/${markReturned.dataset.return}/status`, { method: 'PATCH', body: { status: 'returned' }, auth: true });
-          ui.toast('Marked as returned — points awarded');
         }
         await refresh();
       } catch (err) {

@@ -2,8 +2,9 @@ const express = require('express');
 const mongoose = require('mongoose');
 const Claim = require('../models/Claim');
 const Item = require('../models/Item');
-const { protect, requireVerified } = require('../middleware/auth');
+const { protect, requireVerified, ADMIN_ROLES } = require('../middleware/auth');
 const { notify } = require('../utils/notify');
+const { awardPoints, evaluateBadges } = require('../utils/gamification');
 const { supportsTransactions } = require('../utils/transactions');
 const { claimIpLimit, claimAccountLimit } = require('../middleware/rateLimit');
 
@@ -134,7 +135,7 @@ router.get('/item/:itemId', protect, async (req, res, next) => {
     if (!item) return res.status(404).json({ message: 'Item not found' });
 
     const isOwner = item.reportedBy.toString() === req.user._id.toString();
-    if (!isOwner && req.user.role !== 'admin') {
+    if (!isOwner && !ADMIN_ROLES.includes(req.user.role)) {
       return res.status(403).json({ message: 'You can only view claims on your own listings' });
     }
 
@@ -167,7 +168,7 @@ router.patch('/:id', protect, async (req, res, next) => {
 
     const item = claim.item;
     const isOwner = item.reportedBy.toString() === req.user._id.toString();
-    if (!isOwner && req.user.role !== 'admin') {
+    if (!isOwner && !ADMIN_ROLES.includes(req.user.role)) {
       return res.status(403).json({ message: 'Only the item owner or an admin can review claims' });
     }
 
@@ -195,7 +196,7 @@ router.patch('/:id', protect, async (req, res, next) => {
     // 3. every other pending claim on the item is rejected
     const siblingNote = 'Another claim was approved for this listing.';
 
-    const approve = async (session) => {
+    const approve = async (session, reviewedAt = new Date()) => {
       const opts = session ? { session } : {};
       const claimed = await Item.findOneAndUpdate(
         { _id: item._id, status: 'open' },
@@ -206,7 +207,7 @@ router.patch('/:id', protect, async (req, res, next) => {
 
       claim.status = 'approved';
       claim.reviewedBy = req.user._id;
-      claim.reviewedAt = new Date();
+      claim.reviewedAt = reviewedAt;
       claim.reviewNote = String(req.body.note || '').slice(0, 200) || undefined;
       await claim.save(opts);
 
@@ -223,7 +224,7 @@ router.patch('/:id', protect, async (req, res, next) => {
             $set: {
               status: 'rejected',
               reviewedBy: req.user._id,
-              reviewedAt: new Date(),
+              reviewedAt,
               reviewNote: siblingNote
             }
           },
@@ -253,13 +254,30 @@ router.patch('/:id', protect, async (req, res, next) => {
         await session.endSession();
       }
     } else {
-      // No transactions available: the conditional item update is the guard.
-      // If a later write fails, put the item back so the listing is not stuck
-      // as "claimed" with no approved claim.
+      // Without transactions, compensate in reverse order and fail closed.
+      const approvalAt = new Date();
       try {
-        siblings = await approve(null);
+        siblings = await approve(null, approvalAt);
       } catch (err) {
-        await Item.updateOne({ _id: item._id, status: 'claimed' }, { $set: { status: 'open' } });
+        try {
+          await Claim.collection.updateOne(
+            { _id: claim._id, status: 'approved', reviewedBy: req.user._id, reviewedAt: approvalAt },
+            { $set: { status: 'pending' }, $unset: { reviewedBy: '', reviewedAt: '', reviewNote: '' } }
+          );
+          await Claim.collection.updateMany(
+            { item: item._id, _id: { $ne: claim._id }, status: 'rejected', reviewedBy: req.user._id, reviewedAt: approvalAt, reviewNote: siblingNote },
+            { $set: { status: 'pending' }, $unset: { reviewedBy: '', reviewedAt: '', reviewNote: '' } }
+          );
+          const remainingApproval = await Claim.exists({ item: item._id, status: 'approved' });
+          if (!remainingApproval) {
+            await Item.collection.updateOne(
+              { _id: item._id, status: 'claimed' },
+              { $set: { status: 'open' } }
+            );
+          }
+        } catch (recoveryError) {
+          console.error('Claim approval compensation failed for item ' + item._id + ': ' + recoveryError.message);
+        }
         throw err;
       }
       if (siblings === null) {
@@ -312,37 +330,131 @@ router.post('/:id/handover', protect, async (req, res, next) => {
 
     const item = claim.item;
     const isOwner = item.reportedBy.toString() === req.user._id.toString();
-    if (!isOwner && req.user.role !== 'admin') {
+    if (!isOwner && !ADMIN_ROLES.includes(req.user.role)) {
       return res.status(403).json({ message: 'Only the item owner or an admin can confirm a handover' });
     }
     if (claim.status !== 'approved') {
       return res.status(400).json({ message: 'Approve the claim before confirming the handover' });
     }
-    if (claim.handoverConfirmedAt) {
-      return res.status(400).json({ message: 'This handover has already been confirmed' });
+    const isRecovery = Boolean(claim.handoverConfirmedAt);
+    if (isRecovery && item.status !== 'claimed') {
+      return res.status(400).json({ message: 'This handover has already been confirmed or the listing is no longer awaiting handover' });
     }
-    if (item.status === 'returned') {
+    if (!isRecovery && item.status === 'returned') {
       return res.status(400).json({ message: 'This listing is already marked as returned' });
     }
 
-    // Conditional transition: two simultaneous confirmations cannot both win
-    const completed = await Item.findOneAndUpdate(
-      { _id: item._id, status: 'claimed' },
-      { $set: { status: 'returned' } },
-      { new: true }
-    );
-    if (!completed) {
-      return res.status(409).json({ message: 'This listing is no longer awaiting a handover' });
+    // Resume a stranded standalone-MongoDB handover without changing its
+    // original confirmation actor or timestamp.
+    const handoverAt = isRecovery ? new Date(claim.handoverConfirmedAt) : new Date();
+    let completed;
+
+    if (isRecovery) {
+      completed = await Item.findOneAndUpdate(
+        { _id: item._id, status: 'claimed' },
+        { $set: { status: 'returned' } },
+        { new: true }
+      );
+      if (!completed) {
+        return res.status(409).json({ message: 'This listing is no longer awaiting a handover' });
+      }
+    } else if (await supportsTransactions()) {
+      const session = await mongoose.startSession();
+      try {
+        await session.withTransaction(async () => {
+          const confirmedClaim = await Claim.findOneAndUpdate(
+            { _id: claim._id, status: 'approved', handoverConfirmedAt: null },
+            { $set: { handoverConfirmedBy: req.user._id, handoverConfirmedAt: handoverAt } },
+            { new: true, session }
+          );
+          if (!confirmedClaim) {
+            throw Object.assign(new Error('handover already confirmed'), { isHandoverConflict: true });
+          }
+
+          completed = await Item.findOneAndUpdate(
+            { _id: item._id, status: 'claimed' },
+            { $set: { status: 'returned' } },
+            { new: true, session }
+          );
+          if (!completed) {
+            throw Object.assign(new Error('item is no longer awaiting handover'), { isHandoverConflict: true });
+          }
+        });
+      } catch (err) {
+        if (err.isHandoverConflict) {
+          return res.status(409).json({ message: 'This listing is no longer awaiting a handover' });
+        }
+        throw err;
+      } finally {
+        await session.endSession();
+      }
+    } else {
+      const confirmedClaim = await Claim.findOneAndUpdate(
+        { _id: claim._id, status: 'approved', handoverConfirmedAt: null },
+        { $set: { handoverConfirmedBy: req.user._id, handoverConfirmedAt: handoverAt } },
+        { new: true }
+      );
+      if (!confirmedClaim) {
+        return res.status(409).json({ message: 'This handover has already been confirmed' });
+      }
+
+      try {
+        completed = await Item.findOneAndUpdate(
+          { _id: item._id, status: 'claimed' },
+          { $set: { status: 'returned' } },
+          { new: true }
+        );
+      } catch (err) {
+        let currentItem;
+        try {
+          currentItem = await Item.findById(item._id);
+        } catch (readError) {
+          console.error('Could not verify item state after handover error for ' + item._id + ': ' + readError.message);
+          throw err;
+        }
+
+        if (currentItem && currentItem.status === 'returned') {
+          completed = currentItem;
+        } else {
+          await Claim.collection.updateOne(
+            { _id: claim._id, handoverConfirmedBy: req.user._id, handoverConfirmedAt: handoverAt },
+            { $unset: { handoverConfirmedBy: '', handoverConfirmedAt: '' } }
+          );
+          throw err;
+        }
+      }
+
+      if (!completed) {
+        await Claim.collection.updateOne(
+          { _id: claim._id, handoverConfirmedBy: req.user._id, handoverConfirmedAt: handoverAt },
+          { $unset: { handoverConfirmedBy: '', handoverConfirmedAt: '' } }
+        );
+        return res.status(409).json({ message: 'This listing is no longer awaiting a handover' });
+      }
     }
 
+    item.status = 'returned';
     claim.handoverConfirmedBy = req.user._id;
-    claim.handoverConfirmedAt = new Date();
-    await claim.save();
-
+    claim.handoverConfirmedAt = handoverAt;
     // Both sides of a completed return earn the points, once
     const User = require('../models/User');
-    await User.findByIdAndUpdate(item.reportedBy, { $inc: { points: 10, returns: 1 } });
-    await User.findByIdAndUpdate(claim.claimant, { $inc: { points: 10, returns: 1 } });
+    // The handover is complete and saved. Points are secondary: a failure here
+    // is logged and left recoverable, never reported as a failed handover.
+    try {
+      // Idempotent: the same {user, key} pair can only ever pay out once
+      await awardPoints({
+        userId: item.reportedBy, type: 'return',
+        key: `return:${item._id}:${item.reportedBy}`, item: item._id, claim: claim._id
+      });
+      await awardPoints({
+        userId: claim.claimant, type: 'return',
+        key: `return:${item._id}:${claim.claimant}`, item: item._id, claim: claim._id
+      });
+      await evaluateBadges(item.reportedBy);
+      await evaluateBadges(claim.claimant);
+    } catch (err) {
+      console.error(`Points could not be awarded for handover of ${item._id}: ${err.message}`);
+    }
 
     await notify(item.reportedBy, 'item_returned',
       `Handover confirmed for "${item.title}". The listing is now marked returned.`,

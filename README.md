@@ -285,46 +285,108 @@ the cleanup will delete that account along with the rest of the demo data.
 
 ## 9. Tests
 
+Seven suites. Four need no database at all; three start an in-memory MongoDB.
+
 ```bash
 cd backend
-node test/offline.test.js
-node test/routes.test.js
+node test/offline.test.js      # unit + source guards, no database
+npm run test:routes            # route-level, no database
+npm run test:ratelimit         # rate limiter, no database
+npm test                       # API suite, needs MongoDB
+npm run test:transactions      # replica-set behaviour, needs MongoDB
+npm run test:coverage          # coverage of the remaining paths, needs MongoDB
 ```
+
+| Suite | Command | Expected | Database |
+|---|---|---|---|
+| Offline | `node test/offline.test.js` | 239 passed, 0 failed | no |
+| Routes | `npm run test:routes` | 95 passed, 0 failed | no |
+| Rate limits | `npm run test:ratelimit` | 5 passed, 0 failed | no |
+| API | `npm test` | 219 passed, 0 failed | yes |
+| Transactions | `npm run test:transactions` | 33 passed, 0 failed | yes |
+| Coverage | `npm run test:coverage` | 47 passed, 0 failed | yes |
+| Frontend | `npm run test:frontend` | 24 passed, 0 failed | no |
+
+The three database-free suites were re-run after the latest changes. The three
+MongoDB suites were last verified on Windows; re-run them after pulling.
+
+`test/frontend.test.js` runs the real `frontend/assets/js/auth.js` inside a stub
+DOM and drives the registration form: it asserts that one click sends exactly one
+`POST /api/auth/register`, that validation stops the request with a visible
+message, that a pending faculty application is reported, and that the button is
+disabled in flight and restored afterwards. This exists because a handler that
+throws before calling the API produces **no network request at all**, which no
+server-side suite can observe.
 
 `test/routes.test.js` needs **no database at all**: every case is decided before
 the first Mongoose query — the domain rule, input validation, the authentication
-gate, id validation and the JSON error shape. It is the suite to run when you
-want to know quickly whether the API is still sane.
+gate, id validation and the JSON error shape. It also reads the frontend files to
+check the registration feedback path, because a ReferenceError in the submit
+handler is exactly the kind of fault that no server test can see.
 
-No database needed. Proves the app loads, all 24 routes are registered, the
-schemas reject bad input, bcrypt and JWT round-trip, no fallback secret exists,
-no demo password appears anywhere in the repository, and the old seed script is
-gone, plus unit tests for the email-domain rule and the verification tokens.
-Expected last lines: `81 passed, 0 failed` for the offline suite and
-`42 passed, 0 failed` for the route suite.
+The offline suite proves the app loads, all 46 routes are registered, the schemas
+reject bad input, bcrypt and JWT round-trip, no fallback secret exists, and the
+email-domain rule and verification tokens behave.
 
-```bash
-npm test
-```
-
-The full API suite. It starts an in-memory MongoDB (`mongodb-memory-server`), so
-the first run downloads a database binary. To run against a real database instead:
+The full API suite starts an in-memory MongoDB (`mongodb-memory-server`), so the
+first run downloads a database binary. To run against a real database instead:
 
 ```bash
 set MONGO_URI=mongodb://localhost:27017/foundry-test
 npm test
 ```
 
+Some suites inject failures on purpose (approval rollback, handover rollback,
+ledger outage, concurrent resets). Those log errors during a **passing** run and
+are not failures.
+
 The Postman collection in `backend/postman/` has 48 requests with assertions,
 across Health, Auth, Items, Claims, Dashboards, Cleanup and Notifications. It
 includes the domain-refusal case, email verification and the handover step.
-It contains **no credentials** — set the collection variables `studentEmail`,
-`studentPassword`, `otherEmail`, `otherPassword`, `adminEmail` and `adminPassword`
-to accounts you created, and select **No Environment** so a stale environment
-variable cannot shadow them. Two different students are needed because the API
-refuses a claim on your own listing.
 
-## 10. API
+## 10. Scheduled monitoring
+
+Three GitHub Actions workflows live in `.github/workflows/`. They are inert until
+the repository receives them, and they check the real service — none of them
+prints success without making the request.
+
+| Workflow | When | What it checks |
+|---|---|---|
+| `ci.yml` | every push and pull request, or manually | installs with `npm ci`, syntax-checks every JS file, runs all seven suites, runs `npm audit --audit-level=high`, and fails the build on any failure |
+| `health-check.yml` | daily at 02:30 UTC (08:00 IST) | `/api/health`, `/api/health/ready` (which fails when the database is unreachable), the homepage, and five critical API routes |
+| `weekly-audit.yml` | Mondays at 03:00 UTC (08:30 IST) | the full suite, a dependency advisory report, and a boot test that starts the server and fetches the homepage |
+
+**Enabling / disabling:** in GitHub, open *Actions*, pick the workflow and use the
+*Enable workflow* / *Disable workflow* menu. To run one on demand, open the
+workflow and press *Run workflow* (`workflow_dispatch` is enabled on all three).
+
+**Pointing the probe at a different host:** set a repository variable named
+`PRODUCTION_URL` (Settings → Secrets and variables → Actions → Variables). The
+default is `https://foundry-lost-and-found.onrender.com`.
+
+**Reading results:** the *Actions* tab shows each run; a failure lists the exact
+endpoint and status code. Nothing in these workflows writes to production data —
+`reconcile:points` is run without `--apply`, so it only reports.
+
+**Scheduled runs only happen on the default branch.** GitHub fires `schedule:`
+triggers from the repository's default branch (currently `main`). While these
+workflows exist only on `phase3-stage1`, the daily and weekly crons do **not**
+run — you can still start them by hand with *Run workflow*. To activate the
+schedules, merge this branch into the default branch.
+
+**Ledger consistency** is checked by `npm run test:ledger`: it seeds a known
+account and ledger pair in an isolated in-memory database, runs the same
+classification the production script uses, and asserts that a matching balance
+is reported in sync, that a pending award is not counted as a score, that an
+under-credited account is detected, and that nothing was written. For a real
+deployment, `npm run reconcile:points` (without `--apply`) prints the same
+comparison against live data and changes nothing.
+
+**What they do not do:** they do not read application logs (no log drain is
+configured), do not send email or chat notifications, and do not deploy. Wire a
+notification step to your channel of choice if you want alerts pushed.
+
+## 11. API
 
 All responses are JSON, including errors. Every protected route requires
 `Authorization: Bearer <token>`.
@@ -373,7 +435,193 @@ All responses are JSON, including errors. Every protected route requires
 | PATCH | `/api/notifications/:id/read` | logged in — mark one as read |
 | PATCH | `/api/notifications/read-all` | logged in — mark all as read |
 
-## 11. Moderation
+### Preferences and the leaderboard
+
+```
+PATCH /api/auth/preferences     Protected
+    body: { "leaderboardOptOut": true | false }
+    Sets whether the signed-in student's name appears on the public leaderboard.
+    Points, returns and role are deliberately not writable here — the endpoint
+    rejects nothing silently, it simply has no other fields, so it cannot be
+    used to inflate a score or escalate a role.
+```
+
+`GET /api/leaderboard` is public and returns the top ten students by points.
+Students with `leaderboardOptOut: true` are left out entirely rather than shown
+anonymised, and the response never contains an email address.
+
+### Password reset and account recovery
+
+```
+POST /api/auth/forgot-password      Public, rate limited
+    body: { "email": "..." }
+    Always answers: "If that address has a Foundry account, a reset link is on
+    its way." It does not reveal whether the address is registered.
+
+POST /api/auth/reset-password       Public, rate limited
+    body: { "token": "...", "password": "...", "confirmPassword": "..." }
+    The token works once and expires after 15 minutes.
+```
+
+How it is stored and why:
+
+- The token is 32 random bytes from `crypto.randomBytes`. Only its **SHA-256
+  hash** is stored (`User.resetTokenHash`), so a database leak cannot be turned
+  into a working reset link.
+- `resetTokenExpires` is 15 minutes from the request.
+- The whole reset is **one atomic update** on a single document
+  (`findOneAndUpdate`): it sets the new password hash, unsets the token fields and
+  increments `tokenVersion` in the same write. Two simultaneous reset requests
+  cannot both succeed — the second matches nothing — and there is no window where
+  the link is spent but the password is unchanged, or the password changes while
+  older sessions stay valid.
+- `User.tokenVersion` is incremented on reset. Every JWT carries the version it
+  was signed with, and `protect` refuses a token whose version no longer
+  matches — so a reset logs out every older session. Tokens issued before this
+  field existed carry no version and are treated as 0, which means the upgrade
+  itself logs nobody out.
+- The password is hashed explicitly with bcrypt (cost 10) before the update, so
+  the atomic write and the pre-save hook produce the same hash strength. The
+  user's role and other fields are untouched.
+- The token never appears in an API response and is never logged. If SMTP fails,
+  the endpoint still answers generically and the failure is logged by message
+  only.
+
+**Account recovery without the mailbox:** there is deliberately no alternative
+path. If a student loses access to their university address they must contact
+the Foundry administrator or university IT and prove their identity through
+official channels. There are no security questions and no unauthenticated
+administrative password reset.
+
+### Gamification rules
+
+Points are written only by `backend/src/utils/gamification.js`, never by a route
+handler and never from anything the client sends.
+
+| Event | Points | When it is awarded |
+|---|---|---|
+| Completed return or handover | 10 | When the owner marks a listing returned, or when both sides confirm the handover |
+| Posting a found item | 2 | On creating a listing of type `found` |
+
+**How an award is recorded.** Each `PointEvent` moves through
+`pending → claimed → completed`:
+
+- `pending` — the row exists and nobody is working on it.
+- `claimed` — one request holds a 60-second lease and is applying the credit.
+- `completed` — the points are on the account.
+
+Only the lease holder may credit, and the credit itself is a single atomic update
+guarded on the event id (`User.creditedEvents`). **The marker is permanent and is
+never removed.** That is the whole point: a worker can be paused for an unbounded
+time — it can hold a claim, lose the lease to another worker, and only resume
+after that worker has finished. Any worker that resumes is stopped by the marker,
+because the guard sits inside the same atomic update as the increment and is
+never re-read separately from it. On a replica set the whole thing runs inside a
+transaction instead. See "Repairing point totals" for the recovery paths.
+
+**Storage trade-off, stated plainly:** each award leaves one 24-character id on
+the user document for ever. That is roughly 24 bytes per award — a student with
+1,000 awards adds about 24 KB, well inside MongoDB's 16 MB document limit, but it
+does grow without bound. Pruning an id would be safe only if no worker could
+still be holding a claim on that event, and that cannot be proven while a paused
+process can resume at any time. If the collection ever approaches the limit, the
+honest options are archiving completed events into a separate collection and
+recomputing totals from it, not quietly dropping ids.
+
+**Why points cannot be farmed.** Every award writes a row to the `PointEvent`
+collection with a stable key (`return:<itemId>:<userId>`, `found:<itemId>`), and
+`{ user, key }` is a **unique index**. A repeated request — including two
+concurrent ones — loses the insert and pays nothing. Because the return key is
+the same for both the "mark returned" route and the handover route, an item
+cannot pay out twice through two different code paths.
+
+Badges (`User.badges`, with the date each was earned):
+
+| Badge | Criteria |
+|---|---|
+| First Found Item | Posted your first found item |
+| Helpful Finder | Posted three found items |
+| Successful Return | Completed your first verified return |
+| Community Helper | Completed five verified returns |
+| Trusted Member | Completed ten verified returns |
+
+Badges are never revoked and never awarded twice; the evaluation skips any id
+the user already has.
+
+### Leaderboard
+
+```
+GET /api/leaderboard?period=week|month|all     Public
+```
+
+- Students on equal points **share a rank** (1, 2, 2, 4), ordered by name so the
+  board is stable between requests.
+- `all` reads the running total on the user document.
+- `week` and `month` are date windows over `PointEvent`, so they describe points
+  actually earned in that period rather than a lifetime total.
+- Students with `leaderboardOptOut: true` are excluded from every period,
+  including the windowed boards, and the response never contains an email
+  address. The preference is enforced in the query, not in the browser.
+
+### Repairing point totals
+
+Two different repairs, because there are two different failures:
+
+```
+npm run recover:awards                          report only, all time
+npm run recover:awards -- --apply               create the missing awards
+npm run recover:awards -- --since-days 90 --apply    narrower window
+npm run recover:awards -- --batch-size 500 --apply   bigger pages (1-1000, default 200)
+
+npm run reconcile:points                        report only
+npm run reconcile:points -- --apply             fix under-credited accounts
+npm run reconcile:points -- --apply --allow-decrease
+                                                also overwrite historical balances
+npm run reconcile:points -- --apply --complete-pending
+                                                credit events left pending
+node scripts/reconcile-points.js --restore backups/points-backup-<stamp>.json
+```
+
+**`recover:awards`** covers the case reconciliation cannot see: a business action
+that succeeded while its award failed *before* the ledger row was written. There
+is no row to reconcile, so this script rebuilds eligibility from the business
+records themselves — found listings (not hidden) and returned listings, plus the
+approved claimant of a returned item. Nothing else is eligible.
+
+It looks at **all time by default**, walking the collection in pages ordered by
+`_id` with a cursor, so every eligible record is examined however large the
+collection is and however old the failure was. Each page is processed and then
+released, so memory is bounded by the batch size — nothing accumulates across
+pages, and the collection is never loaded wholesale. It never re-reads a page it
+has already seen. Pass `--since-days N` only when you deliberately want a
+narrower window, and `--batch-size N` to change the page size. The page size must
+be a whole number from 1 to **1000** (default 200); anything else — zero, a
+negative, a decimal, `NaN`, `Infinity` or an over-large value — is rejected with
+an error rather than quietly corrected, because a silently coerced page size is
+how an accidental full-collection read happens. The same limit is enforced inside
+`recoverMissingAwards()`, not only in the CLI.
+
+The report gives exact counters — records scanned, batches, eligible awards,
+already recorded, missing, created and failed — and keeps only a small sample of
+missing and failed keys (10 by default) for diagnosis. Every award goes through
+the same idempotent path the application uses, so running it twice, concurrently,
+or on a live site cannot double-pay.
+
+**`reconcile:points`** compares totals with the ledger. The ledger only starts when it was introduced, so an account can legitimately
+hold points no event records. The script therefore classifies every account:
+
+| State | Meaning | Default action |
+|---|---|---|
+| `in-sync` | the ledger explains the whole balance | none |
+| `historical-balance` | the account holds more than the ledger records | **left alone** |
+| `under-credited` | the ledger records more than the account holds | topped up (only ever adds) |
+
+Reducing a balance can destroy genuine history, so it needs `--allow-decrease`
+on top of `--apply`. Every `--apply` run writes `backend/backups/points-backup-<timestamp>.json`
+before touching anything and prints the `--restore` command that undoes it. The
+script never deletes a user, an event or a listing.
+
+## 12. Moderation
 
 Students can flag a listing from the item dialog: spam, inappropriate,
 suspicious, incorrect or other, with an optional note. One report per student
@@ -392,9 +640,11 @@ value up to 365) or permanent; a temporary one lifts itself when it expires, and
 an administrator can reinstate at any time. A reason is required and is kept in
 the audit log.
 
-**Faculty registration** creates a `faculty` account in a pending state. It can
-log in and browse, but every protected action is refused with a clear message
-until an administrator approves it via `PATCH /api/admin/users/:id/approve`. A
+**Faculty registration** creates a `faculty` account in a pending state. A
+pending account **cannot sign in**: both the login route and the `protect`
+middleware refuse it with 403, so no token is ever issued and no protected route
+is reachable. An administrator approves it via
+`PATCH /api/admin/users/:id/approve`, after which it signs in normally. A
 rejection must include a reason, which is stored and which blocks the account. Two guard rails: an administrator cannot suspend themselves, and cannot
 suspend another administrator — otherwise one compromised admin could lock out
 the rest. Suspended students are marked in the accounts table and can be
@@ -406,7 +656,7 @@ suspended or reinstated, report resolved or dismissed. The actor's email is
 stored with each entry so the log still reads correctly if an account is later
 removed.
 
-## 12. Email verification (implemented, off by default)
+## 13. Email verification (implemented, off by default)
 
 The full flow exists: a random 32-byte token is created on registration, only
 its SHA-256 hash is stored, it expires in 24 hours, it is consumed once, and
@@ -437,7 +687,7 @@ SMTP_FROM=Foundry <no-reply@saiuniversity.edu.in>
 Any standard SMTP account works; a Gmail account with an app password is
 enough for a demo. No paid service is required or recommended.
 
-## 13. Security
+## 14. Security
 
 - Passwords are hashed with bcrypt and never returned by any endpoint.
 - Authorisation is enforced on the server in each route, never in the UI. A
@@ -460,7 +710,41 @@ enough for a demo. No paid service is required or recommended.
   login/registration are rate limited.
 - `.env` is git-ignored; `.env.example` contains placeholders only.
 
-## 14. Deploying to Render
+## 15. When the database is unavailable
+
+Two public listing routes check the connection before querying and answer
+immediately:
+
+| Route | Database down |
+|---|---|
+| `GET /api/items` | **503** straight away, JSON body |
+| `GET /api/items/stats` | **503** straight away, JSON body |
+
+```json
+{ "message": "The service is temporarily unavailable. Please try again shortly." }
+```
+
+**This is deliberately partial.** Every other database-backed route — claims,
+dashboard, leaderboard, notifications, the admin surface, item detail, and the
+authenticated mutations — has **no such guard yet**. When MongoDB is unreachable
+they still let Mongoose buffer for its default 10 seconds and then return a
+**500** with a logged stack trace. A caller waits ten seconds and gets an
+unhelpful status.
+
+That behaviour is honest but not ideal, and it is documented here rather than
+hidden: do not assume the whole API answers 503 when the database is down. Only
+the two routes above do.
+
+The health endpoints are unaffected and are the right thing to probe:
+`GET /api/health` always answers 200 and reports the database state, while
+`GET /api/health/ready` answers 200 only when the database is connected.
+
+Extending the guard to the remaining routes is a small, mechanical change — the
+same `mongoose.connection.readyState !== 1` check placed before the first query
+— but it changes production status codes, so it is a decision rather than a
+silent edit.
+
+## 16. Deploying to Render
 
 - Root Directory: `backend`
 - Build Command: `npm install`
@@ -474,17 +758,48 @@ locally against the same `MONGO_URI`.
 The free tier sleeps when idle, so the first request after a pause can take
 30–50 seconds. That is the host, not the application.
 
-## 15. Known limitations
+## 17. Known limitations
 
+Stated plainly so nobody assumes more than the code does.
+
+- **Automatic expiry** of stale listings is not implemented, deliberately. The
+  database records when a listing was created but nothing records whether the
+  owner still wants it open, and an item that is still lost does not become
+  less lost because a timer expired. A safe policy needs a decision from the
+  university (for example "close after 90 days with no claim, after emailing
+  the owner"), so it is documented here rather than guessed at in code.
+- **Weekly and monthly leaderboards count only events recorded after the ledger
+  was introduced.** An account's all-time total can therefore be larger than the
+  sum of its weekly and monthly scores. This is a property of introducing a
+  ledger late, not a bug, and the reconciliation script prints each account's
+  pre-ledger balance so the difference is visible.
+- **Exactly-once is guaranteed only on a replica set** (which Atlas is), where
+  the ledger row and the credit commit together. On a standalone MongoDB the
+  design is "at most once, with a recoverable window": a crash between the
+  credit and the `completed` write leaves a claimed event whose points are
+  already on the account. The idempotent guard means reclaiming it cannot pay
+  twice, and `npm run reconcile:points` reports such rows. No claim of exactly-once
+  is made for that configuration.
+- **The repair scripts are manual.** Nothing schedules `recover:awards` or
+  `reconcile:points`; run them after an incident, or add them to a cron if you
+  want them automatic. `recover:awards` is the one to run after a crash that
+  interrupted a write.
+- **Email verification and SMTP** remain off by default (see section 12).
+  Password reset does need SMTP: without it the endpoint still answers
+  generically, but no mail is delivered and the Render log records the failure.
+- **Images** are stored as base64 data URLs capped at 400 KB; there is no
+  external object storage.
+- **Moderation is deliberately manual.** Reports are queued for an
+  administrator; nothing is auto-removed or auto-suspended by a threshold.
+- **There is no in-app chat** between a finder and an owner. Coordination happens
+  through the claim message and the dashboard.
 - No email notifications; coordination happens inside the site through in-app
   notifications and the dashboard.
 - **Email verification is implemented but switched off** until you configure
   SMTP (see section 10). Until then every account is treated as verified.
-- **No password reset.** It needs working SMTP; once section 10 is configured it
-  is a small addition, but it is not built and is not pretended to be.
 - **Moderation is deliberately manual.** Reports are queued for an
   administrator; nothing is auto-removed or auto-suspended by a threshold.
-- **Not built yet**, and deliberately not faked: password reset, in-app messaging between
+- **Not built yet**, and deliberately not faked: in-app messaging between
   users, QR codes per listing, saved listings and saved searches,
   multiple images per listing (one photo each),
   listing expiry and archival, multi-image galleries (listings carry one

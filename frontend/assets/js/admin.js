@@ -62,10 +62,10 @@
         const who = ui.esc(Auth.user?.name || 'this account');
         const role = ui.esc(Auth.user?.role || 'unknown');
         guard.innerHTML = reason === 'refused'
-          ? `You are signed in as ${who} (${role}), and the server refused part of the admin area. `
+          ? 'You are signed in as ' + who + ' (' + role + '), and the server refused part of the admin area. '
             + 'If that looks wrong, an administrator can check the role on your account. '
             + '<a href="index.html" style="color:var(--accent)">Back to the board</a>.'
-          : `You are signed in as ${who} (${role}). The admin area needs an administrator or moderator role. `
+          : 'You are signed in as ' + who + ' (' + role + '). The admin area needs an administrator or moderator role. '
             + '<a href="index.html" style="color:var(--accent)">Back to the board</a>.';
       }
       guard.hidden = false;
@@ -77,6 +77,31 @@
         return;
       }
       document.getElementById('admin-content').hidden = false;
+      const isModerator = Auth.user?.role === 'moderator';
+      if (isModerator) {
+        document.querySelector('.cards-row').hidden = true;
+        const listingPanel = document.getElementById('admin-items').closest('section.panel');
+        document.querySelectorAll('#admin-content section.panel').forEach((panel) => { panel.hidden = panel !== listingPanel; });
+        listingPanel.querySelector('h2').textContent = 'Found-listing verification';
+        listingPanel.querySelector('thead').innerHTML = '<tr><th>Item</th><th>Category</th><th>Reported by</th><th>Date</th><th>Verification</th><th>Action</th></tr>';
+        try {
+          const items = await api(`/admin/items?page=${paging.items}&limit=${paging.limit}`, { auth: true });
+          paging.items = items.page;
+          document.getElementById('items-count').textContent = `${items.total} found listing${items.total === 1 ? '' : 's'}`;
+          renderPager('items-pager', items, 'items');
+          document.getElementById('admin-items').innerHTML = items.items.length
+            ? items.items.map((i) => row([
+                ui.esc(i.title),
+                ui.esc(i.category),
+                ui.esc(i.reportedBy?.name || '—'),
+                ui.date(i.date),
+                i.verifiedAt ? `<span class="status status--approved">Verified</span><br><small>${ui.esc(i.verifiedBy?.name || 'Moderator')} · ${ui.date(i.verifiedAt)}</small>` : i.status === 'hidden' ? '<span class="status status--rejected">Hidden</span>' : '<span class="status status--pending">Pending verification</span>',
+                i.verifiedAt || i.status === 'hidden' ? '<span class="form-note">No action</span>' : `<button class="btn btn--primary" data-verify-found="${i.id}">Verify found item</button>`
+              ])).join('')
+            : '<tr><td colspan="6" style="color:var(--muted)">No found listings.</td></tr>';
+        } catch (err) { ui.toast(err.message); }
+        return;
+      }
 
       try {
         const stats = await api('/admin/stats', { auth: true });
@@ -100,7 +125,7 @@
               ui.esc(i.reportedBy?.name || '—'),
               ui.date(i.date),
               `<select class="select" data-admin-status="${i.id}" aria-label="Status for ${ui.esc(i.title)}">
-                 ${['open', 'claimed', 'returned', 'closed'].map((s) => `<option value="${s}"${s === i.status ? ' selected' : ''}>${s}</option>`).join('')}
+                 ${['open', 'claimed', 'returned', 'closed'].filter((s) => s !== 'returned' || s === i.status).map((s) => `<option value="${s}"${s === i.status ? ' selected' : ''}>${s}</option>`).join('')}
                </select>`,
               `<button class="btn btn--ghost" data-admin-delete="${i.id}">Delete</button>`
             ])).join('')
@@ -120,10 +145,19 @@
               ui.esc(u.name),
               ui.esc(u.email),
               `<span class="status">${ui.esc(u.role)}</span>${u.suspended ? ' <span class="status status--rejected">suspended</span>' : ''}`,
+              u.pendingApproval
+                ? '<span class="status status--pending">Pending approval</span>'
+                : u.approvalNote
+                  ? `<span class="form-note">${ui.esc(u.approvalNote)}</span>`
+                  : '<span class="form-note">—</span>',
               u.points,
               ui.date(u.createdAt),
               [
-                u.role === 'admin'
+                u.pendingApproval
+                  ? `<button class="btn btn--ghost" data-approve-user="${u.id}">Approve</button>
+                     <button class="btn btn--ghost" data-reject-user="${u.id}">Reject</button>`
+                  : '',
+                u.pendingApproval ? '' : u.role === 'admin'
                   ? `<button class="btn btn--ghost" data-user="${u.id}" data-role="student">Make student</button>`
                   : `<button class="btn btn--ghost" data-user="${u.id}" data-role="admin">Make admin</button>`,
                 u.role === 'admin'
@@ -133,7 +167,7 @@
                     : `<button class="btn btn--ghost" data-suspend="${u.id}">Suspend</button>`
               ].join(' ')
             ])).join('')
-          : '<tr><td colspan="6" style="color:var(--muted)">No accounts.</td></tr>';
+          : '<tr><td colspan="7" style="color:var(--muted)">No accounts.</td></tr>';
 
         const reports = await api('/admin/reports', { auth: true });
         document.getElementById('reports-count').textContent = `${reports.count} open`;
@@ -237,8 +271,22 @@
       const dismiss = event.target.closest('[data-dismiss]');
       const suspend = event.target.closest('[data-suspend]');
       const reinstate = event.target.closest('[data-unsuspend]');
-      const button = remove || role || resolve || dismiss || suspend || reinstate;
+      const verify = event.target.closest('[data-verify-found]');
+      const button = remove || role || resolve || dismiss || suspend || reinstate || verify;
       if (!button) return;
+
+      if (verify) {
+        button.disabled = true;
+        try {
+          await api(`/admin/items/${verify.dataset.verifyFound}/verify`, { method: 'PATCH', auth: true });
+          ui.toast('Found listing verified');
+          await loadAdmin();
+        } catch (err) {
+          ui.toast(err.message);
+          button.disabled = false;
+        }
+        return;
+      }
 
       if (remove) {
         const title = remove.closest('tr')?.querySelector('td')?.textContent?.trim() || 'this listing';

@@ -1,0 +1,80 @@
+name: CI
+
+# Runs on every push and pull request. A failing check blocks the merge.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies (reproducible)
+        working-directory: backend
+        run: npm ci
+
+      - name: Syntax check every JavaScript file
+        working-directory: backend
+        run: |
+          find src scripts test -name '*.js' -print0 | xargs -0 -n1 node --check
+          find ../frontend -name '*.js' -print0 | xargs -0 -n1 node --check
+
+      - name: Offline tests (no database)
+        working-directory: backend
+        run: npm run test:offline
+
+      - name: Route tests (no database)
+        working-directory: backend
+        run: npm run test:routes
+
+      - name: Rate-limit tests (no database)
+        working-directory: backend
+        run: npm run test:ratelimit
+
+      - name: Frontend registration regression tests
+        working-directory: backend
+        run: npm run test:frontend
+
+      # These three start mongodb-memory-server, which downloads a Linux mongod.
+      - name: API tests
+        working-directory: backend
+        run: npm test
+
+      - name: Transaction tests (replica set)
+        working-directory: backend
+        run: npm run test:transactions
+
+      - name: Coverage tests
+        working-directory: backend
+        run: npm run test:coverage
+
+      - name: Boot test (real server, isolated in-memory database)
+        working-directory: backend
+        run: npm run test:boot
+
+      - name: Ledger consistency audit (read-only, isolated database)
+        working-directory: backend
+        run: npm run test:ledger
+
+      - name: Dependency vulnerability audit
+        working-directory: backend
+        run: npm audit --audit-level=high
+
+      - name: Keep the test output when something fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output
+          path: backend/*.log
+          if-no-files-found: ignore

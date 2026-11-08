@@ -10,6 +10,8 @@
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test_secret_key_for_local_runs_only';
 
+const fs = require('fs');
+const path = require('path');
 const request = require('supertest');
 const app = require('../src/app');
 
@@ -142,7 +144,7 @@ const check = (name, cond, detail = '') => {
   // The app sends `script-src 'self'` (helmet's default), so an inline <script>
   // is silently blocked by the browser. That is exactly what stopped the
   // dashboard from ever running its own code.
-  for (const page of ['index.html', 'auth.html', 'dashboard.html', 'admin.html']) {
+  for (const page of ['index.html', 'auth.html', 'dashboard.html', 'admin.html', 'forgot-password.html', 'reset-password.html']) {
     const res = await request(app).get(`/${page}`);
     check(`GET /${page} returns 200`, res.status === 200, `got ${res.status}`);
 
@@ -154,7 +156,174 @@ const check = (name, cond, detail = '') => {
       inline.length === 0, `found ${inline.length}`);
   }
 
+  // ---------- 8. Account recovery: validation that runs before any query ----------
+  // These paths answer without touching MongoDB, so they are verifiable here.
+  const forgotNoEmail = await request(app).post('/api/auth/forgot-password').send({});
+  check('forgot-password without an address returns 400',
+    forgotNoEmail.status === 400, `got ${forgotNoEmail.status}`);
+  check('forgot-password error is JSON with a message',
+    Boolean(forgotNoEmail.body && forgotNoEmail.body.message));
+
+  const resetNoToken = await request(app).post('/api/auth/reset-password').send({ password: 'abcdef' });
+  check('reset-password without a token returns 400',
+    resetNoToken.status === 400, `got ${resetNoToken.status}`);
+
+  const resetNoPassword = await request(app).post('/api/auth/reset-password').send({ token: 'abc' });
+  check('reset-password without a password returns 400',
+    resetNoPassword.status === 400, `got ${resetNoPassword.status}`);
+
+  const resetShort = await request(app).post('/api/auth/reset-password')
+    .send({ token: 'abc', password: 'abc' });
+  check('reset-password refuses a too-short password',
+    resetShort.status === 400, `got ${resetShort.status}`);
+
+  const resetMismatch = await request(app).post('/api/auth/reset-password')
+    .send({ token: 'abc', password: 'abcdef', confirmPassword: 'different' });
+  check('reset-password refuses a mismatched confirmation',
+    resetMismatch.status === 400, `got ${resetMismatch.status}`);
+
+  const badPeriod = await request(app).get('/api/leaderboard?period=fortnight');
+  check('leaderboard rejects an unknown period (400)',
+    badPeriod.status === 400, `got ${badPeriod.status}`);
+
+  // ---------- 9. The recovery pages actually offer the flow ----------
+  const forgotPage = await request(app).get('/forgot-password.html');
+  check('forgot-password.html contains the email form',
+    forgotPage.status === 200 && /id="forgot-form"/.test(forgotPage.text));
+  check('forgot-password.html explains the no-mailbox route',
+    /administrator or university IT/i.test(forgotPage.text));
+
+  const resetPage = await request(app).get('/reset-password.html');
+  check('reset-password.html contains the new-password form',
+    resetPage.status === 200 && /id="reset-form"/.test(resetPage.text));
+
+  const authPage = await request(app).get('/auth.html');
+  check('auth.html links to the recovery page',
+    /forgot-password\.html/.test(authPage.text));
+
+  // ---- Faculty domain regression (no database needed: the domain rule runs
+  // before the first query) ----
+  const reg = (email) => request(app).post('/api/auth/register')
+    .send({ name: 'Domain Test', email, password: 'secret123' });
+
+  // Accepted domains are asserted through the same rule the route uses. Sending
+  // a full registration for each one would reach Mongoose with no connection
+  // and stall on buffering; the refusal cases below still exercise the route
+  // itself, because a bad domain is rejected before any query runs.
+  const { isAllowedEmail } = require('../src/utils/email');
+  for (const domain of ['scds.saiuniversity.edu.in', 'sas.saiuniversity.edu.in',
+    'sol.saiuniversity.edu.in', 'sahs.saiuniversity.edu.in', 'saiuniversity.edu.in']) {
+    check(`the accepted domain @${domain} passes domain validation`,
+      isAllowedEmail(`student.${domain.split('.')[0]}@${domain}`) === true,
+      'the server would refuse this address');
+  }
+
+  for (const [email, label] of [
+    ['someone@gmail.com', 'an external domain'],
+    ['someone@sai.edu', 'a lookalike domain'],
+    ['someone@scds.saiuniversity.edu.in.evil.com', 'a suffix trick'],
+    ['someone@sub.saiuniversity.edu.in', 'a subdomain of the faculty domain'],
+    ['someone@sub.scds.saiuniversity.edu.in', 'a subdomain of a school domain']
+  ]) {
+    const res = await reg(email);
+    check(`${label} is refused (400)`, res.status === 400, `got ${res.status}`);
+  }
+
+  {
+    const cfg = await request(app).get('/api/auth/config');
+    check('the config lists the faculty domain separately',
+      Array.isArray(cfg.body.facultyDomains)
+      && cfg.body.facultyDomains.includes('saiuniversity.edu.in'),
+      JSON.stringify(cfg.body.facultyDomains));
+    check('the config still lists all four student domains',
+      Array.isArray(cfg.body.allowedEmailDomains) && cfg.body.allowedEmailDomains.length === 4,
+      JSON.stringify(cfg.body.allowedEmailDomains));
+    const msg = await reg('someone@gmail.com');
+    check('the refusal message names the faculty domain too',
+      /saiuniversity\.edu\.in/.test(msg.body.message || ''), msg.body.message || '');
+  }
+
+  // ---- The browser fallback must mirror the server's domain rule ----
+  {
+    const authJs = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'assets', 'js', 'auth.js'), 'utf8');
+    const fallback = authJs.slice(authJs.indexOf('let authConfig'), authJs.indexOf('})();'));
+    check('the fallback config includes the faculty domain',
+      /facultyDomains:\s*\['saiuniversity\.edu\.in'\]/.test(fallback),
+      'faculty domain missing from the fallback');
+    check('the fallback still lists all four student domains',
+      (fallback.match(/saiuniversity\.edu\.in'/g) || []).length >= 5,
+      'student domains missing from the fallback');
+
+    const cfg = await request(app).get('/api/auth/config');
+    check('the server accepts exactly the domains the fallback offers',
+      cfg.body.facultyDomains.includes('saiuniversity.edu.in')
+      && cfg.body.allowedEmailDomains.length === 4);
+  }
+
+  // ---- Registration feedback: the bug that made the button do nothing ----
+  {
+    const authJs = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'assets', 'js', 'auth.js'), 'utf8');
+    const handler = authJs.slice(authJs.indexOf("document.getElementById('form-register')"));
+
+    check('registration validation accepts the faculty domain',
+      /function acceptedDomains\(\)/.test(authJs) && /facultyDomains/.test(authJs),
+      'the client still only knows the student domains');
+    check('the refusal message does not reference an out-of-scope variable',
+      !/\$\{domains\.map/.test(handler), 'a ReferenceError here is what made the click do nothing');
+    check('a pending faculty registration is reported, not navigated past',
+      /data\.pendingApproval/.test(handler));
+    check('a verification-required registration is reported',
+      /data\.verificationRequired/.test(handler));
+    check('the submit button is restored on the pending path',
+      (handler.match(/btn\.disabled = false/g) || []).length >= 2);
+    check('the API error message is surfaced', /err\.message/.test(handler));
+    check('the password is never logged', !/console\.(log|error|warn)\([^)]*password/i.test(authJs));
+  }
+
+  // ---- Query-parameter injection: an object must never reach Mongoose ----
+  for (const qs of ['category[$ne]=x', 'location[$ne]=x', 'type[$ne]=x',
+    'subcategory[$ne]=x', 'category[$regex]=.*', 'location[$regex]=.*']) {
+    const res = await request(app).get(`/api/items?${qs}`);
+    check(`the filter ${qs.split('=')[0]} is refused (400)`, res.status === 400, `got ${res.status}`);
+  }
+  for (const qs of ['category=Bottles&category=Bags', 'location=Canteen&location=Library',
+    'type=found&type=lost', 'subcategory=Flask&subcategory=Tumbler']) {
+    const res = await request(app).get(`/api/items?${qs}`);
+    check(`a repeated parameter (${qs.split('&')[0].split('=')[0]}) is refused (400)`,
+      res.status === 400, `got ${res.status}`);
+  }
+  for (const qs of ['category=Spaceships', 'location=Atlantis', 'type=sideways']) {
+    const res = await request(app).get(`/api/items?${qs}`);
+    check(`an unknown filter value ${qs} is refused (400)`, res.status === 400, `got ${res.status}`);
+  }
+  // ---- Database outage: answer 503 immediately, not 500 after a 10s buffer ----
+  {
+    const started = Date.now();
+    const listNoDb = await request(app).get('/api/items?type=found');
+    const elapsed = Date.now() - started;
+    check('the listing route answers 503 when the database is down',
+      listNoDb.status === 503, `got ${listNoDb.status}`);
+    check('and it answers without buffering', elapsed < 2000, `${elapsed}ms`);
+
+    const statsNoDb = await request(app).get('/api/items/stats');
+    check('the stats route answers 503 when the database is down',
+      statsNoDb.status === 503, `got ${statsNoDb.status}`);
+    check('the 503 body is JSON with a message',
+      Boolean(statsNoDb.body && statsNoDb.body.message), JSON.stringify(statsNoDb.body));
+  }
+
+  // ---- Production CORS must not reflect arbitrary origins ----
+  {
+    const appSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
+    check('production CORS does not fall back to reflecting any origin',
+      /NODE_ENV === 'production' \? \(origins\.length \? origins : false\) : true/.test(appSrc),
+      'the permissive fallback is still present');
+  }
+
   console.log('\n' + results.join('\n'));
+  // Close the handle so the process exits without waiting on Mongoose
+  try { await require('mongoose').connection.close(); } catch { /* never connected */ }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);
 })().catch((err) => {

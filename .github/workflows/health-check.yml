@@ -1,0 +1,56 @@
+name: Production health check
+
+# Daily probe of the live service. It checks the real endpoints and fails loudly
+# when they are down — it does not print success without checking.
+# NOTE: GitHub only runs `schedule:` triggers from the repository's DEFAULT branch
+# (currently `main`). While this file exists only on `phase3-stage1`, the cron
+# below does NOT fire — use "Run workflow" (workflow_dispatch) to try it, or merge
+# to the default branch to activate the schedule.
+on:
+  schedule:
+    - cron: '30 2 * * *'      # 02:30 UTC = 08:00 IST
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Liveness endpoint
+        env:
+          BASE_URL: ${{ vars.PRODUCTION_URL || 'https://foundry-lost-and-found.onrender.com' }}
+        run: |
+          set -euo pipefail
+          echo "Probing $BASE_URL/api/health"
+          code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 30 "$BASE_URL/api/health")
+          cat /tmp/health.json; echo
+          test "$code" = "200" || { echo "::error::liveness returned $code"; exit 1; }
+
+      - name: Readiness endpoint (database reachable)
+        env:
+          BASE_URL: ${{ vars.PRODUCTION_URL || 'https://foundry-lost-and-found.onrender.com' }}
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/ready.json -w '%{http_code}' --max-time 30 "$BASE_URL/api/health/ready")
+          cat /tmp/ready.json; echo
+          test "$code" = "200" || { echo "::error::readiness returned $code — the database may be down"; exit 1; }
+
+      - name: Frontend is served
+        env:
+          BASE_URL: ${{ vars.PRODUCTION_URL || 'https://foundry-lost-and-found.onrender.com' }}
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/home.html -w '%{http_code}' --max-time 30 "$BASE_URL/")
+          test "$code" = "200" || { echo "::error::homepage returned $code"; exit 1; }
+          grep -qi '<html' /tmp/home.html || { echo "::error::homepage did not return HTML"; exit 1; }
+
+      - name: Critical API routes answer
+        env:
+          BASE_URL: ${{ vars.PRODUCTION_URL || 'https://foundry-lost-and-found.onrender.com' }}
+        run: |
+          set -euo pipefail
+          for path in /api/items /api/items/stats /api/items/meta /api/leaderboard /api/auth/config; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$BASE_URL$path")
+            echo "$path -> $code"
+            test "$code" = "200" || { echo "::error::$path returned $code"; exit 1; }
+          done

@@ -9,6 +9,7 @@ const {
   protect, requireRole, ADMIN_ROLES, MODERATION_ROLES, SUPER_ROLES
 } = require('../middleware/auth');
 const { audit } = require('../utils/audit');
+const { awardPoints, evaluateBadges } = require('../utils/gamification');
 
 const router = express.Router();
 
@@ -88,10 +89,12 @@ router.get('/items', requireRole(...MODERATION_ROLES), async (req, res, next) =>
   try {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 25));
-    const total = await Item.countDocuments();
+    const itemFilter = req.user.role === 'moderator' ? { type: 'found' } : {};
+    const total = await Item.countDocuments(itemFilter);
 
-    const items = await Item.find()
-      .populate('reportedBy', 'name email')
+    const items = await Item.find(itemFilter)
+      .populate('reportedBy', req.user.role === 'moderator' ? 'name' : 'name email')
+      .populate('verifiedBy', 'name')
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit);
@@ -103,8 +106,84 @@ router.get('/items', requireRole(...MODERATION_ROLES), async (req, res, next) =>
       items: items.map((i) => ({
         id: i._id, title: i.title, category: i.category, type: i.type,
         status: i.status, location: i.location, date: i.date,
+        verifiedAt: i.verifiedAt,
+        verifiedBy: i.verifiedBy ? { id: i.verifiedBy._id, name: i.verifiedBy.name } : null,
         reportedBy: i.reportedBy ? { id: i.reportedBy._id, name: i.reportedBy.name, email: i.reportedBy.email } : null
       }))
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PATCH /api/admin/items/:id/verify
+ * Moderation staff verify genuine found listings before gamification rewards.
+ */
+router.patch('/items/:id/verify', requireRole(...MODERATION_ROLES), async (req, res, next) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid item id' });
+    }
+
+    const item = await Item.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        type: 'found',
+        status: { $ne: 'hidden' },
+        verifiedAt: null
+      },
+      {
+        $set: {
+          verifiedAt: new Date(),
+          verifiedBy: req.user._id
+        }
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!item) {
+      const current = await Item.findById(req.params.id).select('type status verifiedAt');
+      if (!current) return res.status(404).json({ message: 'Listing not found' });
+      if (current.type !== 'found') {
+        return res.status(400).json({ message: 'Only found listings can be verified' });
+      }
+      if (current.status === 'hidden') {
+        return res.status(400).json({ message: 'Hidden listings cannot be verified' });
+      }
+      if (current.verifiedAt) {
+        return res.status(200).json({ message: 'Listing already verified', alreadyVerified: true });
+      }
+      return res.status(409).json({ message: 'Listing could not be verified; please retry' });
+    }
+
+    try {
+      await awardPoints({
+        userId: item.reportedBy,
+        type: 'found_item',
+        key: 'found:' + item._id,
+        item: item._id
+      });
+    } catch (err) {
+      console.error('Found-item points award failed after verification:', err.message);
+    }
+
+    try {
+      await evaluateBadges(item.reportedBy);
+    } catch (err) {
+      console.error('Found-item badge evaluation failed after verification:', err.message);
+    }
+
+    try {
+      await audit(req, 'item_found_verified', 'item', item._id, item.title);
+    } catch (err) {
+      console.error('Found-item verification audit failed:', err.message);
+    }
+
+    res.status(200).json({
+      message: 'Found listing verified',
+      verifiedAt: item.verifiedAt,
+      verifiedBy: req.user._id
     });
   } catch (err) {
     next(err);
@@ -158,14 +237,18 @@ router.get('/users', requireRole(...ADMIN_ROLES), async (req, res, next) => {
 
 /**
  * PATCH /api/admin/items/:id/status
- * Admin only. Force any listing into a status.
+ * Admin only. Change listing status, except returned.
+ * A return must be confirmed through an approved claim handover.
  */
-router.patch('/items/:id/status', requireRole(...MODERATION_ROLES), async (req, res, next) => {
+router.patch('/items/:id/status', requireRole(...ADMIN_ROLES), async (req, res, next) => {
   try {
     const { status } = req.body;
     const allowed = ['open', 'claimed', 'returned', 'closed'];
     if (!allowed.includes(status)) {
       return res.status(400).json({ message: `status must be one of: ${allowed.join(', ')}` });
+    }
+    if (status === 'returned') {
+      return res.status(400).json({ message: 'A listing can only be marked returned after its approved claim handover is confirmed' });
     }
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ message: 'Invalid item id' });
@@ -311,12 +394,17 @@ router.patch('/users/:id/suspend', requireRole(...ADMIN_ROLES), async (req, res,
     if (typeof suspended !== 'boolean') {
       return res.status(400).json({ message: 'suspended must be true or false' });
     }
-    // 0, null or missing means "permanent"; a number means a temporary ban
+    const suspensionReason = String(reason || '').trim();
+    if (suspended && suspensionReason.length > 200) {
+      return res.status(400).json({ message: 'Suspension reason cannot exceed 200 characters' });
+    }
+
+    // 0, null or missing means permanent; temporary suspensions use whole days.
     let days = 0;
     if (suspended && durationDays !== undefined && durationDays !== null) {
       days = Number(durationDays);
-      if (!Number.isFinite(days) || days < 0 || days > 365) {
-        return res.status(400).json({ message: 'durationDays must be between 0 and 365 (0 = permanent)' });
+      if (!Number.isFinite(days) || !Number.isInteger(days) || days < 0 || days > 365) {
+        return res.status(400).json({ message: 'durationDays must be a whole number between 0 and 365 (0 = permanent)' });
       }
     }
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
@@ -328,12 +416,12 @@ router.patch('/users/:id/suspend', requireRole(...ADMIN_ROLES), async (req, res,
 
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
-    if (user.role === 'admin') {
+    if (['admin', 'superadmin'].includes(user.role)) {
       return res.status(400).json({ message: 'Administrator accounts cannot be suspended' });
     }
 
     user.suspended = suspended;
-    user.suspendedReason = suspended ? String(reason || '').trim() : undefined;
+    user.suspendedReason = suspended ? suspensionReason : undefined;
     user.suspendedAt = suspended ? new Date() : undefined;
     user.suspendedUntil = suspended && days > 0
       ? new Date(Date.now() + days * 24 * 60 * 60 * 1000)
