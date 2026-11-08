@@ -172,17 +172,37 @@ router.delete('/:id', protect, async (req, res, next) => {
 });
 
 /** Moderation: hide or restore. Moderators may restore others' listings to open. */
-router.patch('/:id/status', protect, requireRole('moderator','admin','superadmin'), async (req, res, next) => {
+router.patch('/:id/status', protect, async (req, res, next) => {
   try {
-    const next_ = oneValue(req.body.status);
-    if (!['open','hidden'].includes(next_)) {
-      return res.status(400).json({ message: 'status must be open or hidden' });
-    }
+    const requested = oneValue(req.body.status);
+    // The dashboard still offers 'closed'; the schema has no such state, and a
+    // closed listing is a hidden one.
+    const next_ = requested === 'closed' ? 'hidden' : requested;
+
+    const STAFF = ['moderator', 'admin', 'superadmin'];
+    const OWNER_STATUSES = ['open', 'claimed', 'returned'];
+    const STAFF_STATUSES = ['open', 'hidden'];
+
     const existing = await items.findByIdRaw(req.params.id);
     if (!existing) return res.status(404).json({ message: 'Listing not found' });
 
+    const isOwner = existing.reportedBy === req.user.id;
+    const isStaff = STAFF.includes(req.user.role);
+    if (!isOwner && !isStaff) {
+      return res.status(403).json({ message: 'You can only change your own listing' });
+    }
+
+    // An owner moves their listing through its lifecycle; only staff may hide.
+    if (next_ === 'hidden' && !isStaff) {
+      return res.status(403).json({ message: 'Only a moderator can hide a listing' });
+    }
+    const allowed = next_ === 'hidden' ? STAFF_STATUSES : OWNER_STATUSES;
+    if (!allowed.includes(next_)) {
+      return res.status(400).json({ message: 'Unsupported status' });
+    }
+
     if (req.user.role === 'moderator' && next_ === 'open') {
-      if (existing.reportedBy === req.user.id) {
+      if (isOwner) {
         return res.status(403).json({ message: 'A moderator cannot restore their own listing' });
       }
       if (existing.status !== 'hidden') {

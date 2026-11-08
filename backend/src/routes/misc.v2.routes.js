@@ -30,10 +30,11 @@ notifications.get('/', protect, async (req, res, next) => {
 // Must be declared BEFORE /:id/read or 'read-all' is captured as an id.
 notifications.patch('/read-all', protect, async (req, res, next) => {
   try {
-    const r = await one(
+    const { db } = require('../config/pg');
+    const r = await db().query(
       `update notifications set read = true
-        where user_id = $1 and read = false returning id`, [req.user.id]);
-    res.status(200).json({ updated: r ? 1 : 0, message: 'All notifications marked read' });
+        where user_id = $1 and read = false`, [req.user.id]);
+    res.status(200).json({ updated: r.rowCount, message: 'All notifications marked read' });
   } catch (err) { next(err); }
 });
 
@@ -86,8 +87,14 @@ dashboard.get('/me', protect, async (req, res, next) => {
                 contributions: mine.items.length },
       badges: [],
       items: mine.items,
-      claims: claimsMade.map((c) => ({ ...c, itemTitle: c.item_title })),
-      claimsReceived: claimsReceived.map((c) => ({ ...c, claimantName: c.claimant_name })),
+      claims: claimsMade.map((c) => ({
+        ...c, itemTitle: c.item_title, createdAt: c.created_at,
+        item: { id: c.item, title: c.item_title }
+      })),
+      claimsReceived: claimsReceived.map((c) => ({
+        ...c, claimantName: c.claimant_name, createdAt: c.created_at,
+        claimant: { id: c.claimant, name: c.claimant_name }
+      })),
       listings: mine.items,
       ledger, pointsAudit: audit, unreadNotifications: unread.n
     });
@@ -197,10 +204,16 @@ const admin = express.Router();
 
 admin.get('/users', protect, requireRole('admin','superadmin'), async (req, res, next) => {
   try {
-    const rows = await many(
-      `select id, name, email, role, points, email_verified, pending_approval, suspended, created_at
-         from users order by created_at desc limit 100`);
-    res.status(200).json({ users: rows });
+    const rows = await many('select * from users order by created_at desc limit 100');
+    // Mapped through the shared mapper: the page reads pendingApproval,
+    // approvalNote and createdAt, which raw snake_case columns do not provide.
+    res.status(200).json({
+      count: rows.length,
+      users: rows.map((r) => ({ ...users.toSafeObject(users.toUser(r)),
+                                pendingApproval: r.pending_approval,
+                                approvalNote: r.approval_note,
+                                emailVerified: r.email_verified }))
+    });
   } catch (err) { next(err); }
 });
 

@@ -79,7 +79,10 @@ function isAllowedEmail(email) {
   const value = String(email || '').trim().toLowerCase();
   const at = value.lastIndexOf('@');
   if (at <= 0) return false;
-  return acceptedDomains().includes(value.slice(at + 1));
+  // Mirrors the server (isUniversityEmail): the parent domain and any
+  // subdomain of it. An exact-match list rejected valid school addresses.
+  const domain = value.slice(at + 1);
+  return acceptedDomains().some((d) => domain === d || domain.endsWith('.' + d));
 }
 
 function showError(id, message) {

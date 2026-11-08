@@ -399,10 +399,10 @@ async function openItem(id) {
       <div><dt>Location</dt><dd>${ui.esc(place)}</dd></div>
       <div><dt>Date reported</dt><dd>${ui.date(item.date)}</dd></div>
       <div><dt>Status</dt><dd>${ui.esc(item.status)}</dd></div>
-      <div><dt>Posted by</dt><dd>${ui.esc(item.reportedBy?.name || 'A student')}</dd></div>`;
+      <div><dt>Posted by</dt><dd>${ui.esc(item.reporterName || 'A student')}</dd></div>`;
 
     const claimBtn = document.getElementById('btn-claim');
-    const mine = Auth.user && item.reportedBy && item.reportedBy.id === Auth.user.id;
+    const mine = Auth.user && Auth.user && item.reportedBy === Auth.user.id;
     if (mine) {
       claimBtn.disabled = true;
       claimBtn.textContent = 'This is your listing';
@@ -771,26 +771,8 @@ document.addEventListener('DOMContentLoaded', async () => {
  * picks a real place instead of typing one that no map can place. Failure is
  * silent: typing a location by hand must still work.
  */
-(function loadCampusLocations() {
-  // The report form uses a <select id="rf-location"> filled from the fixed
-  // LOCATIONS list. Real campus places are appended as their own group, so a
-  // user can pick somewhere the map actually knows about.
-  var list = document.getElementById('rf-location');
-  if (!list || typeof fetch !== 'function') return;
-  fetch('/api/campus/locations', { headers: { Accept: 'application/json' } })
-    .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (data) {
-      var locs = (data && data.locations) ? data.locations : [];
-      if (!locs.length) return;
-      var group = document.createElement('optgroup');
-      group.label = 'Campus Explorer locations';
-      locs.forEach(function (loc) {
-        var opt = document.createElement('option');
-        opt.value = loc.name;
-        opt.textContent = loc.name;
-        group.appendChild(opt);
-      });
-      list.appendChild(group);
-    })
-    .catch(function () { /* keep manual entry working */ });
-})();
+// Campus Explorer location names are not in the server's fixed location list,
+// so appending them to the report form's select made every such listing fail
+// validation with 'Unknown location'. The Explorer page is the place to browse
+// campus locations; the form keeps the fixed list the API accepts.
+

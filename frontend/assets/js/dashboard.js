@@ -84,10 +84,10 @@
       // --- claims you made ---
       document.getElementById('claims-body').innerHTML = data.claims.length
         ? data.claims.map((c) => row([
-            ui.esc(c.item?.title || 'Item removed'),
+            ui.esc(c.itemTitle || c.item?.title || 'Item removed'),
             ui.esc(String(c.message).slice(0, 80)),
             statusTag(c.status),
-            ui.date(c.createdAt)
+            ui.date(c.createdAt || c.created_at)
           ])).join('')
         : '<tr><td colspan="4" style="color:var(--muted)">No claims yet.</td></tr>';
 
@@ -108,7 +108,7 @@
       document.getElementById('received-body').innerHTML = received.length
         ? received.map((c) => row([
             ui.esc(c.itemTitle),
-            ui.esc(c.claimant?.name || 'A student'),
+            ui.esc(c.claimantName || c.claimant?.name || 'A student'),
             ui.esc(c.message),
             statusTag(c.status),
             c.status === 'pending'
@@ -222,7 +222,8 @@
         document.getElementById('ef-type').value = item.type;
         document.getElementById('ef-title').value = item.title;
         document.getElementById('ef-description').value = item.description;
-        document.getElementById('ef-date').value = new Date(item.date).toISOString().slice(0, 10);
+        document.getElementById('ef-date').value = (() => { const d = new Date(item.date); return [d.getFullYear(),
+      String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-'); })();
         editingStatus = item.status;
         // A moderated listing's status is not one of the editable options.
         // Show it, disabled, so the select cannot silently misrepresent it.

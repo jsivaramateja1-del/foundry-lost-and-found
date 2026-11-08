@@ -55,7 +55,10 @@ router.get('/config', (req, res) => {
     // sent. Without this, a missing key looks like "signup silently does nothing".
     emailConfigured: Boolean(process.env.BREVO_API_KEY && process.env.BREVO_SENDER),
     // Kept for the existing client, which validates against these lists.
-    allowedEmailDomains: [PARENT_DOMAIN],
+    // The client validates with an exact match, so it needs the concrete
+    // school subdomains as well as the parent domain.
+    allowedEmailDomains: [PARENT_DOMAIN, 'scds.' + PARENT_DOMAIN, 'sas.' + PARENT_DOMAIN,
+                          'sol.' + PARENT_DOMAIN, 'sahs.' + PARENT_DOMAIN],
     facultyDomains: [PARENT_DOMAIN]
   });
 });
@@ -255,6 +258,11 @@ const updatePreferences = async (req, res, next) => {
 };
 router.patch('/preferences', protect, updatePreferences);
 router.post('/preferences', protect, updatePreferences);
+
+/** POST /api/auth/logout — tokens are stateless, so this is an acknowledgement. */
+router.post('/logout', protect, (req, res) => {
+  res.status(200).json({ message: 'Signed out' });
+});
 
 /** GET /api/auth/me */
 router.get('/me', protect, async (req, res) => {
