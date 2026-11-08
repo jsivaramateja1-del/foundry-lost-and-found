@@ -229,6 +229,13 @@ router.get('/', async (req, res, next) => {
     };
     const sortBy = sortMap[sort] || sortMap.newest;
 
+
+    // Without this, an unreachable database leaves Mongoose buffering for its
+    // default 10 seconds and then answers 500. A caller deserves an immediate,
+    // honest 503 instead.
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ message: 'The service is temporarily unavailable. Please try again shortly.' });
+    }
     const total = await Item.countDocuments(filter);
     const items = await Item.find(filter)
       .populate('reportedBy', 'name')
@@ -276,7 +283,15 @@ router.get('/stats', async (req, res, next) => {
     // value, but applying the rule uniformly means the invariant survives any
     // future change to how takedowns are represented.
     const visible = { status: { $ne: 'hidden' } };
+
+    // An unreachable database would otherwise leave Mongoose buffering for its
+    // default 10 seconds before answering 500. Answer 503 immediately instead.
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ message: 'The service is temporarily unavailable. Please try again shortly.' });
+    }
+
     const [total, lost, found, returned, claimed, open] = await Promise.all([
+
       Item.countDocuments(visible),
       Item.countDocuments({ ...visible, type: 'lost' }),
       Item.countDocuments({ ...visible, type: 'found' }),

@@ -59,6 +59,14 @@ jobs:
         working-directory: backend
         run: npm run test:coverage
 
+      - name: Boot test (real server, isolated in-memory database)
+        working-directory: backend
+        run: npm run test:boot
+
+      - name: Ledger consistency audit (read-only, isolated database)
+        working-directory: backend
+        run: npm run test:ledger
+
       - name: Dependency vulnerability audit
         working-directory: backend
         run: npm audit --audit-level=high

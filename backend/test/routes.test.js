@@ -296,6 +296,30 @@ const check = (name, cond, detail = '') => {
     const res = await request(app).get(`/api/items?${qs}`);
     check(`an unknown filter value ${qs} is refused (400)`, res.status === 400, `got ${res.status}`);
   }
+  // ---- Database outage: answer 503 immediately, not 500 after a 10s buffer ----
+  {
+    const started = Date.now();
+    const listNoDb = await request(app).get('/api/items?type=found');
+    const elapsed = Date.now() - started;
+    check('the listing route answers 503 when the database is down',
+      listNoDb.status === 503, `got ${listNoDb.status}`);
+    check('and it answers without buffering', elapsed < 2000, `${elapsed}ms`);
+
+    const statsNoDb = await request(app).get('/api/items/stats');
+    check('the stats route answers 503 when the database is down',
+      statsNoDb.status === 503, `got ${statsNoDb.status}`);
+    check('the 503 body is JSON with a message',
+      Boolean(statsNoDb.body && statsNoDb.body.message), JSON.stringify(statsNoDb.body));
+  }
+
+  // ---- Production CORS must not reflect arbitrary origins ----
+  {
+    const appSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
+    check('production CORS does not fall back to reflecting any origin',
+      /NODE_ENV === 'production' \? \(origins\.length \? origins : false\) : true/.test(appSrc),
+      'the permissive fallback is still present');
+  }
+
   console.log('\n' + results.join('\n'));
   // Close the handle so the process exits without waiting on Mongoose
   try { await require('mongoose').connection.close(); } catch { /* never connected */ }
