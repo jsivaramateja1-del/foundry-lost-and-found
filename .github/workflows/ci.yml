@@ -77,6 +77,11 @@ jobs:
         working-directory: backend
         run: npm run test:auth-v2
 
+      # The connection-string and TLS decisions that broke a real deploy.
+      - name: Connection and TLS unit tests (no database needed)
+        working-directory: backend
+        run: npm run test:connection
+
       - name: PostgreSQL integration tests
         working-directory: backend
         run: npm run test:pg

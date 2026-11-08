@@ -169,6 +169,60 @@ const { connectDB, closeDB, many, one, transaction } = require('../src/config/pg
       approvedLogin.status === 200 && Boolean(approvedLogin.body.token),
       `got ${approvedLogin.status}`);
 
+    // ---------- faculty journey, end to end over HTTP ----------
+    // Everything above called the repository directly. This drives the real
+    // routes in the order a person would: register, verify, be refused, be
+    // approved by an administrator, then sign in.
+    const applicant = await request(app).post('/api/auth/register')
+      .send({ name: 'Journey Prof', email: 'journey@saiuniversity.edu.in', password: 'secret123' });
+    check('journey: the application is accepted', applicant.status === 201, `got ${applicant.status}`);
+    check('journey: the response says it is a pending application',
+      applicant.body.pendingApproval === true);
+    check('journey: the message mentions administrator approval',
+      /administrat/i.test(applicant.body.message || ''), applicant.body.message);
+
+    const journeyRow = await users.findByEmail('journey@saiuniversity.edu.in');
+    const journeyToken = crypto.randomBytes(32).toString('hex');
+    await users.setVerificationToken(journeyRow.id,
+      crypto.createHash('sha256').update(journeyToken).digest('hex'),
+      new Date(Date.now() + 60000));
+    const journeyVerify = await request(app)
+      .post('/api/auth/verify-email').send({ token: journeyToken });
+    check('journey: the address verifies', journeyVerify.status === 200, `got ${journeyVerify.status}`);
+
+    const journeyRefused = await request(app).post('/api/auth/login')
+      .send({ email: 'journey@saiuniversity.edu.in', password: 'secret123' });
+    check('journey: a verified but unapproved professor is refused', journeyRefused.status === 403,
+      `got ${journeyRefused.status}`);
+
+    // An administrator approves through the real route.
+    const superadmin = await users.create({
+      name: 'Journey Admin', email: 'journeyadmin@saiuniversity.edu.in',
+      password: await bcrypt.hash('secret123', 4), role: 'superadmin'
+    });
+    await users.markVerified(superadmin.id);
+    const adminLogin = await request(app).post('/api/auth/login')
+      .send({ email: 'journeyadmin@saiuniversity.edu.in', password: 'secret123' });
+    check('journey: the administrator signs in', adminLogin.status === 200);
+
+    const approveRes = await request(app)
+      .patch(`/api/admin/users/${journeyRow.id}/approve`)
+      .set({ Authorization: `Bearer ${adminLogin.body.token}` })
+      .send({ approved: true });
+    check('journey: the administrator approves through the API', approveRes.status === 200,
+      `got ${approveRes.status}`);
+
+    const journeyLogin = await request(app).post('/api/auth/login')
+      .send({ email: 'journey@saiuniversity.edu.in', password: 'secret123' });
+    check('journey: the approved professor can sign in',
+      journeyLogin.status === 200 && Boolean(journeyLogin.body.token), `got ${journeyLogin.status}`);
+
+    const journeyNotes = await many(
+      'select type from notifications where user_id = $1', [journeyRow.id]);
+    check('journey: the applicant is told the outcome',
+      journeyNotes.some((n) => n.type === 'account_approved'),
+      JSON.stringify(journeyNotes.map((n) => n.type)));
+
     // ---------- items ----------
     const auth = { Authorization: `Bearer ${login.body.token}` };
     const created = await request(app).post('/api/items').set(auth).send({

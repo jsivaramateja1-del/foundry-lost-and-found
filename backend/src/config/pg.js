@@ -169,3 +169,52 @@ const closeDB = async () => {
 };
 
 module.exports = { connectDB, db, one, many, transaction, closeDB };
+
+/**
+ * Pure resolver for the connection string and TLS options.
+ *
+ * Split out of connectDB so the decisions that once broke a real deploy can be
+ * unit-tested without a TLS server: whether an sslmode parameter is stripped,
+ * which TLS mode wins, and whether the direct-host warning fires.
+ *
+ * Returns { connectTarget, ssl, warnings }.
+ */
+const resolveConnection = (connectionString, env = process.env) => {
+  const warnings = [];
+  let connectTarget = connectionString;
+
+  try {
+    const parsed = new URL(connectionString);
+    if (parsed.searchParams.has('sslmode')) {
+      warnings.push('sslmode-ignored');
+      parsed.searchParams.delete('sslmode');
+      connectTarget = parsed.toString();
+    }
+    if (/\.supabase\.co$/i.test(parsed.hostname) && parsed.port === '5432') {
+      warnings.push('direct-host');
+    }
+  } catch { /* an unparseable URL will fail at connect anyway */ }
+
+  let ssl;
+  if (env.PG_NO_SSL === 'true') {
+    ssl = false;
+  } else if (env.PG_CA_CERT_PATH) {
+    try {
+      ssl = { ca: require('fs').readFileSync(env.PG_CA_CERT_PATH, 'utf8'), rejectUnauthorized: true };
+    } catch {
+      warnings.push('ca-unreadable');
+      ssl = env.PG_SSL_NO_VERIFY === 'true'
+        ? { rejectUnauthorized: false }
+        : { rejectUnauthorized: true };
+    }
+  } else if (env.PG_SSL_NO_VERIFY === 'true') {
+    warnings.push('no-verify');
+    ssl = { rejectUnauthorized: false };
+  } else {
+    ssl = { rejectUnauthorized: true };
+  }
+
+  return { connectTarget, ssl, warnings };
+};
+
+module.exports.resolveConnection = resolveConnection;
