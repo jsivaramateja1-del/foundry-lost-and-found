@@ -10,6 +10,7 @@ const users = require('../repositories/users');
 const { protect, requireRole } = require('../middleware/auth.v2');
 const mailer = require('../lib/brevo');
 const notify = require('../repositories/notify');
+const badges = require('../repositories/badges');
 
 const appUrl = () => (process.env.APP_URL || 'http://localhost:5000').replace(/\/+$/, '');
 
@@ -86,7 +87,7 @@ dashboard.get('/me', protect, async (req, res, next) => {
       },
       impact: { points: req.user.points, returns: req.user.returns,
                 contributions: mine.items.length },
-      badges: [],
+      badges: await badges.forUser(req.user.id),
       items: mine.items,
       claims: claimsMade.map((c) => ({
         ...c, itemTitle: c.item_title, createdAt: c.created_at,
@@ -372,6 +373,17 @@ admin.patch('/items/:id/verify', protect, requireRole(...STAFF), async (req, res
       actor: req.user.id, actorEmail: req.user.email,
       action: 'item.verify', targetType: 'item', targetId: item.id, note: item.title
     });
+
+    // Award any badge the reporter now qualifies for, and say so.
+    const earned = await badges.evaluate(null, item.reportedBy);
+    if (earned.length) {
+      const names = badges.BADGES.filter((b) => earned.includes(b.id)).map((b) => b.label);
+      notify.create(null, {
+        userId: item.reportedBy, type: 'badge_earned',
+        message: `You earned a badge: ${names.join(', ')}`,
+        link: 'dashboard.html', relatedType: 'item', relatedId: item.id
+      }).catch(() => {});
+    }
 
     const reporter = await users.findById(item.reportedBy);
     if (reporter) {

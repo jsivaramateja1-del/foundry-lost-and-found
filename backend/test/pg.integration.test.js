@@ -140,7 +140,41 @@ const { connectDB, closeDB, many, one, transaction } = require('../src/config/pg
     const rolled = await users.findByEmail('rollback@scds.saiuniversity.edu.in');
     check('a failed transaction leaves no row behind', rolled === null);
 
-    await many('truncate users, items, claims, notifications, point_events, reports, campus_locations restart identity cascade');
+    // ---------- badges ----------
+    const badges = require('../src/repositories/badges');
+    const u3 = await users.create({
+      name: 'Badge Test', email: 'badge@scds.saiuniversity.edu.in',
+      password: await bcrypt.hash('secret123', 4)
+    });
+
+    let fresh = await badges.forUser(u3.id);
+    check('a new account has no badges', fresh.every((b) => b.earned === false));
+    check('the catalogue lists all five badges', fresh.length === 5);
+
+    // Posting a listing earns nothing: only a verified one counts.
+    await many(
+      `insert into items (title, description, category, location, date, type, reported_by, status)
+       values ('Badge Item', 'x', 'Bags', 'Library', '2026-11-01', 'found', $1, 'open')`, [u3.id]);
+    let earned = await badges.evaluate(null, u3.id);
+    check('an unverified listing earns no badge', earned.length === 0);
+
+    await many(
+      `update items set verified_at = now() where reported_by = $1`, [u3.id]);
+    earned = await badges.evaluate(null, u3.id);
+    check('verifying the first found listing earns first_found', earned.includes('first_found'));
+
+    const again = await badges.evaluate(null, u3.id);
+    check('evaluating twice awards nothing new', again.length === 0);
+
+    await many('update users set returns = 10 where id = $1', [u3.id]);
+    const all = await badges.evaluate(null, u3.id);
+    check('ten returns earns every return badge',
+      ['first_return', 'community_helper', 'trusted_member'].every((b) => all.includes(b)));
+
+    fresh = await badges.forUser(u3.id);
+    check('forUser reports all five as earned', fresh.every((b) => b.earned === true));
+
+    await many('truncate users, items, claims, notifications, point_events, reports, campus_locations, user_badges restart identity cascade');
   } catch (err) {
     check('the integration suite ran', false, err.message);
     console.error(err);

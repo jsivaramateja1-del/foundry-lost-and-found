@@ -210,3 +210,19 @@ BEGIN
       t, t, t, t);
   END LOOP;
 END $$;
+
+-- ---------------------------------------------------------------------------
+-- Badges
+--
+-- Earned once and never revoked. The primary key makes the award idempotent,
+-- so re-evaluating after every event is safe and cheap.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_badges (
+  user_id    UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  badge_id   TEXT        NOT NULL,
+  earned_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, badge_id)
+);
+
+CREATE INDEX IF NOT EXISTS user_badges_user_idx ON user_badges (user_id);
+

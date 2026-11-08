@@ -169,6 +169,20 @@ router.post('/:id/complete', claimIpLimit, protect, claimAccountLimit, async (re
       link: 'dashboard.html', relatedType: 'claim', relatedId: claim.id
     }).catch(() => {});
 
+    // Both parties can earn a return badge from this handover.
+    const badges = require('../repositories/badges');
+    for (const uid of [claim.claimant, item.reportedBy]) {
+      const earned = await badges.evaluate(null, uid).catch(() => []);
+      if (earned.length) {
+        const names = badges.BADGES.filter((b) => earned.includes(b.id)).map((b) => b.label);
+        notify.create(null, {
+          userId: uid, type: 'badge_earned',
+          message: `You earned a badge: ${names.join(', ')}`,
+          link: 'dashboard.html', relatedType: 'claim', relatedId: claim.id
+        }).catch(() => {});
+      }
+    }
+
     res.status(200).json({ message: 'Handover complete. The item is marked returned.', ...result });
   } catch (err) { next(err); }
 });
