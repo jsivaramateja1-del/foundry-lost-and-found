@@ -172,3 +172,9 @@
 
   searchEl.addEventListener('input', function () { renderList(searchEl.value); });
 })();
+
+/* Bind the theme toggle. api.js defines initTheme() but nothing on this page
+   called it, so the button did nothing. */
+document.addEventListener('DOMContentLoaded', function () {
+  if (typeof initTheme === 'function') initTheme();
+});

@@ -14,15 +14,8 @@
        third party is slow. Tiles still come from OpenStreetMap. -->
   <link rel="stylesheet" href="assets/vendor/leaflet.css" />
   <style>
-    #map { height: 460px; border-radius: 12px; border: 1px solid rgba(255,255,255,.12); }
-    .explorer-layout { display: grid; grid-template-columns: 320px 1fr; gap: 20px; align-items: start; }
-    @media (max-width: 860px) { .explorer-layout { grid-template-columns: 1fr; } #map { height: 360px; } }
-    .loc-card { padding: 12px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; margin-bottom: 10px; cursor: pointer; }
-    .loc-card:hover, .loc-card:focus { border-color: var(--accent, #4ade80); outline: none; }
-    .loc-card h3 { margin: 0 0 4px; font-size: 15px; }
-    .loc-card p { margin: 0; font-size: 13px; opacity: .75; }
-    .loc-source { font-size: 11px; opacity: .55; margin-top: 6px; }
-    .state-box { padding: 16px; border: 1px dashed rgba(255,255,255,.2); border-radius: 10px; font-size: 14px; }
+    /* Only the map height is page-specific; every colour comes from tokens. */
+    #map { height:460px; }
   </style>
   <meta name="theme-color" content="#F4EDE0" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#121110" media="(prefers-color-scheme: dark)">

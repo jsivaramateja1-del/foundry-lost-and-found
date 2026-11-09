@@ -188,6 +188,7 @@ hr { border:0; border-top:2px solid var(--line-soft); margin:24px 0; }
 .input:focus, .select:focus, .textarea:focus,
 .field input:focus, .field select:focus, .field textarea:focus {
   box-shadow:3px 3px 0 var(--mustard);
+  outline:3px solid var(--primary); outline-offset:1px;
 }
 .select, select {
   appearance:none; padding-right:34px; cursor:pointer;
@@ -669,7 +670,11 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0); }
 }
 @media (max-width: 900px) {
   .site-header__inner { flex-wrap: wrap; height: auto; min-height: 60px; padding: 10px var(--pad); gap: 10px; }
-  .header-actions { margin-left: auto; flex-wrap: wrap; gap: 6px; }
+  .header-actions {
+    margin-left: auto; flex: 0 1 auto; min-width: 0;
+    flex-wrap: wrap; justify-content: flex-end; gap: 6px;
+  }
+  .header-actions .btn { flex: 0 0 auto; }
   /* The nav is shown, wrapped, rather than hidden behind a menu button that
      is not reliably reachable at narrow widths. */
   .nav {
@@ -761,6 +766,10 @@ header.site-header > .brand:hover { text-decoration: none; }
 
 /* ---- anchors must clear the sticky header ---- */
 html { scroll-padding-top:84px; }
+/* At <=900px the header wraps to two or three rows and reaches ~200px, so a
+   fixed 84px offset dropped every anchor target behind it. */
+@media (max-width:900px) { html { scroll-padding-top:212px; } }
+@media (max-width:420px) { html { scroll-padding-top:224px; } }
 
 /* ---- skip link ---- */
 .skip-link { position:absolute; left:-9999px; top:0; z-index:500; }
@@ -785,3 +794,20 @@ html { scroll-padding-top:84px; }
 [data-theme="dark"] .leaflet-tile { filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.9); }
 [data-theme="dark"] .leaflet-popup-content-wrapper,
 [data-theme="dark"] .leaflet-control { background:var(--surface); color:var(--ink); }
+/* The badge paints its own background, so the nested description must not keep
+   the muted ink colour or it disappears into it. */
+.badge--earned .form-note, .badge--earned .badge__body,
+.badge--found .form-note, .badge--lost .form-note {
+  color:inherit; opacity:.92;
+}
+[data-theme="dark"] .badge--earned .form-note,
+[data-theme="dark"] .badge--earned .badge__body { color:#0E1F1C; }
+
+/* Night must not keep a hard shadow on the header toggle. */
+[data-theme="dark"] .header-actions .theme-toggle,
+[data-theme="dark"] .theme-toggle.btn--ghost { box-shadow:none; }
+
+/* The Night fallback drifted from the dark block; align the tokens that matter. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) { --ink-3:#9A948B; --blk-hover:#3A3532; }
+}
