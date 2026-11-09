@@ -811,3 +811,12 @@ html { scroll-padding-top:84px; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) { --ink-3:#9A948B; --blk-hover:#3A3532; }
 }
+/* The six-digit code the claimant reads to the owner: monospace, selectable,
+   and in its own column so it cannot be mistaken for part of the message. */
+.handover-code {
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:14px; font-weight:700; letter-spacing:.14em;
+  background:var(--sunken); border:2px solid var(--line);
+  border-radius:4px 7px 4px 6px; padding:2px 8px;
+  user-select:all; white-space:nowrap;
+}

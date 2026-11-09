@@ -56,6 +56,18 @@
       + (loc.source ? ' \u00b7 ' + escapeHtml(loc.source) : ' \u00b7 no source recorded');
   }
 
+  /* Leaflet's default marker images were never vendored, so every marker
+   rendered as a broken image. An inline divIcon needs no asset at all. */
+  function pin(colour) {
+    return L.divIcon({
+      className: '',
+      html: '<span style="display:block;width:16px;height:16px;border-radius:50%;'
+          + 'border:2.5px solid #121110;background:' + colour + ';'
+          + 'box-shadow:0 0 0 5px rgba(194,59,34,.25);"></span>',
+      iconSize: [16, 16], iconAnchor: [8, 8]
+    });
+  }
+
   function initMap() {
     if (typeof L === 'undefined') {
       // The CDN did not load. Say so plainly rather than showing an empty box.
@@ -68,7 +80,7 @@
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
-    L.marker([CAMPUS.lat, CAMPUS.lng])
+    L.marker([CAMPUS.lat, CAMPUS.lng], { icon: pin('#C23B22') })
       .addTo(map)
       .bindPopup('<strong>' + escapeHtml(CAMPUS.name) + '</strong><br>One Hub Road, OMR, Paiyanur');
     return true;
@@ -150,7 +162,7 @@
         renderList('');
         if (map) {
           locations.forEach(function (loc) {
-            markers[loc.id] = L.marker([loc.lat, loc.lng])
+            markers[loc.id] = L.marker([loc.lat, loc.lng], { icon: pin('#C23B22') })
               .addTo(map)
               .bindPopup('<strong>' + escapeHtml(loc.name) + '</strong>');
           });

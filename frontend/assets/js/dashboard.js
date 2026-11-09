@@ -26,6 +26,10 @@
       try {
         data = await api('/dashboard/me', { auth: true });
       } catch (err) {
+    var _ie = document.getElementById('impact-summary');
+    if (_ie) _ie.textContent = 'Could not load your impact.';
+    var _bl = document.getElementById('badges-list');
+    if (_bl) _bl.innerHTML = '<li class="form-note">Could not load your badges.</li>';
         // If the user just logged out, stay quiet instead of bouncing them back
         if (!Auth.isLoggedIn) return { ok: false, message: 'You have been signed out.' };
         if (err.status === 401) {
@@ -107,21 +111,28 @@
       // One request for all of them. The old version asked per listing and
       // swallowed every error, so a failure looked identical to "no claims".
       let received = [];
+  let receivedFailed = false;
       try {
         const res = await api('/claims/received', { auth: true });
         received = res.claims;
       } catch (err) {
         ui.toast(`Could not load claims received: ${err.message}`);
         received = [];
+        receivedFailed = true;
       }
       document.getElementById('received-count').textContent =
-        received.length ? `${received.length} total` : '';
+        receivedFailed ? '—' : received.length ? `${received.length} total` : '';
 
-      document.getElementById('received-body').innerHTML = received.length
+      document.getElementById('received-body').innerHTML = receivedFailed
+        ? '<tr><td colspan="5" class="table__empty">Claims could not be loaded. <button type="button" class="link-button" data-retry-received>Retry</button></td></tr>'
+        : received.length
         ? received.map((c) => row([
             ui.esc(c.itemTitle),
             ui.esc(c.claimantName || c.claimant?.name || 'A student'),
             ui.esc(c.message),
+            c.handoverCode && c.status === 'approved'
+              ? '<code class="handover-code">' + ui.esc(c.handoverCode) + '</code>'
+              : '—',
             statusTag(c.status),
             c.status === 'pending'
               ? `<button class="btn btn--ghost" data-approve="${c.id}">Approve</button>

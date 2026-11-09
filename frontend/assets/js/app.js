@@ -73,6 +73,7 @@ function paintAuthState() {
 async function loadMeta() {
   try {
     const meta = await api('/items/meta');
+  if (state.similarSeq !== _seq || state.activeItemId !== _reqId) return;
     state.meta = {
       categories: meta.categories || [],
       subcategories: meta.subcategories || {},
@@ -439,6 +440,8 @@ async function openItem(id) {
 }
 
 async function showSimilar(id) {
+  state.similarSeq = (state.similarSeq || 0) + 1;
+  var _seq = state.similarSeq;
   var _reqId = state.activeItemId;
   const body = document.getElementById('modal-item-body');
   try {
