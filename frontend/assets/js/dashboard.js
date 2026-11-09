@@ -213,12 +213,47 @@
     let editingId = null;
     let editingStatus = '';   // the status the listing had when the modal opened
 
+    /* Focus management. app.js has this but the dashboard does not load it, so
+       the dialog opened with focus still on the page behind it and Tab walked
+       straight out. */
+    const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), '
+      + 'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    let _lastFocused = null;
+    let _trapHandler = null;
+
+    function trapModal(node) {
+      const nodes = [...node.querySelectorAll(FOCUSABLE)].filter((n) => n.offsetParent !== null);
+      if (!nodes.length) return;
+      _trapHandler = function (event) {
+        if (event.key !== 'Tab') return;
+        const first = nodes[0];
+        const last = nodes[nodes.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault(); last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault(); first.focus();
+        }
+      };
+      node.addEventListener('keydown', _trapHandler);
+      (nodes.find((n) => n.classList.contains('modal__close')) || nodes[0]).focus();
+    }
+
+    function untrapModal(node) {
+      if (_trapHandler) node.removeEventListener('keydown', _trapHandler);
+      _trapHandler = null;
+      if (_lastFocused && _lastFocused.isConnected) _lastFocused.focus();
+      _lastFocused = null;
+    }
+
     function openModalEl(node) {
+      _lastFocused = document.activeElement;
       node.dataset.open = 'true';
+      trapModal(node);
       document.body.style.overflow = 'hidden';
     }
     function closeModalEl(node) {
       node.dataset.open = 'false';
+      untrapModal(node);
       document.body.style.overflow = '';
     }
     function fillSelect(node, values, selected) {
