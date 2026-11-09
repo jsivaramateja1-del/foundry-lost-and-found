@@ -26,6 +26,10 @@
       try {
         data = await api('/dashboard/me', { auth: true });
       } catch (err) {
+    var _ie = document.getElementById('impact-summary');
+    if (_ie) _ie.textContent = 'Could not load your impact.';
+    var _bl = document.getElementById('badges-list');
+    if (_bl) _bl.innerHTML = '<li class="form-note">Could not load your badges.</li>';
         // If the user just logged out, stay quiet instead of bouncing them back
         if (!Auth.isLoggedIn) return { ok: false, message: 'You have been signed out.' };
         if (err.status === 401) {
@@ -94,35 +98,42 @@
       document.getElementById('claims-body').innerHTML = data.claims.length
         ? data.claims.map((c) => row([
             ui.esc(c.itemTitle || c.item?.title || 'Item removed'),
-            ui.esc(String(c.message).slice(0, 80))
-              + (c.handoverCode
-                  ? ` <strong>Handover code: ${ui.esc(c.handoverCode)}</strong>`
-                  : ''),
+            ui.esc(String(c.message).slice(0, 80)),
             statusTag(c.status),
+            c.handoverCode && c.status === 'approved'
+              ? '<code class="handover-code">' + ui.esc(c.handoverCode) + '</code>'
+              : '\u2014',
             ui.date(c.createdAt || c.created_at)
           ])).join('')
-        : '<tr><td colspan="4" style="color:var(--muted)">No claims yet.</td></tr>';
+        : '<tr><td colspan="5" class="table__empty">No claims yet.</td></tr>';
 
       // --- claims received on your listings ---
       // One request for all of them. The old version asked per listing and
       // swallowed every error, so a failure looked identical to "no claims".
       let received = [];
+  let receivedFailed = false;
       try {
         const res = await api('/claims/received', { auth: true });
         received = res.claims;
       } catch (err) {
         ui.toast(`Could not load claims received: ${err.message}`);
         received = [];
+        receivedFailed = true;
       }
       document.getElementById('received-count').textContent =
-        received.length ? `${received.length} total` : '';
+        receivedFailed ? '—' : received.length ? `${received.length} total` : '';
 
-      document.getElementById('received-body').innerHTML = received.length
+      document.getElementById('received-body').innerHTML = receivedFailed
+        ? '<tr><td colspan="6" class="table__empty">Claims could not be loaded. <button type="button" class="link-button" data-retry-received>Retry</button></td></tr>'
+        : received.length
         ? received.map((c) => row([
             ui.esc(c.itemTitle),
             ui.esc(c.claimantName || c.claimant?.name || 'A student'),
-            ui.esc(c.message),
-            statusTag(c.status),
+            ui.esc(c.message),            statusTag(c.status),
+
+            c.handoverCode && c.status === 'approved'
+              ? '<code class="handover-code">' + ui.esc(c.handoverCode) + '</code>'
+              : '—',
             c.status === 'pending'
               ? `<button class="btn btn--ghost" data-approve="${c.id}">Approve</button>
                  <button class="btn btn--ghost" data-reject="${c.id}">Reject</button>`
@@ -130,7 +141,7 @@
                 ? `<button class="btn btn--ghost" data-handover="${c.id}">Confirm handover</button>`
                 : '<span class="form-note">Reviewed</span>'
           ])).join('')
-        : '<tr><td colspan="5" style="color:var(--muted)">Nobody has claimed any of your items yet.</td></tr>';
+        : '<tr><td colspan="6" class="table__empty">Nobody has claimed any of your items yet.</td></tr>';
 
       return { ok: true };
     }
@@ -202,12 +213,47 @@
     let editingId = null;
     let editingStatus = '';   // the status the listing had when the modal opened
 
+    /* Focus management. app.js has this but the dashboard does not load it, so
+       the dialog opened with focus still on the page behind it and Tab walked
+       straight out. */
+    const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), '
+      + 'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    let _lastFocused = null;
+    let _trapHandler = null;
+
+    function trapModal(node) {
+      const nodes = [...node.querySelectorAll(FOCUSABLE)].filter((n) => n.offsetParent !== null);
+      if (!nodes.length) return;
+      _trapHandler = function (event) {
+        if (event.key !== 'Tab') return;
+        const first = nodes[0];
+        const last = nodes[nodes.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault(); last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault(); first.focus();
+        }
+      };
+      node.addEventListener('keydown', _trapHandler);
+      (nodes.find((n) => n.classList.contains('modal__close')) || nodes[0]).focus();
+    }
+
+    function untrapModal(node) {
+      if (_trapHandler) node.removeEventListener('keydown', _trapHandler);
+      _trapHandler = null;
+      if (_lastFocused && _lastFocused.isConnected) _lastFocused.focus();
+      _lastFocused = null;
+    }
+
     function openModalEl(node) {
+      _lastFocused = document.activeElement;
       node.dataset.open = 'true';
+      trapModal(node);
       document.body.style.overflow = 'hidden';
     }
     function closeModalEl(node) {
       node.dataset.open = 'false';
+      untrapModal(node);
       document.body.style.overflow = '';
     }
     function fillSelect(node, values, selected) {
@@ -412,4 +458,12 @@
     refresh();
     initNotifications();
     initTheme();
-  
+
+/* The error row offers a Retry; without this it did nothing. */
+document.addEventListener('click', (event) => {
+  if (event.target.closest('[data-retry-received]')) {
+    event.preventDefault();
+    if (typeof refresh === 'function') refresh();
+  }
+});
+

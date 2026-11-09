@@ -26,7 +26,9 @@ if (!token) {
 }
 
 form.addEventListener('submit', async (event) => {
-  event.preventDefault();
+  
+    if (!token) { showError('This link is missing its reset token. Request a new link from the forgot-password page.'); return; }
+event.preventDefault();
   showError('');
   const password = document.getElementById('reset-password').value;
   const confirmPassword = document.getElementById('reset-confirm').value;
@@ -49,4 +51,10 @@ form.addEventListener('submit', async (event) => {
     button.disabled = false;
     button.textContent = 'Save new password';
   }
+});
+
+/* Wire the theme toggle. Without this the button on this page does nothing,
+   because initTheme() is only called from the pages that load a page script. */
+document.addEventListener('DOMContentLoaded', function () {
+  if (typeof initTheme === 'function') initTheme();
 });

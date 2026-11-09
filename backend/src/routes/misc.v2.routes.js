@@ -11,6 +11,7 @@ const { protect, requireRole } = require('../middleware/auth.v2');
 const mailer = require('../lib/brevo');
 const notify = require('../repositories/notify');
 const badges = require('../repositories/badges');
+const claims = require('../repositories/claims');
 
 const appUrl = () => (process.env.APP_URL || 'http://localhost:5000').replace(/\/+$/, '');
 
@@ -506,12 +507,98 @@ admin.patch('/reports/:id', protect, requireRole(...STAFF), async (req, res, nex
   } catch (err) { next(err); }
 });
 
+/**
+ * PATCH /api/admin/claims/:id/review — a staff override.
+ *
+ * The owner-only route in claims.v2.routes.js means a claim the owner never
+ * answers is stuck forever and the item never returns to circulation. Staff may
+ * settle it instead. Because this overrides somebody else's decision about their
+ * own property, it is audited, a reason is required, and BOTH parties are told.
+ */
+admin.patch('/claims/:id/review', protect, requireRole('admin', 'superadmin'), async (req, res, next) => {
+  try {
+    const decision = req.body.decision;
+    if (!['approve', 'reject'].includes(decision)) {
+      return res.status(400).json({ message: 'decision must be approve or reject' });
+    }
+
+    // A staff override without a recorded reason is not acceptable.
+    const note = typeof req.body.note === 'string' ? req.body.note.trim().slice(0, 300) : '';
+    if (note.length < 10) {
+      return res.status(400).json({ message: 'Give a reason of at least 10 characters for overriding the owner' });
+    }
+
+    const claim = await claims.findById(req.params.id);
+    if (!claim) return res.status(404).json({ message: 'Claim not found' });
+
+    const item = await items.findByIdRaw(claim.item);
+    if (!item) return res.status(404).json({ message: 'Listing not found' });
+
+    // Staff cannot use the override to settle their own claim or one on their
+    // own listing — that would be reviewing yourself.
+    if (item.reportedBy === req.user.id || claim.claimant === req.user.id) {
+      return res.status(403).json({ message: 'You cannot review a claim you are party to' });
+    }
+
+    const result = decision === 'approve'
+      ? await claims.approve(claim.id, req.user.id, note)
+      : await claims.reject(claim.id, req.user.id, note);
+
+    if (result.error === 'not-found') return res.status(404).json({ message: 'Claim not found' });
+    if (result.error === 'not-pending') return res.status(409).json({ message: 'That claim was already reviewed' });
+    if (result.error === 'item-not-open') {
+      return res.status(409).json({ message: 'That listing is no longer open for claims' });
+    }
+
+    const label = decision === 'approve' ? 'approved' : 'rejected';
+
+    await notify.audit({
+      actor: req.user.id,
+      actorEmail: req.user.email || '',
+      action: `claim.${label}.override`,
+      targetType: 'claim',
+      targetId: claim.id,
+      note: `Staff override by ${req.user.role}: ${note}`
+    });
+
+    const body = `A staff member ${label} the claim on "${item.title}". Reason: ${note}`;
+    const targets = [...new Set([claim.claimant, item.reportedBy].filter(Boolean))];
+    targets.forEach((userId) => {
+      notify.create(null, {
+        userId,
+        type: decision === 'approve' ? 'claim_approved' : 'claim_rejected',
+        message: body,
+        link: 'dashboard.html',
+        relatedType: 'claim',
+        relatedId: claim.id
+      }).catch(() => {});
+    });
+
+    res.status(200).json({ message: `Claim ${label}`, claim: { id: claim.id, status: label } });
+  } catch (err) { next(err); }
+});
+
 /** GET /api/admin/users — the account list the admin page builds from. */
 admin.get('/users', protect, requireRole('admin', 'superadmin'), async (req, res, next) => {
   try {
-    const rows = await many('select * from users order by created_at desc limit 200');
+    // Paginated like /admin/items and /admin/claims. A hard LIMIT 200 meant
+    // every account past the newest 200 was invisible and unmanageable, while
+    // the count reported the cap as if it were the population.
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 25));
+    const totalRow = await one('select count(*)::int as n from users');
+    const pages = Math.max(1, Math.ceil(totalRow.n / limit));
+    // Clamp: an out-of-range page used to render an empty table that read as
+    // "there are no accounts".
+    const page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
+    const offset = (page - 1) * limit;
+    const rows = await many(
+      'select * from users order by created_at desc, id desc limit $1 offset $2', [limit, offset]);
     res.status(200).json({
       count: rows.length,
+      page,
+      limit,
+      pages,
+      total: totalRow.n,
       users: rows.map((r) => ({
         ...users.toSafeObject(users.toUser(r)),
         pendingApproval: r.pending_approval,

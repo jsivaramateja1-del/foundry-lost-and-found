@@ -131,7 +131,7 @@ const ui = {
   /** Format a date as 12 Oct 2026 */
   date(value) {
     if (!value) return '—';
-    const d = new Date(value);
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? new Date(value + 'T00:00:00') : new Date(value);
     if (Number.isNaN(d.getTime())) return '—';
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   },
@@ -185,25 +185,29 @@ function applyTheme(theme) {
 }
 
 function initTheme() {
-  let stored = 'dark';
-  try {
-    stored = localStorage.getItem(THEME_KEY) || 'dark';
-  } catch {
-    /* private mode: just use the default */
-  }
-  applyTheme(stored);
-
-  document.querySelectorAll('[data-theme-toggle]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
-      try {
-        localStorage.setItem(THEME_KEY, next);
-      } catch {
-        /* the theme simply will not persist */
-      }
+  // theme-init.js already resolved stored -> OS preference -> Paper before
+  // first paint. Trust that decision instead of re-deriving it with a
+  // different rule, which caused a flash of the wrong theme and ignored the
+  // operating system setting entirely.
+  // Bind the toggle. Nothing did this before, so the button was inert on every
+  // page and the choice was never stored.
+  document.querySelectorAll('[data-theme-toggle]').forEach(function (btn) {
+    if (btn.dataset.themeBound === 'true') return;
+    btn.dataset.themeBound = 'true';
+    btn.addEventListener('click', function () {
+      var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      try { localStorage.setItem('foundry.theme', next); } catch (e) { /* private mode */ }
       applyTheme(next);
     });
   });
+
+  var decided = document.documentElement.getAttribute('data-theme');
+  if (decided === 'light' || decided === 'dark') {
+    applyTheme(decided);
+  } else {
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    applyTheme(prefersDark ? 'dark' : 'light');
+  }
 }
 
 /** Reveal elements as they scroll into view. */

@@ -235,6 +235,8 @@ document.getElementById('form-login').addEventListener('submit', async (event) =
 
     finish(data.token, data.user);
   } catch (err) {
+    // A returning user whose verification email was lost had no way back in.
+    if (/verify your email/i.test(String(err.message || ''))) showResend();
     showError('login-error', err.message);
     btn.disabled = false;
     btn.textContent = 'Log in';

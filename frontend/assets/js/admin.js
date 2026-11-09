@@ -29,7 +29,7 @@
 
     /* Which page of each long table is showing. 25 rows is a comfortable
        screenful and keeps the admin response small. */
-    const paging = { items: 1, claims: 1, limit: 25 };
+    const paging = { items: 1, claims: 1, limit: 25 , users: 1 };
 
     /** Draw a "Page x of y" control. Renders nothing when there is one page. */
     function renderPager(id, data, key) {
@@ -81,9 +81,13 @@
       if (isModerator) {
         document.querySelector('.cards-row').hidden = true;
         const listingPanel = document.getElementById('admin-items').closest('section.panel');
-        document.querySelectorAll('#admin-content section.panel').forEach((panel) => { panel.hidden = panel !== listingPanel; });
-        listingPanel.querySelector('h2').textContent = 'Found-listing verification';
-        listingPanel.querySelector('thead').innerHTML = '<tr><th>Item</th><th>Category</th><th>Reported by</th><th>Date</th><th>Verification</th><th>Action</th></tr>';
+        /* The API grants moderators reports and audit. Hide only the panels
+           they genuinely cannot use, or they can never triage abuse. */
+        document.querySelectorAll('#admin-content section.panel').forEach((panel) => {
+          if (panel === listingPanel) return;
+          const head = (panel.querySelector('h2') || {}).textContent || '';
+          panel.hidden = /account|claim|category|last 7 days/i.test(head);
+        });
         try {
           const items = await api(`/admin/items?page=${paging.items}&limit=${paging.limit}`, { auth: true });
           paging.items = items.page;
@@ -100,7 +104,7 @@
               ])).join('')
             : '<tr><td colspan="6" style="color:var(--muted)">No found listings.</td></tr>';
         } catch (err) { ui.toast(err.message); }
-        return;
+
       }
 
       try {
@@ -127,7 +131,12 @@
               `<select class="select" data-admin-status="${i.id}" aria-label="Status for ${ui.esc(i.title)}">
                  ${['open', 'claimed', 'returned', 'hidden'].filter((s) => s !== 'returned' || s === i.status).map((s) => `<option value="${s}"${s === i.status ? ' selected' : ''}>${s}</option>`).join('')}
                </select>`,
-              `<button class="btn btn--ghost" data-admin-delete="${i.id}">Delete</button>`
+              `<span style="display:flex;gap:6px;flex-wrap:wrap;">
+                 ${i.type === 'found' && !i.verifiedAt && i.status !== 'hidden'
+                   ? `<button class="btn btn--primary" data-verify-found="${i.id}" aria-label="Verify found item ${ui.esc(i.title)}">Verify</button>`
+                   : ''}
+                 <button class="btn btn--ghost" data-admin-delete="${i.id}" aria-label="Delete listing ${ui.esc(i.title)}">Delete</button>
+               </span>`
             ])).join('')
           : '<tr><td colspan="7" style="color:var(--muted)">No listings.</td></tr>';
 
@@ -135,11 +144,19 @@
         // server decision, so the page has to cope with the 403.
         let users = { count: 0, users: [] };
         try {
-          users = await api('/admin/users', { auth: true });
+          users = await api(`/admin/users?page=${paging.users}&limit=${paging.limit}`, { auth: true });
+          paging.users = users.page || 1;
         } catch (err) {
           document.getElementById('users-count').textContent = 'not available for your role';
+          users = { count: 0, users: [] };
         }
-        document.getElementById('users-count').textContent = users.count ? `${users.count} accounts` : document.getElementById('users-count').textContent;
+        const _ut = users.total != null ? users.total : users.count;
+        document.getElementById('users-count').textContent =
+          `${_ut} account${_ut === 1 ? '' : 's'}`;
+        if (users.pages !== undefined) {
+          paging.users = users.page;
+          renderPager('users-pager', users, 'users');
+        }
         document.getElementById('admin-users').innerHTML = users.users.length
           ? users.users.map((u) => row([
               ui.esc(u.name),
@@ -217,7 +234,15 @@
               ui.esc(c.claimant?.name || '—'),
               ui.esc(String(c.message).slice(0, 70)),
               `<span class="status status--${c.status}">${ui.esc(c.status)}</span>`,
-              ui.date(c.createdAt)
+              ui.date(c.createdAt),
+              c.status === 'pending'
+                ? `<span style="display:flex;gap:6px;flex-wrap:wrap;">
+                     <button class="btn btn--primary" data-override-claim="${c.id}" data-decision="approve"
+                       aria-label="Approve claim on ${ui.esc(c.item?.title || 'this item')}">Approve</button>
+                     <button class="btn btn--ghost" data-override-claim="${c.id}" data-decision="reject"
+                       aria-label="Reject claim on ${ui.esc(c.item?.title || 'this item')}">Reject</button>
+                   </span>`
+                : '<span class="form-note">Settled</span>'
             ])).join('')
           : '<tr><td colspan="5" style="color:var(--muted)">No claims.</td></tr>';
       } catch (err) {
@@ -236,6 +261,34 @@
 
     // Pager buttons for the two long tables
     document.addEventListener('click', async (event) => {
+    // Staff override of a claim. The owner-only route leaves an ignored claim
+    // stuck forever; this settles it, and the server requires a reason.
+    const overrideBtn = event.target.closest('[data-override-claim]');
+    if (overrideBtn) {
+      const decision = overrideBtn.dataset.decision;
+      const reason = window.prompt(
+        `Reason for ${decision === 'approve' ? 'approving' : 'rejecting'} this claim (at least 10 characters). Both parties will be told.`
+      );
+      if (reason === null) return;
+      if (reason.trim().length < 10) {
+        ui.toast('Give a reason of at least 10 characters.');
+        return;
+      }
+      overrideBtn.disabled = true;
+      try {
+        await api(`/admin/claims/${overrideBtn.dataset.overrideClaim}/review`, {
+          method: 'PATCH', auth: true,
+          body: { decision, note: reason.trim() }
+        });
+        ui.toast(`Claim ${decision === 'approve' ? 'approved' : 'rejected'}.`);
+        await loadAdmin();
+      } catch (err) {
+        ui.toast(err.message);
+        overrideBtn.disabled = false;
+      }
+      return;
+    }
+
       const button = event.target.closest('[data-page-key]');
       if (!button) return;
       const key = button.dataset.pageKey;
