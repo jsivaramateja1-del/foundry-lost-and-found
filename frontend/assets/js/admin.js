@@ -29,7 +29,7 @@
 
     /* Which page of each long table is showing. 25 rows is a comfortable
        screenful and keeps the admin response small. */
-    const paging = { items: 1, claims: 1, limit: 25 };
+    const paging = { items: 1, claims: 1, limit: 25 , users: 1 };
 
     /** Draw a "Page x of y" control. Renders nothing when there is one page. */
     function renderPager(id, data, key) {
@@ -127,7 +127,12 @@
               `<select class="select" data-admin-status="${i.id}" aria-label="Status for ${ui.esc(i.title)}">
                  ${['open', 'claimed', 'returned', 'hidden'].filter((s) => s !== 'returned' || s === i.status).map((s) => `<option value="${s}"${s === i.status ? ' selected' : ''}>${s}</option>`).join('')}
                </select>`,
-              `<button class="btn btn--ghost" data-admin-delete="${i.id}">Delete</button>`
+              `<span style="display:flex;gap:6px;flex-wrap:wrap;">
+                 ${i.type === 'found' && !i.verifiedAt && i.status !== 'hidden'
+                   ? `<button class="btn btn--primary" data-verify-found="${i.id}" aria-label="Verify found item ${ui.esc(i.title)}">Verify</button>`
+                   : ''}
+                 <button class="btn btn--ghost" data-admin-delete="${i.id}" aria-label="Delete listing ${ui.esc(i.title)}">Delete</button>
+               </span>`
             ])).join('')
           : '<tr><td colspan="7" style="color:var(--muted)">No listings.</td></tr>';
 
@@ -135,9 +140,11 @@
         // server decision, so the page has to cope with the 403.
         let users = { count: 0, users: [] };
         try {
-          users = await api('/admin/users', { auth: true });
+          users = await api(`/admin/users?page=${paging.users}&limit=${paging.limit}`, { auth: true });
+          paging.users = users.page || 1;
         } catch (err) {
           document.getElementById('users-count').textContent = 'not available for your role';
+          users = { count: 0, users: [] };
         }
         document.getElementById('users-count').textContent = users.count ? `${users.count} accounts` : document.getElementById('users-count').textContent;
         document.getElementById('admin-users').innerHTML = users.users.length

@@ -509,9 +509,21 @@ admin.patch('/reports/:id', protect, requireRole(...STAFF), async (req, res, nex
 /** GET /api/admin/users — the account list the admin page builds from. */
 admin.get('/users', protect, requireRole('admin', 'superadmin'), async (req, res, next) => {
   try {
-    const rows = await many('select * from users order by created_at desc limit 200');
+    // Paginated like /admin/items and /admin/claims. A hard LIMIT 200 meant
+    // every account past the newest 200 was invisible and unmanageable, while
+    // the count reported the cap as if it were the population.
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 25));
+    const offset = (page - 1) * limit;
+    const totalRow = await one('select count(*)::int as n from users');
+    const rows = await many(
+      'select * from users order by created_at desc limit $1 offset $2', [limit, offset]);
     res.status(200).json({
-      count: rows.length,
+      count: totalRow.n,
+      page,
+      limit,
+      pages: Math.max(1, Math.ceil(totalRow.n / limit)),
+      total: totalRow.n,
       users: rows.map((r) => ({
         ...users.toSafeObject(users.toUser(r)),
         pendingApproval: r.pending_approval,
