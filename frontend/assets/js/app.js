@@ -72,7 +72,23 @@ function paintAuthState() {
 /* ---------------- dropdowns ---------------- */
 async function loadMeta() {
   try {
-    const meta = await api('/items/meta');
+    let meta;
+    try {
+      meta = await api('/items/meta');
+    } catch (err) {
+      // Without the lists the form cannot be filled correctly. Say so and stop,
+      // rather than leaving two empty required selects the user cannot answer.
+      var btn = document.getElementById('rf-submit');
+      if (btn) btn.disabled = true;
+      var cat = document.getElementById('rf-category');
+      if (cat) cat.innerHTML = '<option value="">Could not load categories</option>';
+      var loc = document.getElementById('rf-location');
+      if (loc) loc.innerHTML = '<option value="">Could not load locations</option>';
+      if (typeof showFormMessage === 'function') {
+        showFormMessage('report-error', 'Could not load the category and location lists. Reload the page and try again.');
+      }
+      return { categories: [], subcategories: {}, locations: [] };
+    }
   if (state.similarSeq !== _seq || state.activeItemId !== _reqId) return;
     state.meta = {
       categories: meta.categories || [],

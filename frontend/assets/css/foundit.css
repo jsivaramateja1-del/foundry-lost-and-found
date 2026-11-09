@@ -84,7 +84,12 @@ img { max-width:100%; display:block; }
 hr { border:0; border-top:2px solid var(--line-soft); margin:24px 0; }
 ::selection { background:var(--mustard); color:var(--ink); }
 
-.wrap, .container { max-width:var(--max); margin:0 auto; padding:0 var(--pad); }
+.wrap, .container {
+  max-width:var(--max); margin:0 auto; padding:0 var(--pad);
+}
+/* The header is sticky, so the first block of content needs room beneath it. */
+main.wrap, main.container { padding-top:28px; padding-bottom:56px; }
+main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
 .two { display:grid; grid-template-columns:1fr 1fr; gap:26px; }
 .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:22px; }
@@ -823,4 +828,76 @@ html { scroll-padding-top:84px; }
   background:var(--sunken); border:2px solid var(--line);
   border-radius:4px 7px 4px 6px; padding:2px 8px;
   user-select:all; white-space:nowrap;
+}
+
+/* ===========================================================================
+   Campus Explorer — schematic plan with live counts
+   =========================================================================== */
+.plan-card {
+  background:var(--surface); border:2px solid var(--line);
+  border-radius:10px 16px 9px 14px; box-shadow:var(--shadow-lg);
+  padding:22px 24px 18px; margin-bottom:28px;
+}
+.plan-head {
+  display:flex; align-items:flex-end; justify-content:space-between;
+  gap:20px; flex-wrap:wrap; margin-bottom:18px;
+}
+.plan-head h2 { margin:0; font-size:clamp(20px,2.4vw,26px); }
+.plan-legend { display:flex; gap:16px; margin:0; font-size:12px; color:var(--ink-2); }
+.plan-legend span { display:flex; align-items:center; gap:6px; }
+.plan-legend .dot { width:10px; height:10px; border-radius:50%; border:2px solid var(--line); }
+.dot.lost { background:var(--primary); }
+.dot.found { background:var(--teal); }
+.dot.none { background:transparent; }
+
+.plan-grid {
+  display:grid; grid-template-columns:minmax(0,1.5fr) minmax(260px,1fr);
+  gap:26px; align-items:start;
+}
+@media (max-width:900px) { .plan-grid { grid-template-columns:1fr; gap:20px; } }
+
+.plan-svg svg { width:100%; height:auto; display:block; }
+
+/* blocks */
+.blk { cursor:pointer; }
+.blk rect { fill:var(--blk); stroke:var(--line); stroke-width:2; transition:fill .12s, stroke .12s; }
+.blk:hover rect { fill:var(--blk-hover, #E4D9C4); }
+.blk.hostel rect { fill:var(--blk-hostel); }
+.blk.sport rect { fill:var(--blk-sport); stroke-dasharray:5 3; }
+.blk.mark rect { fill:var(--blk-mark); }
+.blk.out rect { fill:none; stroke-dasharray:7 5; }
+.blk .bl { font-family:var(--sans); font-size:11px; font-weight:700; fill:var(--ink); text-anchor:middle; pointer-events:none; }
+.blk .ct { font-family:var(--sans); font-size:9px; font-weight:600; fill:var(--ink-3); text-anchor:middle; pointer-events:none; }
+.blk.has-lost .ct { fill:var(--primary); }
+.blk.has-items rect { stroke-width:2.5; }
+.blk.on rect, .blk.hostel.on rect, .blk.sport.on rect, .blk.mark.on rect, .blk.out.on rect {
+  fill:var(--primary); stroke:var(--primary);
+}
+.blk.on .bl, .blk.on .ct { fill:var(--primary-ink); }
+.blk:focus-visible { outline:none; }
+.blk:focus-visible rect { stroke:var(--primary); stroke-width:3.5; }
+
+/* side panel */
+.plan-side { position:sticky; top:96px; }
+@media (max-width:900px) { .plan-side { position:static; } }
+.plan-detail {
+  border:2px solid var(--line); border-radius:8px 13px 7px 11px;
+  background:var(--sunken); padding:18px;
+}
+.plan-detail h3 { margin:2px 0 6px; font-size:20px; }
+.pd-desc { font-size:13px; color:var(--ink-2); margin:0 0 12px; }
+.pd-counts { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+.pill {
+  font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+  padding:4px 10px; border-radius:99px; border:2px solid var(--line);
+}
+.pill--lost { background:var(--primary); color:var(--primary-ink); border-color:var(--primary); }
+.pill--found { background:var(--teal); color:#FFFCF5; border-color:var(--teal); }
+.pd-empty { font-size:13px; color:var(--ink-3); margin:0; }
+.pd-list { list-style:none; margin:0 0 14px; padding:0; display:grid; gap:8px; }
+.pd-list li { display:flex; align-items:center; gap:8px; font-size:13px; }
+.pd-title { color:var(--ink); }
+.plan-note {
+  font-family:var(--hand); font-size:17px; color:var(--ink-3);
+  margin:16px 0 0; padding-top:14px; border-top:1.5px solid var(--line-soft);
 }
