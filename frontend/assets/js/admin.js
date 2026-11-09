@@ -81,7 +81,13 @@
       if (isModerator) {
         document.querySelector('.cards-row').hidden = true;
         const listingPanel = document.getElementById('admin-items').closest('section.panel');
-        document.querySelectorAll('#admin-content section.panel').forEach((panel) => { panel.hidden = panel !== listingPanel; });
+        /* The API grants moderators reports and audit. Hide only the panels
+           they genuinely cannot use, or they can never triage abuse. */
+        document.querySelectorAll('#admin-content section.panel').forEach((panel) => {
+          if (panel === listingPanel) return;
+          const head = (panel.querySelector('h2') || {}).textContent || '';
+          panel.hidden = /account|claim|category|last 7 days/i.test(head);
+        });
         listingPanel.querySelector('h2').textContent = 'Found-listing verification';
         listingPanel.querySelector('thead').innerHTML = '<tr><th>Item</th><th>Category</th><th>Reported by</th><th>Date</th><th>Verification</th><th>Action</th></tr>';
         try {
@@ -146,7 +152,13 @@
           document.getElementById('users-count').textContent = 'not available for your role';
           users = { count: 0, users: [] };
         }
-        document.getElementById('users-count').textContent = users.count ? `${users.count} accounts` : document.getElementById('users-count').textContent;
+        const _ut = users.total != null ? users.total : users.count;
+        document.getElementById('users-count').textContent =
+          `${_ut} account${_ut === 1 ? '' : 's'}`;
+        if (users.pages !== undefined) {
+          paging.users = users.page;
+          renderPager('users-pager', users, 'users');
+        }
         document.getElementById('admin-users').innerHTML = users.users.length
           ? users.users.map((u) => row([
               ui.esc(u.name),

@@ -98,14 +98,14 @@
       document.getElementById('claims-body').innerHTML = data.claims.length
         ? data.claims.map((c) => row([
             ui.esc(c.itemTitle || c.item?.title || 'Item removed'),
-            ui.esc(String(c.message).slice(0, 80))
-              + (c.handoverCode
-                  ? ` <strong>Handover code: ${ui.esc(c.handoverCode)}</strong>`
-                  : ''),
+            ui.esc(String(c.message).slice(0, 80)),
+            c.handoverCode && c.status === 'approved'
+              ? '<code class="handover-code">' + ui.esc(c.handoverCode) + '</code>'
+              : '\u2014',
             statusTag(c.status),
             ui.date(c.createdAt || c.created_at)
           ])).join('')
-        : '<tr><td colspan="4" style="color:var(--muted)">No claims yet.</td></tr>';
+        : '<tr><td colspan="5" class="table__empty">No claims yet.</td></tr>';
 
       // --- claims received on your listings ---
       // One request for all of them. The old version asked per listing and
@@ -458,4 +458,12 @@
     refresh();
     initNotifications();
     initTheme();
-  
+
+/* The error row offers a Retry; without this it did nothing. */
+document.addEventListener('click', (event) => {
+  if (event.target.closest('[data-retry-received]')) {
+    event.preventDefault();
+    if (typeof refresh === 'function') refresh();
+  }
+});
+

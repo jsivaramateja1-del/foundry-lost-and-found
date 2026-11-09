@@ -515,7 +515,7 @@ admin.patch('/reports/:id', protect, requireRole(...STAFF), async (req, res, nex
  * settle it instead. Because this overrides somebody else's decision about their
  * own property, it is audited, a reason is required, and BOTH parties are told.
  */
-admin.patch('/claims/:id/review', protect, requireRole('moderator', 'admin', 'superadmin'), async (req, res, next) => {
+admin.patch('/claims/:id/review', protect, requireRole('admin', 'superadmin'), async (req, res, next) => {
   try {
     const decision = req.body.decision;
     if (!['approve', 'reject'].includes(decision)) {
@@ -584,17 +584,20 @@ admin.get('/users', protect, requireRole('admin', 'superadmin'), async (req, res
     // Paginated like /admin/items and /admin/claims. A hard LIMIT 200 meant
     // every account past the newest 200 was invisible and unmanageable, while
     // the count reported the cap as if it were the population.
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 25));
-    const offset = (page - 1) * limit;
     const totalRow = await one('select count(*)::int as n from users');
+    const pages = Math.max(1, Math.ceil(totalRow.n / limit));
+    // Clamp: an out-of-range page used to render an empty table that read as
+    // "there are no accounts".
+    const page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
+    const offset = (page - 1) * limit;
     const rows = await many(
-      'select * from users order by created_at desc limit $1 offset $2', [limit, offset]);
+      'select * from users order by created_at desc, id desc limit $1 offset $2', [limit, offset]);
     res.status(200).json({
-      count: totalRow.n,
+      count: rows.length,
       page,
       limit,
-      pages: Math.max(1, Math.ceil(totalRow.n / limit)),
+      pages,
       total: totalRow.n,
       users: rows.map((r) => ({
         ...users.toSafeObject(users.toUser(r)),
