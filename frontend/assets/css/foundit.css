@@ -512,10 +512,9 @@ hr { border:0; border-top:2px solid var(--line-soft); margin:24px 0; }
 }
 
 /* scroll reveal */
+/* Content is never hidden by CSS. A scroll animation must not be able to make
+   the page unreadable if a script fails. */
 [data-reveal] { opacity:1; transform:none; }
-html.js [data-reveal] { opacity:0; transform:translateY(10px); transition:opacity .4s ease, transform .4s ease; }
-html.js [data-reveal].is-in { opacity:1; transform:none; }
-@media (prefers-reduced-motion: reduce) { [data-reveal], html.js [data-reveal] { opacity:1 !important; transform:none !important; } }
 
 /* two-column section bodies that had empty rules */
 .community { display:grid; grid-template-columns:1fr 1fr; gap:clamp(2rem,5vw,4rem); align-items:start; }

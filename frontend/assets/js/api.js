@@ -131,7 +131,7 @@ const ui = {
   /** Format a date as 12 Oct 2026 */
   date(value) {
     if (!value) return '—';
-    const d = new Date(value);
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? new Date(value + 'T00:00:00') : new Date(value);
     if (Number.isNaN(d.getTime())) return '—';
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   },

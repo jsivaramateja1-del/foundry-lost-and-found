@@ -39,15 +39,21 @@
    * the reader can open is marked verified; one that only carries a description
    * is marked unverified, so nobody mistakes a claim for a check.
    */
+  function safeUrl(url) {
+    // Only http(s) becomes a link. Anything else is shown as text, never as an
+    // anchor with an empty href that would navigate to the current page.
+    return /^https?:\/\//i.test(url || '') ? escapeHtml(url) : null;
+  }
+
   function provenance(loc) {
-    if (loc.sourceUrl) {
-      return '<span style="color:var(--accent,#4ade80);font-weight:600;">Verified</span> · '
-        + '<a href="' + (/^https?:\/\//i.test(loc.sourceUrl || '') ? escapeHtml(loc.sourceUrl) : '') + '" target="_blank" rel="noopener noreferrer">'
-        + 'view source</a>'
-        + (loc.source ? ' <span style="opacity:.7;">(' + escapeHtml(loc.source) + ')</span>' : '');
+    var href = safeUrl(loc.sourceUrl);
+    if (href) {
+      return '<span style="color:var(--teal);font-weight:600;">Verified</span> \u00b7 '
+        + '<a href="' + href + '" target="_blank" rel="noopener noreferrer">view source</a>'
+        + (loc.source ? ' <span style="color:var(--ink-3);">(' + escapeHtml(loc.source) + ')</span>' : '');
     }
-    return '<span style="color:#f59e0b;font-weight:600;">Unverified</span>'
-      + (loc.source ? ' · ' + escapeHtml(loc.source) : ' · no source recorded');
+    return '<span style="color:#8A5A00;font-weight:600;">Unverified</span>'
+      + (loc.source ? ' \u00b7 ' + escapeHtml(loc.source) : ' \u00b7 no source recorded');
   }
 
   function initMap() {
@@ -113,8 +119,8 @@
 
   function selectLocation(loc) {
     // the text detail needs no map
-    map.setView([loc.lat, loc.lng], 18);
-    if (markers[loc.id]) markers[loc.id].openPopup();
+    if (map) map.setView([loc.lat, loc.lng], 18);
+    if (map && markers[loc.id]) markers[loc.id].openPopup();
 
     var walk = 'https://www.openstreetmap.org/directions?engine=fossgis_osrm_foot&route='
       + CAMPUS.lat + '%2C' + CAMPUS.lng + '%3B' + loc.lat + '%2C' + loc.lng;
