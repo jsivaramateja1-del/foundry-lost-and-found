@@ -88,8 +88,6 @@
           const head = (panel.querySelector('h2') || {}).textContent || '';
           panel.hidden = /account|claim|category|last 7 days/i.test(head);
         });
-        listingPanel.querySelector('h2').textContent = 'Found-listing verification';
-        listingPanel.querySelector('thead').innerHTML = '<tr><th>Item</th><th>Category</th><th>Reported by</th><th>Date</th><th>Verification</th><th>Action</th></tr>';
         try {
           const items = await api(`/admin/items?page=${paging.items}&limit=${paging.limit}`, { auth: true });
           paging.items = items.page;
@@ -106,7 +104,7 @@
               ])).join('')
             : '<tr><td colspan="6" style="color:var(--muted)">No found listings.</td></tr>';
         } catch (err) { ui.toast(err.message); }
-        return;
+
       }
 
       try {

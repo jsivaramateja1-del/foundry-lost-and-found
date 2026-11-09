@@ -99,10 +99,10 @@
         ? data.claims.map((c) => row([
             ui.esc(c.itemTitle || c.item?.title || 'Item removed'),
             ui.esc(String(c.message).slice(0, 80)),
+            statusTag(c.status),
             c.handoverCode && c.status === 'approved'
               ? '<code class="handover-code">' + ui.esc(c.handoverCode) + '</code>'
               : '\u2014',
-            statusTag(c.status),
             ui.date(c.createdAt || c.created_at)
           ])).join('')
         : '<tr><td colspan="5" class="table__empty">No claims yet.</td></tr>';
