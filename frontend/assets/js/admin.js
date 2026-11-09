@@ -224,7 +224,15 @@
               ui.esc(c.claimant?.name || '—'),
               ui.esc(String(c.message).slice(0, 70)),
               `<span class="status status--${c.status}">${ui.esc(c.status)}</span>`,
-              ui.date(c.createdAt)
+              ui.date(c.createdAt),
+              c.status === 'pending'
+                ? `<span style="display:flex;gap:6px;flex-wrap:wrap;">
+                     <button class="btn btn--primary" data-override-claim="${c.id}" data-decision="approve"
+                       aria-label="Approve claim on ${ui.esc(c.item?.title || 'this item')}">Approve</button>
+                     <button class="btn btn--ghost" data-override-claim="${c.id}" data-decision="reject"
+                       aria-label="Reject claim on ${ui.esc(c.item?.title || 'this item')}">Reject</button>
+                   </span>`
+                : '<span class="form-note">Settled</span>'
             ])).join('')
           : '<tr><td colspan="5" style="color:var(--muted)">No claims.</td></tr>';
       } catch (err) {
@@ -243,6 +251,34 @@
 
     // Pager buttons for the two long tables
     document.addEventListener('click', async (event) => {
+    // Staff override of a claim. The owner-only route leaves an ignored claim
+    // stuck forever; this settles it, and the server requires a reason.
+    const overrideBtn = event.target.closest('[data-override-claim]');
+    if (overrideBtn) {
+      const decision = overrideBtn.dataset.decision;
+      const reason = window.prompt(
+        `Reason for ${decision === 'approve' ? 'approving' : 'rejecting'} this claim (at least 10 characters). Both parties will be told.`
+      );
+      if (reason === null) return;
+      if (reason.trim().length < 10) {
+        ui.toast('Give a reason of at least 10 characters.');
+        return;
+      }
+      overrideBtn.disabled = true;
+      try {
+        await api(`/admin/claims/${overrideBtn.dataset.overrideClaim}/review`, {
+          method: 'PATCH', auth: true,
+          body: { decision, note: reason.trim() }
+        });
+        ui.toast(`Claim ${decision === 'approve' ? 'approved' : 'rejected'}.`);
+        await loadAdmin();
+      } catch (err) {
+        ui.toast(err.message);
+        overrideBtn.disabled = false;
+      }
+      return;
+    }
+
       const button = event.target.closest('[data-page-key]');
       if (!button) return;
       const key = button.dataset.pageKey;
