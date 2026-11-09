@@ -89,7 +89,6 @@ async function loadMeta() {
       }
       return { categories: [], subcategories: {}, locations: [] };
     }
-  if (state.similarSeq !== _seq || state.activeItemId !== _reqId) return;
     state.meta = {
       categories: meta.categories || [],
       subcategories: meta.subcategories || {},
@@ -462,6 +461,9 @@ async function showSimilar(id) {
   const body = document.getElementById('modal-item-body');
   try {
     const data = await api(`/items/${id}/similar`);
+    // Bail if the dialog moved on while this request was in flight, so one
+    // item's matches are never appended into another item's panel.
+    if (state.similarSeq !== _seq || state.activeItemId !== _reqId) return;
     if (!data.count) return;
     const names = data.items.map((i) => `<li>${ui.esc(i.title)} — ${ui.esc(i.location)}</li>`).join('');
     body.insertAdjacentHTML('beforeend', `
