@@ -46,7 +46,7 @@
 
     if (!detail) return;
     nameEl.textContent = place;
-    descEl.textContent = place + ' is reported under "' + loc + '" on the board.';
+    descEl.textContent = 'Listings reported at ' + place + ' on the board.';
 
     if (!bucket.items.length) {
       countsEl.innerHTML = '';

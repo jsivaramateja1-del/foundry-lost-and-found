@@ -64,8 +64,7 @@ CREATE TABLE IF NOT EXISTS items (
   subcategory      TEXT        NOT NULL DEFAULT '',
   custom_category  TEXT        NOT NULL DEFAULT '',
   location         TEXT        NOT NULL
-                   CHECK (location IN ('Library','Main Block','Canteen','Hostel A','Hostel B',
-                                       'Sports Complex','Auditorium','Parking','Other')),
+                   CHECK (location IN ('AB1','AB2','Sai Baba Temple','Girls Hostel','Lords','Animal Planet','Guruvayur','Mamatha','Harihar','Football Ground','Cricket Nets','Volleyball Courts','Tennis Court','Basketball Court','Outside Campus')),
   custom_location  TEXT        NOT NULL DEFAULT '',
   date             DATE        NOT NULL,
   type             TEXT        NOT NULL CHECK (type IN ('lost','found')),

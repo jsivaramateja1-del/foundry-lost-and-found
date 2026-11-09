@@ -25,15 +25,21 @@ const CATEGORY_TREE = {
 const CATEGORIES = Object.keys(CATEGORY_TREE);
 
 const LOCATIONS = [
-  'Library',
-  'Main Block',
-  'Canteen',
-  'Hostel A',
-  'Hostel B',
-  'Sports Complex',
-  'Auditorium',
-  'Parking',
-  'Other'
+  'AB1',
+  'AB2',
+  'Sai Baba Temple',
+  'Girls Hostel',
+  'Lords',
+  'Animal Planet',
+  'Guruvayur',
+  'Mamatha',
+  'Harihar',
+  'Football Ground',
+  'Cricket Nets',
+  'Volleyball Courts',
+  'Tennis Court',
+  'Basketball Court',
+  'Outside Campus'
 ];
 
 /** The subcategories offered for one category (empty array when there are none). */
