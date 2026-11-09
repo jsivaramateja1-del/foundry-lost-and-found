@@ -42,7 +42,7 @@
   function provenance(loc) {
     if (loc.sourceUrl) {
       return '<span style="color:var(--accent,#4ade80);font-weight:600;">Verified</span> · '
-        + '<a href="' + escapeHtml(loc.sourceUrl) + '" target="_blank" rel="noopener noreferrer">'
+        + '<a href="' + (/^https?:\/\//i.test(loc.sourceUrl || '') ? escapeHtml(loc.sourceUrl) : '') + '" target="_blank" rel="noopener noreferrer">'
         + 'view source</a>'
         + (loc.source ? ' <span style="opacity:.7;">(' + escapeHtml(loc.source) + ')</span>' : '');
     }
@@ -112,7 +112,7 @@
   }
 
   function selectLocation(loc) {
-    if (!map) return;
+    // the text detail needs no map
     map.setView([loc.lat, loc.lng], 18);
     if (markers[loc.id]) markers[loc.id].openPopup();
 
@@ -159,12 +159,10 @@
       });
   }
 
-  if (initMap()) {
-    hideState();
-    load();
-  } else {
-    document.getElementById('loc-loading').remove();
-  }
+  // The location list does not depend on the map: load it regardless, so a
+  // missing Leaflet leaves a working list rather than a blank panel.
+  if (initMap()) hideState();
+  load();
 
   searchEl.addEventListener('input', function () { renderList(searchEl.value); });
 })();

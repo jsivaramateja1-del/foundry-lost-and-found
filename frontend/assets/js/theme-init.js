@@ -16,4 +16,5 @@
     theme = prefersDark ? 'dark' : 'light';
   }
   document.documentElement.dataset.theme = theme;
+  document.documentElement.classList.add('js');
 })();

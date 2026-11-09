@@ -114,7 +114,10 @@ function shrinkImage(file) {
         const canvas = document.createElement('canvas');
         canvas.width = Math.round(img.width * scale);
         canvas.height = Math.round(img.height * scale);
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        var _ctx = canvas.getContext('2d');
+    _ctx.fillStyle = '#ffffff';
+    _ctx.fillRect(0, 0, canvas.width, canvas.height);
+    _ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
         for (const quality of [0.82, 0.7, 0.55, 0.4]) {
           const dataUrl = canvas.toDataURL('image/jpeg', quality);
@@ -436,6 +439,7 @@ async function openItem(id) {
 }
 
 async function showSimilar(id) {
+  var _reqId = state.activeItemId;
   const body = document.getElementById('modal-item-body');
   try {
     const data = await api(`/items/${id}/similar`);

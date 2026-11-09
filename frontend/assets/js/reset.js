@@ -26,7 +26,9 @@ if (!token) {
 }
 
 form.addEventListener('submit', async (event) => {
-  event.preventDefault();
+  
+    if (!token) { showError('This link is missing its reset token. Request a new link from the forgot-password page.'); return; }
+event.preventDefault();
   showError('');
   const password = document.getElementById('reset-password').value;
   const confirmPassword = document.getElementById('reset-confirm').value;
