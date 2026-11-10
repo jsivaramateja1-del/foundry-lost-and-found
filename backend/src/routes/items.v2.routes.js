@@ -4,10 +4,11 @@ const { protect, requireRole } = require('../middleware/auth.v2');
 
 const router = express.Router();
 
-const CATEGORIES = ['Electronics','IDs & Cards','Bags','Books & Notes','Bottles',
-  'Keys & Accessories','Clothing','Other'];
-const LOCATIONS = ['Library','Main Block','Canteen','Hostel A','Hostel B',
-  'Sports Complex','Auditorium','Parking','Other'];
+// Imported, not duplicated. This file used to carry its own copy of the
+// category and location lists, so editing utils/categories.js changed nothing
+// here — and this copy is what validates every submission.
+const { CATEGORIES, LOCATIONS } = require('../utils/categories');
+
 const TYPES = ['lost','found'];
 const STATUSES = ['open','claimed','returned','hidden'];
 
