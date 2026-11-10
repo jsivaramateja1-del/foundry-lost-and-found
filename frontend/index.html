@@ -16,6 +16,15 @@
   <meta name="theme-color" content="#121110" media="(prefers-color-scheme: dark)">
 </head>
 <body>
+  <div id="intro" role="dialog" aria-label="Welcome to Foundry">
+    <div class="intro-inner">
+      <div class="intro-mark">foundry<em>.</em></div>
+      <p class="intro-line">Sai Campus &middot; Lost &amp; Found</p>
+      <div class="intro-rule"></div>
+      <button class="intro-skip" type="button">Skip</button>
+    </div>
+  </div>
+
   <a class="skip-link" href="#main">Skip to content</a>
 
   <!-- ============ HEADER ============ -->
@@ -58,7 +67,7 @@
 
   <main id="main">
     <!-- ============ HERO ============ -->
-    <section class="hero">
+    <section class="hero rv">
       <div class="wrap hero__grid">
         <div>
           <p class="eyebrow">Campus Lost &amp; Found</p>
@@ -76,7 +85,7 @@
           </div>
         </div>
 
-        <dl class="hero__aside" data-reveal>
+        <dl class="rv hero__aside rv-d2" data-reveal>
           <div>
             <dt>How it works</dt>
             <dd>Report it, search it, collect it.</dd>
@@ -103,7 +112,7 @@
 
     <!-- ============ STATS ============ -->
     <section class="wrap">
-      <div class="stats" data-reveal>
+      <div class="stats rv" data-reveal>
         <div class="stat">
           <div class="stat__value" id="stat-lost">—</div>
           <div class="stat__label">Items reported lost</div>
@@ -127,7 +136,7 @@
     <!-- ============ BROWSE ============ -->
     <section class="section" id="browse">
       <div class="wrap">
-        <div class="section-head" data-reveal>
+        <div class="rv section-head" data-reveal>
           <div>
             <p class="eyebrow">Browse</p>
             <h2 class="display">What's been reported</h2>
@@ -199,7 +208,7 @@
           <button class="btn btn--ghost" id="reset-filters">Reset filters</button>
         </div>
 
-        <div class="grid" id="item-grid"></div>
+        <div class="grid card-stage" id="item-grid"></div>
 
         <div class="load-more">
           <button class="btn" id="load-more" hidden>Load more listings</button>
@@ -221,13 +230,13 @@
     <!-- ============ HOW IT WORKS ============ -->
     <section class="section" id="how">
       <div class="wrap">
-        <div class="section-head" data-reveal>
+        <div class="rv section-head" data-reveal>
           <div>
             <p class="eyebrow">Process</p>
             <h2 class="display">Three steps, no fuss</h2>
           </div>
         </div>
-        <div class="steps" data-reveal>
+        <div class="rv steps" data-reveal>
           <article class="step">
             <p class="step__num">01</p>
             <h3>Report it</h3>
@@ -487,5 +496,6 @@
 
   <script src="assets/js/api.js"></script>
   <script src="assets/js/app.js"></script>
+  <script src="assets/js/motion.js"></script>
 </body>
 </html>

@@ -47,7 +47,7 @@
   </header>
 
   <main class="wrap" id="main">
-    <div class="page-head">
+    <div class="page-head rv">
       <p class="eyebrow">Staff view</p>
       <h1 class="display">Admin dashboard</h1>
     </div>
@@ -69,17 +69,17 @@
         <div class="metric"><div class="metric__value" data-total="users">—</div><div class="metric__label">Users</div></div>
       </div>
 
-      <section class="panel">
+      <section class="panel rv rv-d1">
         <div class="panel__head"><h2>Listings by category</h2></div>
         <div class="chart" id="chart-category"></div>
       </section>
 
-      <section class="panel">
+      <section class="panel rv rv-d2">
         <div class="panel__head"><h2>New listings, last 7 days</h2></div>
         <div class="chart" id="chart-perday"></div>
       </section>
 
-      <section class="panel">
+      <section class="panel rv rv-d3">
         <div class="panel__head">
           <h2>All listings</h2>
           <span class="form-note" id="items-count"></span>
@@ -93,7 +93,7 @@
         <div class="pager" id="items-pager"></div>
       </section>
 
-      <section class="panel">
+      <section class="panel rv rv-d4">
         <div class="panel__head">
           <h2>All accounts</h2>
           <span class="form-note" id="users-count"></span>
@@ -107,7 +107,7 @@
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel rv rv-d4">
         <div class="panel__head">
           <h2>Reported listings</h2>
           <span class="form-note" id="reports-count"></span>
@@ -120,7 +120,7 @@
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel rv rv-d4">
         <div class="panel__head">
           <h2>All claims</h2>
           <span class="form-note" id="claims-count"></span>
@@ -134,7 +134,7 @@
         <div class="pager" id="claims-pager"></div>
       </section>
 
-      <section class="panel">
+      <section class="panel rv rv-d4">
         <div class="panel__head">
           <h2>Recent administrative actions</h2>
           <span class="form-note" id="audit-count"></span>
@@ -151,5 +151,6 @@
 
   <script src="assets/js/api.js"></script>
   <script src="assets/js/admin.js"></script>
+  <script src="assets/js/motion.js"></script>
 </body>
 </html>
