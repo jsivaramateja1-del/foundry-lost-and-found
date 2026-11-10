@@ -667,22 +667,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     headerLogout.addEventListener('click', () => logoutAndGo('index.html'));
   }
 
-  // The Campus Explorer links here as index.html?location=Lords. Honour it, so
-  // clicking a block actually shows that block's listings.
+  const meta = await loadMeta();
+  prepareReportForm(meta);
+
+  // The Campus Explorer links here as index.html?location=Lords. This has to run
+  // AFTER prepareReportForm, because the Location select has no options until
+  // then — reading it earlier found nothing and silently did nothing.
   try {
     const wanted = new URLSearchParams(window.location.search).get('location');
-    if (wanted && el.location) {
-      const match = [].slice.call(el.location.options)
+    if (wanted) {
+      const option = [].slice.call(el.location.options)
         .find((o) => o.value.toLowerCase() === wanted.toLowerCase());
-      if (match) {
-        el.location.value = match.value;
-        state.location = match.value;
+      if (option) {
+        el.location.value = option.value;
+        state.location = option.value;
+        el.count.textContent = 'Showing ' + option.value + ' only.';
       }
     }
   } catch (e) { /* a malformed query string must not break the board */ }
 
-  const meta = await loadMeta();
-  prepareReportForm(meta);
   await Promise.all([loadItems(), loadStats()]);
 
   // filter events
