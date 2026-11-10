@@ -24,13 +24,30 @@
   }
 
   /* Paint the count onto every block that maps to a location with listings. */
+  function paintSummary() {
+    var host = document.getElementById('plan-summary');
+    if (!host) return;
+    var total = 0;
+    var places = 0;
+    Object.keys(byLoc).forEach(function (k) {
+      var b = byLoc[k];
+      total += b.lost + b.found;
+      if (b.lost + b.found) places += 1;
+    });
+    host.textContent = total
+      ? total + (total === 1 ? ' listing' : ' listings') + ' across ' + places + (places === 1 ? ' place' : ' places')
+      : 'Nothing has been reported yet.';
+  }
+
   function paintCounts() {
     blocks.forEach(function (g) {
       var loc = g.getAttribute('data-loc');
       var bucket = byLoc[loc];
       var n = bucket ? bucket.lost + bucket.found : 0;
       var label = g.querySelector('[data-count]');
-      if (label) label.textContent = n ? n + (n === 1 ? ' listing' : ' listings') : 'nothing yet';
+      // Empty blocks stay silent. Fifteen "nothing yet" labels read as a broken
+      // page; a count where there is something reads as a working map.
+      if (label) label.textContent = n ? n + (n === 1 ? ' listing' : ' listings') : '';
       g.classList.toggle('has-items', n > 0);
       g.classList.toggle('has-lost', !!(bucket && bucket.lost));
       g.classList.toggle('has-found', !!(bucket && bucket.found));
@@ -94,6 +111,6 @@
      visible with no counts rather than an empty page. */
   fetch('/api/items?limit=100')
     .then(function (r) { return r.ok ? r.json() : { items: [] }; })
-    .then(function (data) { tally(Array.isArray(data.items) ? data.items : []); paintCounts(); })
-    .catch(function () { paintCounts(); });
+    .then(function (data) { tally(Array.isArray(data.items) ? data.items : []); paintCounts(); paintSummary(); })
+    .catch(function () { paintCounts(); paintSummary(); });
 })();

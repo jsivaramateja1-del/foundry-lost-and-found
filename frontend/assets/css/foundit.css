@@ -901,3 +901,6 @@ html { scroll-padding-top:84px; }
   font-family:var(--hand); font-size:17px; color:var(--ink-3);
   margin:16px 0 0; padding-top:14px; border-top:1.5px solid var(--line-soft);
 }
+.plan-summary {
+  margin:0 0 10px; font-size:13px; font-weight:600; color:var(--ink-2);
+}

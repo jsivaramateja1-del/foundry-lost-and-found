@@ -667,6 +667,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     headerLogout.addEventListener('click', () => logoutAndGo('index.html'));
   }
 
+  // The Campus Explorer links here as index.html?location=Lords. Honour it, so
+  // clicking a block actually shows that block's listings.
+  try {
+    const wanted = new URLSearchParams(window.location.search).get('location');
+    if (wanted && el.location) {
+      const match = [].slice.call(el.location.options)
+        .find((o) => o.value.toLowerCase() === wanted.toLowerCase());
+      if (match) {
+        el.location.value = match.value;
+        state.location = match.value;
+      }
+    }
+  } catch (e) { /* a malformed query string must not break the board */ }
+
   const meta = await loadMeta();
   prepareReportForm(meta);
   await Promise.all([loadItems(), loadStats()]);

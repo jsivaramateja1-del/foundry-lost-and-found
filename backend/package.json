@@ -19,7 +19,8 @@
     "test:deploy": "node test/deploy.test.js",
     "seed:campus": "node scripts/seed-campus-pg.js",
     "reconcile:points": "node scripts/reconcile-points-pg.js",
-    "test:connection": "node test/connection.test.js"
+    "test:connection": "node test/connection.test.js",
+    "seed:demo": "node scripts/seed-demo-items.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
