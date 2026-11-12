@@ -29,9 +29,9 @@ const PASSWORD = 'BrowserTest123';
      returning id`, [hash]);
 
   const items = [
-    ['Black Wireless Earbuds', 'found', 'Electronics', 'Library', '2026-11-01'],
-    ['Student ID Card', 'lost', 'IDs & Cards', 'Main Block', '2026-11-02'],
-    ['Blue Water Bottle', 'found', 'Bottles', 'Canteen', '2026-11-03']
+    ['Black Wireless Earbuds', 'found', 'Electronics', 'AB1', '2026-11-01'],
+    ['Student ID Card', 'lost', 'IDs & Cards', 'AB2', '2026-11-02'],
+    ['Blue Water Bottle', 'found', 'Bottles', 'Mamatha', '2026-11-03']
   ];
   for (const [title, type, category, location, date] of items) {
     await one(

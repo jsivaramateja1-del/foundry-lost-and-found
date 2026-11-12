@@ -227,7 +227,7 @@ const { connectDB, closeDB, many, one, transaction } = require('../src/config/pg
     const auth = { Authorization: `Bearer ${login.body.token}` };
     const created = await request(app).post('/api/items').set(auth).send({
       title: 'Integration Wallet', description: 'brown leather', category: 'Bags',
-      location: 'Library', date: '2026-11-01', type: 'found'
+      location: 'AB1', date: '2026-11-01', type: 'found'
     });
     check('a found listing is created (201)', created.status === 201, `got ${created.status}`);
 
@@ -280,7 +280,7 @@ const { connectDB, closeDB, many, one, transaction } = require('../src/config/pg
     // Posting a listing earns nothing: only a verified one counts.
     await many(
       `insert into items (title, description, category, location, date, type, reported_by, status)
-       values ('Badge Item', 'x', 'Bags', 'Library', '2026-11-01', 'found', $1, 'open')`, [u3.id]);
+       values ('Badge Item', 'x', 'Bags', 'AB1', '2026-11-01', 'found', $1, 'open')`, [u3.id]);
     let earned = await badges.evaluate(null, u3.id);
     check('an unverified listing earns no badge', earned.length === 0);
 
@@ -294,8 +294,8 @@ const { connectDB, closeDB, many, one, transaction } = require('../src/config/pg
     // Two more verified found listings reach the Helpful Finder threshold.
     await many(
       `insert into items (title, description, category, location, date, type, reported_by, status, verified_at)
-       values ('Badge Item 2','x','Bags','Library','2026-11-01','found',$1,'open', now()),
-              ('Badge Item 3','x','Bags','Library','2026-11-01','found',$1,'open', now())`, [u3.id]);
+       values ('Badge Item 2','x','Bags','AB1','2026-11-01','found',$1,'open', now()),
+              ('Badge Item 3','x','Bags','AB1','2026-11-01','found',$1,'open', now())`, [u3.id]);
     const third = await badges.evaluate(null, u3.id);
     check('three verified found listings earns helpful_finder', third.includes('helpful_finder'));
 
