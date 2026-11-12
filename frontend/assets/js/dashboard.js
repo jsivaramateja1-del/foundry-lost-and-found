@@ -124,16 +124,12 @@
         receivedFailed ? '—' : received.length ? `${received.length} total` : '';
 
       document.getElementById('received-body').innerHTML = receivedFailed
-        ? '<tr><td colspan="6" class="table__empty">Claims could not be loaded. <button type="button" class="link-button" data-retry-received>Retry</button></td></tr>'
+        ? '<tr><td colspan="5" class="table__empty">Claims could not be loaded. <button type="button" class="link-button" data-retry-received>Retry</button></td></tr>'
         : received.length
         ? received.map((c) => row([
             ui.esc(c.itemTitle),
             ui.esc(c.claimantName || c.claimant?.name || 'A student'),
             ui.esc(c.message),            statusTag(c.status),
-
-            c.handoverCode && c.status === 'approved'
-              ? '<code class="handover-code">' + ui.esc(c.handoverCode) + '</code>'
-              : '—',
             c.status === 'pending'
               ? `<button class="btn btn--ghost" data-approve="${c.id}">Approve</button>
                  <button class="btn btn--ghost" data-reject="${c.id}">Reject</button>`

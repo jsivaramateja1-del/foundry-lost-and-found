@@ -36,11 +36,6 @@ router.get('/', async (req, res, next) => {
     const category = oneValue(req.query.category);
     if (category && category !== 'all') {
       if (!CATEGORIES.includes(category)) return res.status(400).json({ message: 'Unknown category' });
-    // isValidSubcategory was written for this rule and never called, so any
-    // client could store category 'Bottles' with subcategory 'Laptops'.
-    if (!isValidSubcategory(category, oneValue(b.subcategory))) {
-      return res.status(400).json({ message: 'That subcategory does not belong to that category' });
-    }
       filter.category = category;
     }
     const location = oneValue(req.query.location);
@@ -165,6 +160,11 @@ router.post('/', itemIpLimit, protect, itemAccountLimit, async (req, res, next) 
     if (oneValue(b.subcategory).length > 60) {
       return res.status(400).json({ message: 'Subcategory is too long (max 60 characters)' });
     }
+    // isValidSubcategory was written for this rule and never called, so any
+    // client could store category 'Bottles' with subcategory 'Laptops'.
+    if (!isValidSubcategory(category, oneValue(b.subcategory))) {
+      return res.status(400).json({ message: 'That subcategory does not belong to that category' });
+    }
     // "Other" with no explanation stores a listing nobody can search for
     if (category === 'Other' && !oneValue(b.customCategory).trim()) {
       return res.status(400).json({ message: 'Please describe the category when you choose Other' });
@@ -241,6 +241,15 @@ router.patch('/:id/status', protect, async (req, res, next) => {
 
     const isOwner = existing.reportedBy === req.user.id;
     const isStaff = STAFF.includes(req.user.role);
+    // Reopening a claimed listing is worse than it looks: complete() requires the
+    // item to still be 'claimed', so an approved claim could never be completed
+    // and nobody would be credited.
+    if (!isStaff && existing.status === 'claimed' && next_ === 'open') {
+      return res.status(409).json({
+        message: 'This listing has an approved claim. Complete the handover, or ask a moderator.'
+      });
+    }
+
     if (!isOwner && !isStaff) {
       return res.status(403).json({ message: 'You can only change your own listing' });
     }

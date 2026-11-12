@@ -96,13 +96,14 @@
           document.getElementById('admin-items').innerHTML = items.items.length
             ? items.items.map((i) => row([
                 ui.esc(i.title),
+                'Found',
                 ui.esc(i.category),
                 ui.esc(i.reportedBy?.name || '—'),
                 ui.date(i.date),
                 i.verifiedAt ? `<span class="status status--approved">Verified</span><br><small>${ui.esc(i.verifiedBy?.name || 'Moderator')} · ${ui.date(i.verifiedAt)}</small>` : i.status === 'hidden' ? '<span class="status status--rejected">Hidden</span>' : '<span class="status status--pending">Pending verification</span>',
                 i.verifiedAt || i.status === 'hidden' ? '<span class="form-note">No action</span>' : `<button class="btn btn--primary" data-verify-found="${i.id}">Verify found item</button>`
               ])).join('')
-            : '<tr><td colspan="6" style="color:var(--muted)">No found listings.</td></tr>';
+            : '<tr><td colspan="7" style="color:var(--muted)">No found listings.</td></tr>';
         } catch (err) { ui.toast(err.message); }
 
       }

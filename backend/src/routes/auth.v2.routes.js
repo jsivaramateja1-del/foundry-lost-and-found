@@ -60,8 +60,16 @@ const authLimiter = rateLimit({
   // mistyping a password locked out everyone else — on exactly the network this
   // ships to. Keying on ip + account keeps brute-force protection per account
   // while letting every student sign in.
-  keyGenerator: (req) =>
-    `${req.ip}:${String((req.body && req.body.email) || '').toLowerCase()}`,
+  keyGenerator: (req) => {
+    const b = req.body || {};
+    // Login and register carry an email; /verify-email and /reset-password carry
+    // only a token. Without this fallback those routes keyed on "<ip>:" alone, so
+    // every user behind one NAT shared a single bucket of 20 attempts.
+    const who = b.email
+      ? String(b.email).toLowerCase()
+      : String(b.token || '').slice(-16) || 'anon';
+    return `${req.ip}:${who}`;
+  },
   message: { message: 'Too many attempts. Please try again in a few minutes.' }
 });
 
