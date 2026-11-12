@@ -266,7 +266,9 @@ router.post('/forgot-password', authLimiter, async (req, res, next) => {
       const expires = new Date(Date.now() + 60 * 60 * 1000);
       await users.setResetToken(user.id, sha256(token), expires);
       await mailer.send('passwordReset', user.email, {
-        name: user.name, link: `${appUrl()}/reset-password.html?token=${token}`
+        name: user.name, // The token goes in the fragment, not the query string: a fragment is
+        // never sent to the server, so it stays out of access logs and referrers.
+        link: `${appUrl()}/reset-password.html#token=${token}`
       });
     }
     res.status(200).json({ message: 'If that address has an account, a reset link is on its way.' });

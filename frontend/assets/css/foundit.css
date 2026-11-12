@@ -256,7 +256,12 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
   color:var(--ink-2); font-size:13.5px;
 }
 .empty__actions { margin-top:12px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
-.cards-row { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:22px; }
+.cards-row {
+  display:grid; gap:14px;
+  /* Counters, not photo cards. 280px was sized for listing images, which
+     left ten metrics as 3+3+3+1 with an orphan on its own row. */
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+}
 
 /* tilted cards with tape — Paper only */
 .card {
@@ -915,4 +920,26 @@ html { scroll-padding-top:84px; }
 .plan-note {
   font-family:var(--hand); font-size:17px; color:var(--ink-3);
   margin:16px 0 0; padding-top:14px; border-top:1.5px solid var(--line-soft);
+}
+
+/* ===========================================================================
+   Dense table controls — a 44px button per row makes a 25-row table a mile long
+   =========================================================================== */
+.table .btn {
+  min-height:32px; padding:0 10px; font-size:12px;
+  white-space:nowrap; box-shadow:none;
+}
+.table .btn--sm { min-height:30px; padding:0 8px; font-size:11.5px; }
+.table .select {
+  width:auto; min-height:32px; font-size:12.5px;
+  padding:2px 28px 2px 8px;
+}
+.table td { vertical-align:middle; }
+.table td > span[style*="display:flex"] { gap:6px; }
+
+/* Below 600px a 640px table cannot fit; let the cells breathe instead. */
+@media (max-width:600px) {
+  .panel__body { overflow-x:auto; }
+  .table { min-width:520px; }
+  .table .btn { min-height:36px; }
 }
