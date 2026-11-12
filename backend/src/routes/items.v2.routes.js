@@ -169,9 +169,8 @@ router.post('/', itemIpLimit, protect, itemAccountLimit, async (req, res, next) 
     if (category === 'Other' && !oneValue(b.customCategory).trim()) {
       return res.status(400).json({ message: 'Please describe the category when you choose Other' });
     }
-    if (location === 'Other' && !oneValue(b.customLocation).trim()) {
-      return res.status(400).json({ message: 'Please describe the location when you choose Other' });
-    }
+    // 'Other' is not in LOCATIONS and is rejected above, so this branch can never
+    // run. Removed rather than left as a trap for the next reader.
 
     const created = await items.create({
       title, description: oneValue(b.description), category,
@@ -213,6 +212,22 @@ router.put('/:id', protect, async (req, res, next) => {
     if (nextTitle.length > 120) return res.status(400).json({ message: 'Title is too long (max 120 characters)' });
     if (nextDesc.length > 2000) return res.status(400).json({ message: 'Description is too long (max 2000 characters)' });
     if (nextSub.length > 60) return res.status(400).json({ message: 'Subcategory is too long (max 60 characters)' });
+    // POST rejects these; PUT silently fell back to the existing value, so an edit
+    // could leave a listing in a state create exists to prevent.
+    if (b.category !== undefined && !CATEGORIES.includes(oneValue(b.category))) {
+      return res.status(400).json({ message: 'Unknown category' });
+    }
+    if (b.location !== undefined && !LOCATIONS.includes(oneValue(b.location))) {
+      return res.status(400).json({ message: 'Unknown location' });
+    }
+    if (b.type !== undefined && !TYPES.includes(oneValue(b.type))) {
+      return res.status(400).json({ message: 'type must be lost or found' });
+    }
+    const nextCustomCategory = b.customCategory !== undefined
+      ? oneValue(b.customCategory) : existing.customCategory;
+    if (nextCategory === 'Other' && !String(nextCustomCategory || '').trim()) {
+      return res.status(400).json({ message: 'Please describe the category when you choose Other' });
+    }
     if (!isValidSubcategory(nextCategory, nextSub)) {
       return res.status(400).json({ message: 'That subcategory does not belong to that category' });
     }

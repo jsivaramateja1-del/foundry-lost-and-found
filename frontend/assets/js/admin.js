@@ -255,7 +255,7 @@
                    </span>`
                 : '<span class="form-note">Settled</span>'
             ])).join('')
-          : '<tr><td colspan="5" style="color:var(--muted)">No claims.</td></tr>';
+          : '<tr><td colspan="6" style="color:var(--muted)">No claims.</td></tr>';
       } catch (err) {
         // If the user just logged out, don't flash the guard message
         if (!Auth.isLoggedIn) return;

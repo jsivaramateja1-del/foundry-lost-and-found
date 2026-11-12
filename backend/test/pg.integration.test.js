@@ -315,7 +315,6 @@ const { connectDB, closeDB, many, one, transaction } = require('../src/config/pg
     // Nothing tested this before. It is the most complex code in the project:
     // two row locks inside one transaction, sibling auto-rejection, a six-digit
     // handover code, and a two-sided points credit that must happen exactly once.
-    const claimsRepo = require('../src/repositories/claims');
 
     // A second student, because nobody may claim their own listing.
     const claimer = await users.create({

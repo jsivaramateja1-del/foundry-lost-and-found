@@ -83,7 +83,7 @@
               `<button class="btn btn--ghost" data-delete="${i.id}">Delete</button>`
             ].join(' ')
           ])).join('')
-        : '<tr><td colspan="6" style="color:var(--muted)">You have not posted anything yet.</td></tr>';
+        : '<tr><td colspan="5" style="color:var(--muted)">You have not posted anything yet.</td></tr>';
 
       // --- claims you made ---
       // The six-digit handover code is returned only by /claims/mine. Without
@@ -137,7 +137,7 @@
                 ? `<button class="btn btn--ghost" data-handover="${c.id}">Confirm handover</button>`
                 : '<span class="form-note">Reviewed</span>'
           ])).join('')
-        : '<tr><td colspan="6" class="table__empty">Nobody has claimed any of your items yet.</td></tr>';
+        : '<tr><td colspan="5" class="table__empty">Nobody has claimed any of your items yet.</td></tr>';
 
       return { ok: true };
     }

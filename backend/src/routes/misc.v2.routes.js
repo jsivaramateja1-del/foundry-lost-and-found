@@ -551,6 +551,13 @@ admin.patch('/claims/:id/review', protect, requireRole('admin', 'superadmin'), a
     if (result.error === 'item-not-open') {
       return res.status(409).json({ message: 'That listing is no longer open for claims' });
     }
+    // approve() can also report that the listing vanished between this route's own
+    // lookup and the transaction's row lock. Without this branch the handler fell
+    // through, wrote an audit row and two notifications, and answered 200 "Claim
+    // approved" — telling both parties a claim had been approved when nothing had.
+    if (result.error === 'item-missing') {
+      return res.status(409).json({ message: 'The listing this claim belongs to no longer exists.' });
+    }
 
     const label = decision === 'approve' ? 'approved' : 'rejected';
 
