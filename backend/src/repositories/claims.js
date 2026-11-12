@@ -100,6 +100,16 @@ const complete = (claimId, confirmerId, codeMatches) => transaction(async (clien
   if (claim.status !== 'approved') return { error: 'not-approved' };
   if (!codeMatches) return { error: 'bad-code' };
 
+  // Check the item BEFORE writing anything. Returning early after the claim
+  // update below would COMMIT a completed claim against an item that never
+  // moved to returned, and complete() requires status='approved', so the
+  // handover could never be re-run.
+  const itemLock = await client.query(
+    "select status from items where id=$1 for update", [claim.item]);
+  if (!itemLock.rows[0] || itemLock.rows[0].status !== 'claimed') {
+    return { error: 'item-not-claimed' };
+  }
+
   await client.query(
     `update claims set status='completed', handover_confirmed_by=$2, handover_confirmed_at=now()
       where id=$1`, [claimId, confirmerId]);

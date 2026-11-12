@@ -132,13 +132,33 @@ const stats = async () => {
   return row;
 };
 
-/** Listings that look like this one — same category, opposite type, still open. */
-const similar = async (item, limit = 5) =>
-  (await many(
+/**
+ * Listings that look like this one.
+ *
+ * Matching on category alone is too loose: every lost Electronics item matched
+ * every found Electronics item, so a headset was offered a calculator as a
+ * "possible match". Require a shared meaningful word as well.
+ */
+const similar = async (item, limit = 5) => {
+  const stop = new Set(['the', 'a', 'an', 'my', 'and', 'with', 'of', 'in', 'on',
+    'for', 'black', 'blue', 'new', 'size', 'old', 'white', 'red']);
+  const words = String(item.title || '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length > 2 && !stop.has(w));
+
+  // Nothing distinctive in the title: better to show no matches than bad ones
+  if (!words.length) return [];
+
+  const patterns = words.map((w) => `%${w}%`);
+
+  return (await many(
     `select ${COLUMNS} from items i join users u on u.id = i.reported_by
       where i.category = $1 and i.type <> $2 and i.status = 'open' and i.id <> $3
-      order by i.created_at desc limit $4`,
-    [item.category, item.type, item.id, limit])).map(toItem);
+        and (i.title ilike any($4) or i.description ilike any($4))
+      order by i.created_at desc limit $5`,
+    [item.category, item.type, item.id, patterns, limit])).map(toItem);
+};
 
 module.exports = {
   toItem, list, findById, findByIdRaw, create, update, setStatus, verify, remove,

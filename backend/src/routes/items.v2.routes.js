@@ -120,10 +120,35 @@ router.post('/', protect, async (req, res, next) => {
     const date = oneValue(b.date);
 
     if (title.length < 2) return res.status(400).json({ message: 'A title is required' });
+    if (title.length > 120) return res.status(400).json({ message: 'Title is too long (max 120 characters)' });
     if (!CATEGORIES.includes(category)) return res.status(400).json({ message: 'Unknown category' });
     if (!LOCATIONS.includes(location)) return res.status(400).json({ message: 'Unknown location' });
     if (!TYPES.includes(type)) return res.status(400).json({ message: 'type must be lost or found' });
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ message: 'date must be YYYY-MM-DD' });
+
+    // A real calendar date, not just the right shape: 2026-02-30 must be refused
+    const parsed = new Date(`${date}T00:00:00Z`);
+    if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+      return res.status(400).json({ message: 'That date does not exist' });
+    }
+    // One day of slack so a late-evening report from another timezone still passes
+    if (parsed.getTime() > Date.now() + 24 * 60 * 60 * 1000) {
+      return res.status(400).json({ message: 'The date cannot be in the future' });
+    }
+
+    if (oneValue(b.description).length > 2000) {
+      return res.status(400).json({ message: 'Description is too long (max 2000 characters)' });
+    }
+    if (oneValue(b.subcategory).length > 60) {
+      return res.status(400).json({ message: 'Subcategory is too long (max 60 characters)' });
+    }
+    // "Other" with no explanation stores a listing nobody can search for
+    if (category === 'Other' && !oneValue(b.customCategory).trim()) {
+      return res.status(400).json({ message: 'Please describe the category when you choose Other' });
+    }
+    if (location === 'Other' && !oneValue(b.customLocation).trim()) {
+      return res.status(400).json({ message: 'Please describe the location when you choose Other' });
+    }
 
     const created = await items.create({
       title, description: oneValue(b.description), category,
@@ -205,6 +230,14 @@ router.patch('/:id/status', protect, async (req, res, next) => {
         message: 'This listing was hidden by a moderator and cannot be reopened by its owner'
       });
     }
+    // A returned listing is settled: reopening it would erase the completed
+    // handover and the points already credited to both parties.
+    if (!isStaff && existing.status === 'returned' && next_ !== 'returned') {
+      return res.status(403).json({
+        message: 'This listing is marked returned and can only be reopened by a moderator'
+      });
+    }
+
     const allowed = next_ === 'hidden' ? STAFF_STATUSES : OWNER_STATUSES;
     if (!allowed.includes(next_)) {
       return res.status(400).json({ message: 'Unsupported status' });

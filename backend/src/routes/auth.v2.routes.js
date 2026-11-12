@@ -218,8 +218,13 @@ router.post('/login', authLimiter, async (req, res, next) => {
     const password = typeof req.body.password === 'string' ? req.body.password : '';
 
     const user = await users.findByEmail(email);
-    // Same message whether the account is missing or the password is wrong.
-    const ok = user && await bcrypt.compare(password, user.password);
+    // Same message whether the account is missing or the password is wrong, and
+    // the same amount of work: without the dummy comparison, a missing account
+    // returns far faster than a wrong password, which reveals who is registered.
+    const DUMMY_HASH = '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
+    const ok = user
+      ? await bcrypt.compare(password, user.password)
+      : (await bcrypt.compare(password, DUMMY_HASH), false);
     if (!ok) return res.status(401).json({ message: 'Email or password is incorrect' });
 
     if (!user.emailVerified) {
