@@ -200,7 +200,13 @@ router.put('/:id', protect, async (req, res, next) => {
     const nextCategory = CATEGORIES.includes(oneValue(b.category)) ? oneValue(b.category) : existing.category;
     const nextSub = b.subcategory !== undefined ? oneValue(b.subcategory) : existing.subcategory;
     const nextLocation = LOCATIONS.includes(oneValue(b.location)) ? oneValue(b.location) : existing.location;
-    const nextDate = /^\d{4}-\d{2}-\d{2}$/.test(oneValue(b.date)) ? oneValue(b.date) : existing.date;
+    // existing.date comes back from pg as a Date object, not a 'YYYY-MM-DD'
+    // string, so feeding it to the calendar check made every edit that did not
+    // resend the date fail with "That date does not exist".
+    const existingDate = existing.date instanceof Date
+      ? existing.date.toISOString().slice(0, 10)
+      : String(existing.date || '').slice(0, 10);
+    const nextDate = /^\d{4}-\d{2}-\d{2}$/.test(oneValue(b.date)) ? oneValue(b.date) : existingDate;
     const nextImage = b.imageUrl !== undefined ? oneValue(b.imageUrl) : existing.imageUrl;
 
     if (nextTitle.length < 2) return res.status(400).json({ message: 'A title is required' });

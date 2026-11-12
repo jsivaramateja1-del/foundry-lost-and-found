@@ -76,6 +76,10 @@
     {
       "key": "handoverCode",
       "value": ""
+    },
+    {
+      "key": "adminUserId",
+      "value": ""
     }
   ],
   "item": [
@@ -283,7 +287,11 @@
               "script": {
                 "exec": [
                   "pm.test('status is 200', () => pm.response.to.have.status(200));",
-                  "pm.collectionVariables.set('adminToken', pm.response.json().token);"
+                  "pm.collectionVariables.set('adminToken', pm.response.json().token);",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('adminUserId', pm.response.json().user.id);",
+                  "}"
                 ]
               }
             }
@@ -491,7 +499,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
-                  "pm.test('explains the domain rule', () => pm.expect(pm.response.json().message).to.include('@scds.saiuniversity.edu.in'));"
+                  "// The server names the parent domain, not a school subdomain.",
+                  "pm.test('explains the domain rule', () => pm.expect(pm.response.json().message).to.include('@saiuniversity.edu.in'));"
                 ]
               }
             }
@@ -1247,17 +1256,8 @@
                   "pm.test('status is 200', () => pm.response.to.have.status(200));",
                   "const list = pm.response.json().claims || [];",
                   "pm.test('the claim appears', () => pm.expect(list.length).to.be.above(0));",
-                  "const c = list.find((x) => x.status === 'approved') || list[0];",
-                  "if (c) {",
-                  "  pm.collectionVariables.set('claimId', c.id);",
-                  "  // Only the claimant ever receives the code, which is the whole point of",
-                  "  // the handover: the owner has to ask for it.",
-                  "  if (c.handoverCode) pm.collectionVariables.set('handoverCode', c.handoverCode);",
-                  "}",
-                  "pm.test('an approved claim exposes a six-digit code to the claimant', () => {",
-                  "  pm.expect(c && c.handoverCode, 'no handoverCode on the approved claim').to.be.a('string');",
-                  "  pm.expect(String(c.handoverCode)).to.match(/^\\\\d{6}$/);",
-                  "});"
+                  "// Do NOT touch claimId here: this list can hold claims from earlier runs and",
+                  "// overwriting the id sent Approve at a claim on a different listing."
                 ]
               }
             }
@@ -1324,6 +1324,53 @@
               ]
             }
           }
+        },
+        {
+          "name": "Handover code after approval (200)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{priyaToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/claims/mine",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "claims",
+                "mine"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const list = pm.response.json().claims || [];",
+                  "const c = list.find((x) => x.status === 'approved');",
+                  "pm.test('an approved claim exists', () => pm.expect(c).to.be.an('object'));",
+                  "// The code is issued on approval and returned ONLY to the claimant,",
+                  "// which is the whole point of the handover.",
+                  "pm.test('it exposes a six-digit code', () => {",
+                  "  pm.expect(c && c.handoverCode).to.be.a('string');",
+                  "  pm.expect(String(c.handoverCode)).to.match(/^\\\\d{6}$/);",
+                  "});",
+                  "if (c && c.handoverCode) {",
+                  "  pm.collectionVariables.set('handoverCode', c.handoverCode);",
+                  "  pm.collectionVariables.set('claimId', c.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Confirm handover (200)",
@@ -1799,7 +1846,7 @@
           ]
         },
         {
-          "name": "Appoint an administrator as a plain admin (403)",
+          "name": "Change a superadmin role (403)",
           "request": {
             "method": "PATCH",
             "header": [
@@ -1817,7 +1864,7 @@
               "raw": "{\n  \"role\": \"admin\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/admin/users/{{otherUserId}}/role",
+              "raw": "{{baseUrl}}/api/admin/users/{{adminUserId}}/role",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -1825,7 +1872,7 @@
                 "api",
                 "admin",
                 "users",
-                "{{otherUserId}}",
+                "{{adminUserId}}",
                 "role"
               ]
             },
@@ -1837,7 +1884,8 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));"
+                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));",
+                  "pm.test('the reason is stated', () => pm.expect(pm.response.json().message).to.include('superadmin'));"
                 ]
               }
             }
