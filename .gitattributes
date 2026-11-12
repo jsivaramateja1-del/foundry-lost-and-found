@@ -1,0 +1,16 @@
+# Store LF in the repository, on every machine.
+#
+# The project is authored on Linux and developed on Windows. Without this, Git
+# converts every line ending on checkout, so touching one file makes it look
+# entirely rewritten — a whole evening was lost to a stash that turned out to
+# contain nothing but line endings.
+* text=auto eol=lf
+
+# These must stay binary or they corrupt.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
