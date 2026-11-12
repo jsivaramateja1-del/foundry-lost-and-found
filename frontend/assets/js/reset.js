@@ -42,7 +42,7 @@ event.preventDefault();
   try {
     const result = await api('/auth/reset-password', {
       method: 'POST',
-      body: { token, password, confirmPassword }
+      body: { token, password }
     });
     successBox.textContent = result.message + ' Taking you to the login page…';
     setTimeout(() => { window.location.href = 'auth.html'; }, 1600);
@@ -57,4 +57,17 @@ event.preventDefault();
    because initTheme() is only called from the pages that load a page script. */
 document.addEventListener('DOMContentLoaded', function () {
   if (typeof initTheme === 'function') initTheme();
+});
+
+/* The sign-in page binds these; this page never did, so the password you typed
+   could not be revealed. Same markup, same behaviour. */
+document.querySelectorAll('[data-toggle-password]').forEach(function (button) {
+  button.addEventListener('click', function () {
+    var input = document.getElementById(button.dataset.togglePassword);
+    if (!input) return;
+    var show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    button.classList.toggle('is-revealed', show);
+    button.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+  });
 });
