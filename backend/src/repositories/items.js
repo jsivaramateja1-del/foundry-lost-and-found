@@ -29,11 +29,14 @@ const toItem = (row) => (row ? {
   updatedAt: row.updated_at
 } : null);
 
+// Every sort ends in i.id so LIMIT/OFFSET is deterministic. The seed inserts all
+// rows in one transaction and now() is transaction-scoped, so equal created_at
+// values are normal — without a tie-breaker a row can appear on two pages or none.
 const SORTS = {
-  newest: 'i.created_at desc',
-  oldest: 'i.created_at asc',
-  title: 'i.title asc',
-  'title-desc': 'i.title desc'
+  newest: 'i.created_at desc, i.id desc',
+  oldest: 'i.created_at asc, i.id asc',
+  title: 'i.title asc, i.id asc',
+  'title-desc': 'i.title desc, i.id asc'
 };
 
 const COLUMNS = `i.*, u.name as reporter_name`;

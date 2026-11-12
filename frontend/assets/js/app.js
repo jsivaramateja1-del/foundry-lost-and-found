@@ -219,6 +219,10 @@ async function loadItems({ page = 1, append = false } = {}) {
     if (requestId !== state.requestId) return;
     el.count.textContent = 'Could not load listings';
     el.grid.innerHTML = '';
+    // Otherwise the pager survives from the last good render and the error screen
+    // offers "Load more" for a page that cannot load.
+    if (el.loadMore) el.loadMore.hidden = true;
+    if (el.pageStatus) el.pageStatus.textContent = '';
     showEmpty('The server is not responding', err.message, { firstRun: false });
   }
 }
@@ -468,7 +472,7 @@ async function showSimilar(id) {
     const names = data.items.map((i) => `<li>${ui.esc(i.title)} — ${ui.esc(i.location)}</li>`).join('');
     body.insertAdjacentHTML('beforeend', `
       <div><dt>Possible match</dt><dd>
-        <p style="margin-bottom:.4rem;color:var(--accent);">${data.count} similar listing${data.count === 1 ? '' : 's'} found</p>
+        <p style="margin-bottom:.4rem;color:var(--accent);">${data.count} possible match${data.count === 1 ? '' : 'es'} shown</p>
         <ul style="display:grid;gap:.3rem;font-size:.85rem;color:var(--muted);">${names}</ul>
       </dd></div>`);
   } catch {

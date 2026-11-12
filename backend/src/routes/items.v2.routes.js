@@ -191,16 +191,51 @@ router.put('/:id', protect, async (req, res, next) => {
       return res.status(403).json({ message: 'You can only edit your own listing' });
     }
     const b = req.body || {};
+
+    // PUT used to skip every rule POST enforces: an edit could store a
+    // javascript: URL, a date that does not exist, or a subcategory that
+    // contradicts its category. Validate the resolved values, not the raw body.
+    const nextTitle = oneValue(b.title) || existing.title;
+    const nextDesc = b.description !== undefined ? oneValue(b.description) : existing.description;
+    const nextCategory = CATEGORIES.includes(oneValue(b.category)) ? oneValue(b.category) : existing.category;
+    const nextSub = b.subcategory !== undefined ? oneValue(b.subcategory) : existing.subcategory;
+    const nextLocation = LOCATIONS.includes(oneValue(b.location)) ? oneValue(b.location) : existing.location;
+    const nextDate = /^\d{4}-\d{2}-\d{2}$/.test(oneValue(b.date)) ? oneValue(b.date) : existing.date;
+    const nextImage = b.imageUrl !== undefined ? oneValue(b.imageUrl) : existing.imageUrl;
+
+    if (nextTitle.length < 2) return res.status(400).json({ message: 'A title is required' });
+    if (nextTitle.length > 120) return res.status(400).json({ message: 'Title is too long (max 120 characters)' });
+    if (nextDesc.length > 2000) return res.status(400).json({ message: 'Description is too long (max 2000 characters)' });
+    if (nextSub.length > 60) return res.status(400).json({ message: 'Subcategory is too long (max 60 characters)' });
+    if (!isValidSubcategory(nextCategory, nextSub)) {
+      return res.status(400).json({ message: 'That subcategory does not belong to that category' });
+    }
+    const nextParsed = new Date(`${nextDate}T00:00:00Z`);
+    if (Number.isNaN(nextParsed.getTime()) || nextParsed.toISOString().slice(0, 10) !== nextDate) {
+      return res.status(400).json({ message: 'That date does not exist' });
+    }
+    if (nextParsed.getTime() > Date.now() + 24 * 60 * 60 * 1000) {
+      return res.status(400).json({ message: 'The date cannot be in the future' });
+    }
+    if (nextImage) {
+      if (nextImage.length > 400 * 1024) {
+        return res.status(400).json({ message: 'That photo is too large (max 400 KB).' });
+      }
+      if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(nextImage)) {
+        return res.status(400).json({ message: 'The photo must be a PNG, JPEG or WebP image.' });
+      }
+    }
+
     const updated = await items.update(existing.id, {
-      title: oneValue(b.title) || existing.title,
-      description: b.description !== undefined ? oneValue(b.description) : existing.description,
-      category: CATEGORIES.includes(oneValue(b.category)) ? oneValue(b.category) : existing.category,
-      subcategory: b.subcategory !== undefined ? oneValue(b.subcategory) : existing.subcategory,
+      title: nextTitle,
+      description: nextDesc,
+      category: nextCategory,
+      subcategory: nextSub,
       customCategory: b.customCategory !== undefined ? oneValue(b.customCategory) : existing.customCategory,
-      location: LOCATIONS.includes(oneValue(b.location)) ? oneValue(b.location) : existing.location,
+      location: nextLocation,
       customLocation: b.customLocation !== undefined ? oneValue(b.customLocation) : existing.customLocation,
-      date: /^\d{4}-\d{2}-\d{2}$/.test(oneValue(b.date)) ? oneValue(b.date) : existing.date,
-      imageUrl: b.imageUrl !== undefined ? oneValue(b.imageUrl) : existing.imageUrl,
+      date: nextDate,
+      imageUrl: nextImage,
       type: TYPES.includes(oneValue(b.type)) ? oneValue(b.type) : existing.type
     });
     res.status(200).json({ item: updated });
