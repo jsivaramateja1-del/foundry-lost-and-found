@@ -56,6 +56,12 @@ const authLimiter = rateLimit({
   max: Number(process.env.RATE_LIMIT_AUTH_MAX || 20),
   standardHeaders: true,
   legacyHeaders: false,
+  // A campus sits behind one NAT address, so an IP-only key meant twenty students
+  // mistyping a password locked out everyone else — on exactly the network this
+  // ships to. Keying on ip + account keeps brute-force protection per account
+  // while letting every student sign in.
+  keyGenerator: (req) =>
+    `${req.ip}:${String((req.body && req.body.email) || '').toLowerCase()}`,
   message: { message: 'Too many attempts. Please try again in a few minutes.' }
 });
 

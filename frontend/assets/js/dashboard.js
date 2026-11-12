@@ -51,7 +51,7 @@
       if (summary && data.impact) {
         const c = data.impact.contributions;
         const r = data.impact.returns;
-        summary.textContent = `${c} verified contribution${c === 1 ? '' : 's'}`
+        summary.textContent = `${c} listing posted${c === 1 ? '' : 's'}`
           + ` · ${r} successful return${r === 1 ? '' : 's'}`
           + ` · ${data.impact.points} points`;
       }

@@ -7,6 +7,10 @@
 (function () {
   'use strict';
 
+  // The header carries a theme button. api.js binds it inside initTheme(), and
+  // nothing on this page called it, so the toggle was inert here alone.
+  if (typeof window.initTheme === 'function') window.initTheme();
+
   var detail = document.getElementById('plan-detail');
   var blocks = [].slice.call(document.querySelectorAll('.blk[data-place]'));
   var byLoc = {};      // item location -> { lost, found, items[] }
@@ -109,7 +113,7 @@
 
   /* Load the listings once and paint the plan. A failure leaves the plan
      visible with no counts rather than an empty page. */
-  fetch('/api/items?limit=100')
+  fetch('/api/items?limit=50')
     .then(function (r) { return r.ok ? r.json() : { items: [] }; })
     .then(function (data) { tally(Array.isArray(data.items) ? data.items : []); paintCounts(); paintSummary(); })
     .catch(function () { paintCounts(); paintSummary(); });

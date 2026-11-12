@@ -115,7 +115,7 @@ const templates = {
     html: shell(
       'Someone claimed your item',
       `<p style="margin:0 0 6px;">Hello ${escapeHtml(name)}, a student has submitted a claim on <strong>${escapeHtml(title)}</strong>.</p>
-       <p style="margin:0 0 6px;">Review the claim in your dashboard. If you approve it, you will get a six-digit handover code to give the claimant in person.</p>
+       <p style="margin:0 0 6px;">Review the claim in your dashboard. If you approve it, the claimant will see a six-digit code on their dashboard. Ask them for it and enter it on yours to confirm the handover.</p>
        ${button(link, 'Review the claim')}`,
       'You received this because you posted a found item on Foundry.'
     )

@@ -146,16 +146,23 @@
         // A moderator is not allowed to see the account list. That is a
         // server decision, so the page has to cope with the 403.
         let users = { count: 0, users: [] };
+        let usersUnavailable = false;
         try {
           users = await api(`/admin/users?page=${paging.users}&limit=${paging.limit}`, { auth: true });
           paging.users = users.page || 1;
+          usersUnavailable = false;
         } catch (err) {
           document.getElementById('users-count').textContent = 'not available for your role';
           users = { count: 0, users: [] };
+          usersUnavailable = true;
         }
-        const _ut = users.total != null ? users.total : users.count;
-        document.getElementById('users-count').textContent =
-          `${_ut} account${_ut === 1 ? '' : 's'}`;
+        // Only write a count when the request actually succeeded. Overwriting the
+        // refusal message with "0 accounts" told a moderator the platform was empty.
+        if (!usersUnavailable) {
+          const _ut = users.total != null ? users.total : users.count;
+          document.getElementById('users-count').textContent =
+            `${_ut} account${_ut === 1 ? '' : 's'}`;
+        }
         if (users.pages !== undefined) {
           paging.users = users.page;
           renderPager('users-pager', users, 'users');
