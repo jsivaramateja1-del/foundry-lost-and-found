@@ -8,6 +8,63 @@ Built as a B.Tech Computer Science project.
 
 ---
 
+## Live demo
+
+**https://foundry-lost-and-found.onrender.com**
+
+The service sleeps on the free tier; the first request after a quiet period takes
+about thirty seconds to wake. `/api/health` returns the database state.
+
+### Demo accounts
+
+Created by `npm run seed:users` (see §4). The password is whatever `DEMO_PASSWORD`
+is set to when the script runs.
+
+| Account | Email | Role | Use it to |
+|---|---|---|---|
+| Owner | `demo.student@scds.saiuniversity.edu.in` | student | post a listing, then approve a claim on it |
+| Claimant | `demo.other@scds.saiuniversity.edu.in` | student | claim the owner's listing and read the handover code |
+| Administrator | `demo.admin@scds.saiuniversity.edu.in` | superadmin | the admin panel, moderation, faculty approval |
+
+The two students are separate on purpose: the server refuses a claim on your own
+listing, so the handover flow cannot be demonstrated with one account.
+
+### The flow to demonstrate
+
+1. Sign in as **Owner**, report a found item with a photo.
+2. Sign out, sign in as **Claimant**, open the item, submit a claim.
+3. Sign back in as **Owner**, open the dashboard, approve the claim.
+4. The **Claimant's** dashboard now shows a six-digit handover code.
+5. Enter that code on the **Owner's** dashboard. The item becomes *returned* and
+   both accounts are credited points — once each, enforced by the ledger.
+
+### API evidence
+
+`backend/postman/` holds a 52-request collection and the environment it needs.
+Import both, select the environment, fill the three account emails and passwords,
+and run. It passes 80 of 80 assertions against the deployed URL. See
+`backend/postman/README.md` for the run order.
+
+---
+
+## AI assistance disclosure
+
+**Edit this section before submitting.** It is a required part of the submission
+and it must be accurate.
+
+> This project was developed with assistance from AI coding tools. They were used
+> for [EDIT: e.g. code review, debugging, drafting documentation, generating test
+> cases]. The architectural decisions, the database schema, and the application
+> logic were reviewed and are understood by the author.
+>
+> Specifically: [EDIT: name the tools and what each was used for, e.g. "Claude was
+> used to review the claim workflow and to draft this README"; "GitHub Copilot
+> autocompleted routine boilerplate in the repository layer"].
+>
+> The claim workflow, the points ledger and the handover verification are covered
+> by the automated tests in `backend/test/` and by the Postman collection, so the
+> behaviour can be checked independently of how the code was written.
+
 ## 1. What it does
 
 - **Report a lost item** or **post a found item**, with a category, campus
@@ -21,7 +78,8 @@ Built as a B.Tech Computer Science project.
 - **Earn points and badges** for verified actions — never for merely posting.
 - **Faculty applications** are reviewed by an administrator before the account
   can be used.
-- **Campus Explorer** plots known campus locations on a map.
+- **Campus Explorer** shows a schematic campus plan with live lost and found
+  counts per location. It is a diagram, not a map to scale, and needs no map library.
 
 ---
 

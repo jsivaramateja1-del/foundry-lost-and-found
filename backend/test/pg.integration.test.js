@@ -310,6 +310,123 @@ const { connectDB, closeDB, many, one, transaction } = require('../src/config/pg
     fresh = await badges.forUser(u3.id);
     check('forUser reports all five as earned', fresh.every((b) => b.earned === true));
 
+
+    // ---------- claim workflow ----------
+    // Nothing tested this before. It is the most complex code in the project:
+    // two row locks inside one transaction, sibling auto-rejection, a six-digit
+    // handover code, and a two-sided points credit that must happen exactly once.
+    const claimsRepo = require('../src/repositories/claims');
+
+    // A second student, because nobody may claim their own listing.
+    const claimer = await users.create({
+      name: 'Claim Test', email: 'claimer@scds.saiuniversity.edu.in',
+      password: await bcrypt.hash('secret123', 4)
+    });
+    await many('update users set email_verified = true, pending_approval = false where id = $1', [claimer.id]);
+
+    const claimerLogin = await request(app).post('/api/auth/login')
+      .send({ email: 'claimer@scds.saiuniversity.edu.in', password: 'secret123' });
+    check('the claimant can sign in', claimerLogin.status === 200 && Boolean(claimerLogin.body.token),
+      `got ${claimerLogin.status}`);
+    const claimerAuth = { Authorization: `Bearer ${claimerLogin.body.token}` };
+
+    // The owner's listing from the items block above.
+    const targetItem = created.body.item.id;
+
+    const ownClaim = await request(app).post('/api/claims').set(auth)
+      .send({ item: targetItem, message: 'Claiming my own listing' });
+    check('an owner cannot claim their own listing (400)', ownClaim.status === 400, `got ${ownClaim.status}`);
+
+    const claim = await request(app).post('/api/claims').set(claimerAuth)
+      .send({ item: targetItem, message: 'This is mine, it has a scratch on the back.' });
+    check('a claim on an open listing is created (201)', claim.status === 201, `got ${claim.status}`);
+    const claimId = claim.body.claim && claim.body.claim.id;
+    check('the claim has an id', typeof claimId === 'string' && claimId.length === 36);
+
+    const dupClaim = await request(app).post('/api/claims').set(claimerAuth)
+      .send({ item: targetItem, message: 'Trying again' });
+    check('the same user cannot claim twice (409)', dupClaim.status === 409, `got ${dupClaim.status}`);
+
+    // Before approval the claimant must NOT see a handover code: the whole point
+    // is that the code only exists once the owner has agreed.
+    const beforeApproval = await request(app).get('/api/claims/mine').set(claimerAuth);
+    const pendingClaim = (beforeApproval.body.claims || []).find((c) => c.id === claimId);
+    check('a pending claim has no handover code',
+      pendingClaim && pendingClaim.handoverCode === undefined,
+      JSON.stringify(pendingClaim && pendingClaim.handoverCode));
+
+    // Only the owner may review.
+    const wrongReviewer = await request(app).patch(`/api/claims/${claimId}/review`)
+      .set(claimerAuth).send({ decision: 'approve' });
+    check('a non-owner cannot review the claim (403)', wrongReviewer.status === 403, `got ${wrongReviewer.status}`);
+
+    const badDecision = await request(app).patch(`/api/claims/${claimId}/review`)
+      .set(auth).send({ decision: 'maybe' });
+    check('an invalid decision is refused (400)', badDecision.status === 400, `got ${badDecision.status}`);
+
+    const approved = await request(app).patch(`/api/claims/${claimId}/review`)
+      .set(auth).send({ decision: 'approve', note: 'Approved in the integration test.' });
+    check('the owner can approve the claim (200)', approved.status === 200, `got ${approved.status}`);
+
+    const itemAfterApprove = await one('select status from items where id = $1', [targetItem]);
+    check('approving a claim moves the listing to claimed', itemAfterApprove.status === 'claimed',
+      itemAfterApprove.status);
+
+    // The code exists only after approval, and only for the claimant.
+    const afterApprove = await request(app).get('/api/claims/mine').set(claimerAuth);
+    const approvedClaim = (afterApprove.body.claims || []).find((c) => c.id === claimId);
+    check('an approved claim exposes a six-digit code',
+      approvedClaim && /^[0-9]{6}$/.test(String(approvedClaim.handoverCode)),
+      JSON.stringify(approvedClaim && approvedClaim.handoverCode));
+
+    // The owner's view must never carry the code — that is what makes the
+    // handover proof rather than ceremony.
+    const ownerView = await request(app).get('/api/claims/received').set(auth);
+    const ownerRow = (ownerView.body.claims || []).find((c) => c.id === claimId);
+    check('the owner never receives the handover code',
+      ownerRow && ownerRow.handoverCode === undefined,
+      JSON.stringify(ownerRow && ownerRow.handoverCode));
+
+    const wrongCode = await request(app).post(`/api/claims/${claimId}/complete`)
+      .set(auth).send({ code: '000000' });
+    check('a wrong handover code is refused (400)', wrongCode.status === 400, `got ${wrongCode.status}`);
+
+    const rightCode = approvedClaim && approvedClaim.handoverCode;
+    const completed = await request(app).post(`/api/claims/${claimId}/complete`)
+      .set(auth).send({ code: rightCode });
+    check('the correct handover code completes it (200)', completed.status === 200, `got ${completed.status}`);
+
+    const itemAfterComplete = await one('select status from items where id = $1', [targetItem]);
+    check('a completed handover returns the listing', itemAfterComplete.status === 'returned',
+      itemAfterComplete.status);
+
+    const bothPaid = await many(
+      'select user_id, count(*)::int as n from point_events where item = $1 group by user_id',
+      [targetItem]);
+    check('both parties are credited exactly once', bothPaid.length === 2 && bothPaid.every((r) => r.n === 1),
+      JSON.stringify(bothPaid));
+
+    const repeatComplete = await request(app).post(`/api/claims/${claimId}/complete`)
+      .set(auth).send({ code: rightCode });
+    check('the handover cannot be completed twice (409)', repeatComplete.status === 409,
+      `got ${repeatComplete.status}`);
+
+    // A second claim on a listing that is already spoken for must be refused.
+    const item2 = await request(app).post('/api/items').set(auth).send({
+      title: 'Second Wallet', description: 'also brown', category: 'Bags',
+      location: 'AB2', date: '2026-11-02', type: 'found'
+    });
+    const c1 = await request(app).post('/api/claims').set(claimerAuth)
+      .send({ item: item2.body.item.id, message: 'first claim' });
+    const c2 = await request(app).post('/api/claims').set(claimerAuth)
+      .send({ item: item2.body.item.id, message: 'second claim' });
+    check('a duplicate claim on the same listing is refused (409)', c2.status === 409, `got ${c2.status}`);
+
+    const approveFirst = await request(app).patch(`/api/claims/${c1.body.claim.id}/review`)
+      .set(auth).send({ decision: 'approve' });
+    check('the first claim on the second listing is approved', approveFirst.status === 200,
+      `got ${approveFirst.status}`);
+
     await many('truncate users, items, claims, notifications, point_events, reports, campus_locations, user_badges restart identity cascade');
   } catch (err) {
     check('the integration suite ran', false, err.message);
