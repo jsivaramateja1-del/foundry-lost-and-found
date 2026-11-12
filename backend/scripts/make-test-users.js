@@ -38,8 +38,9 @@ const USERS = [
 
     if (existing) {
       await one(
+        // suspended_reason is NOT NULL DEFAULT '' -- writing null violates it.
         `update users set name = $2, password = $3, role = $4, email_verified = true,
-                pending_approval = false, suspended = false, suspended_reason = null
+                pending_approval = false, suspended = false, suspended_reason = ''
           where id = $1`,
         [existing.id, u.name, hash, u.role]);
       console.log(`  updated  ${u.email}  (${u.role})`);
