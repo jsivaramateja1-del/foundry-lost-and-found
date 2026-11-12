@@ -10,7 +10,7 @@
     "dev:pg": "nodemon server.v2.js",
     "db:init": "psql \"$DATABASE_URL\" -f db/schema.sql",
     "create-admin": "node scripts/create-admin-pg.js",
-    "test": "npm run test:auth-v2 && npm run test:pg",
+    "test": "npm run test:auth-v2 && npm run test:connection",
     "test:auth-v2": "node test/auth-v2.test.js",
     "test:pg": "node test/pg.integration.test.js",
     "test:boot-v2": "node test/boot-v2.test.js",
@@ -21,7 +21,8 @@
     "reconcile:points": "node scripts/reconcile-points-pg.js",
     "test:connection": "node test/connection.test.js",
     "seed:demo": "node scripts/seed-demo-items.js",
-    "seed:users": "node scripts/make-test-users.js"
+    "seed:users": "node scripts/make-test-users.js",
+    "test:all": "npm run test:auth-v2 && npm run test:connection && npm run test:pg && npm run test:boot-v2 && npm run test:deploy"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

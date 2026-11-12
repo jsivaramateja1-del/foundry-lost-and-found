@@ -1,9 +1,10 @@
 /**
  * Express app on PostgreSQL.
  *
- * Mirrors src/app.js (still the live Mongo version) so the cutover is a change
- * of entry point, not a rewrite of the middleware stack. Everything below the
- * router mounts — helmet, CORS, static hosting, error handling — is identical.
+ * This is the only entry point. The earlier MongoDB implementation was removed
+ * during the migration; there is no src/app.js and no Mongoose dependency left
+ * in the tree. Everything below the router mounts — helmet, CORS, static
+ * hosting, error handling — is unchanged from that version.
  */
 const path = require('path');
 const express = require('express');

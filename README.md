@@ -17,8 +17,13 @@ about thirty seconds to wake. `/api/health` returns the database state.
 
 ### Demo accounts
 
-Created by `npm run seed:users` (see §4). The password is whatever `DEMO_PASSWORD`
-is set to when the script runs.
+Created by `npm run seed:users` (see §4).
+
+**Password for all three accounts: `Foundry@Viva2026`**
+
+That is the value `DEMO_PASSWORD` was set to when the deployed database was
+seeded. To change it, set `DEMO_PASSWORD` and re-run the script — it updates the
+existing accounts rather than failing on the unique email index.
 
 | Account | Email | Role | Use it to |
 |---|---|---|---|
@@ -105,7 +110,7 @@ endpoint that demonstrates it.
 | Auth | JWT with a `token_version` check, bcrypt password hashing |
 | Email | **Brevo** HTTP API (transactional email) |
 | Frontend | Plain HTML, CSS and JavaScript — no framework, no build step |
-| Maps | Leaflet, self-hosted under `frontend/assets/vendor/` |
+| Maps | Inline SVG campus plan — no map library, works offline |
 | Tests | Node scripts, Playwright for the browser suite |
 | CI | GitHub Actions against a real `postgres:16` service |
 
@@ -438,12 +443,14 @@ Stated plainly, because they are real:
   are the resend link, and an administrator approving the account — approval also
   marks the address verified, so an applicant whose mail never arrived can still
   be let in.
-- **No campus seeder.** `campus_locations` is created but never populated; the
-  Explorer page is empty until an administrator adds each location.
-- **No ledger reconciliation *script*.** The comparison itself exists —
-  `points.auditUser()` returns `storedPoints`, `ledgerPoints` and `inSync`, and
-  the dashboard shows it as `pointsAudit` — but there is no CLI to sweep every
-  user and repair drift.
+- **Campus locations are added one at a time.** `npm run seed:campus` inserts the
+  single place that can be sourced (the main campus, with a source URL). The
+  fifteen places in the `items.location` constraint are a fixed enum; markers in
+  the `campus_locations` table are added by an administrator through the API, so a
+  fresh database has one marker until they do.
+- **Ledger reconciliation is a script, not a daemon.** `npm run reconcile:points`
+  reports drift between `users.points` and the ledger, and `-- --apply` repairs it,
+  writing an audit row per correction. It runs when invoked, not on a schedule.
 - **No reapplication after rejection.** A rejected faculty account keeps its row,
   and the unique email index means re-registering returns 409.
 - **TLS is not exercised in CI.** The deploy check uses a local plain Postgres,

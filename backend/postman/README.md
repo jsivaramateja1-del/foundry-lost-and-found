@@ -2,7 +2,7 @@
 
 Two files:
 
-- `Foundry.postman_collection.json` — 50 requests covering every endpoint
+- `Foundry.postman_collection.json` — 52 requests covering every endpoint
 - `Foundry.postman_environment.json` — the variables they need
 
 ## Running it
