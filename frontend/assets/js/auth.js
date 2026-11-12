@@ -200,9 +200,12 @@ function showNotice(text) {
 
 /** Reveal the resend link once a verification email has been asked for. */
 function showResend() {
-  const wrap = document.getElementById('resend-wrap');
-  if (wrap) wrap.hidden = false;
-}
+    // The control is always available now: a returning applicant whose email
+    // never arrived must be able to ask for another without registering again.
+    // Kept as a named hook so existing call sites still read clearly.
+    var wrap = document.getElementById('resend-wrap');
+    if (wrap) wrap.hidden = false;
+  }
 
 initTheme();
 
