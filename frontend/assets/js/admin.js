@@ -118,10 +118,13 @@
 
         const items = await api(`/admin/items?page=${paging.items}&limit=${paging.limit}`, { auth: true });
         paging.items = items.page;
-        document.getElementById('items-count').textContent =
+        // A moderator's found-only table was already rendered above; writing the
+        // full admin table over it showed them every listing plus status and
+        // delete controls the server answers with 403.
+        if (!isModerator) document.getElementById('items-count').textContent =
           `${items.total} listing${items.total === 1 ? '' : 's'}`;
         renderPager('items-pager', items, 'items');
-        document.getElementById('admin-items').innerHTML = items.items.length
+        if (!isModerator) document.getElementById('admin-items').innerHTML = items.items.length
           ? items.items.map((i) => row([
               ui.esc(i.title),
               i.type === 'lost' ? 'Lost' : 'Found',

@@ -455,7 +455,9 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 .filters__row .select, .filters__row select {
   width:auto; flex:0 1 auto;
   /* room for the text plus the chevron, or the arrow sits on the last letter */
-  min-width:calc(max-content + 34px);
+  /* max-content is not allowed inside calc(); it made the whole declaration
+     invalid and the select fell back to width:100%. */
+  min-width:11ch;
   padding-right:36px;
   text-overflow:ellipsis;
 }

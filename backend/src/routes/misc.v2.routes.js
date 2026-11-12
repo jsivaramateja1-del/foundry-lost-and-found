@@ -8,6 +8,8 @@ const items = require('../repositories/items');
 const points = require('../repositories/points');
 const users = require('../repositories/users');
 const { protect, requireRole } = require('../middleware/auth.v2');
+// Defined and exported but never mounted, so reporting a listing was unthrottled.
+const { reportIpLimit, reportAccountLimit } = require('../middleware/rateLimit');
 const mailer = require('../lib/brevo');
 const notify = require('../repositories/notify');
 const badges = require('../repositories/badges');
@@ -176,7 +178,7 @@ campus.post('/locations', protect, requireRole('admin','superadmin'), async (req
 // ---------- reports ----------
 const reports = express.Router();
 
-reports.post('/', protect, async (req, res, next) => {
+reports.post('/', reportIpLimit, protect, reportAccountLimit, async (req, res, next) => {
   try {
     const itemId = typeof req.body.item === 'string' ? req.body.item : '';
     const reason = typeof req.body.reason === 'string' ? req.body.reason : '';

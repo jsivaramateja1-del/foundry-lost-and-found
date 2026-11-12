@@ -10,7 +10,7 @@ const router = express.Router();
 // Imported, not duplicated. This file used to carry its own copy of the
 // category and location lists, so editing utils/categories.js changed nothing
 // here — and this copy is what validates every submission.
-const { CATEGORIES, LOCATIONS } = require('../utils/categories');
+const { CATEGORIES, LOCATIONS, isValidSubcategory } = require('../utils/categories');
 
 const TYPES = ['lost','found'];
 const STATUSES = ['open','claimed','returned','hidden'];
@@ -36,6 +36,11 @@ router.get('/', async (req, res, next) => {
     const category = oneValue(req.query.category);
     if (category && category !== 'all') {
       if (!CATEGORIES.includes(category)) return res.status(400).json({ message: 'Unknown category' });
+    // isValidSubcategory was written for this rule and never called, so any
+    // client could store category 'Bottles' with subcategory 'Laptops'.
+    if (!isValidSubcategory(category, oneValue(b.subcategory))) {
+      return res.status(400).json({ message: 'That subcategory does not belong to that category' });
+    }
       filter.category = category;
     }
     const location = oneValue(req.query.location);
@@ -225,7 +230,10 @@ router.patch('/:id/status', protect, async (req, res, next) => {
     const next_ = requested === 'closed' ? 'hidden' : requested;
 
     const STAFF = ['moderator', 'admin', 'superadmin'];
-    const OWNER_STATUSES = ['open', 'claimed', 'returned'];
+    // An owner may only reopen or close their own listing. 'claimed' and
+    // 'returned' are outcomes of the claim workflow: setting them by hand left
+    // claims.complete() refusing forever and nobody credited.
+    const OWNER_STATUSES = ['open'];
     const STAFF_STATUSES = ['open', 'hidden'];
 
     const existing = await items.findByIdRaw(req.params.id);
