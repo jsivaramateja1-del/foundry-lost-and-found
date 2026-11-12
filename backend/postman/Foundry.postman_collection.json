@@ -559,7 +559,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Postman Test Bottle\",\n  \"description\": \"A blue steel bottle with a dented base, created during API testing.\",\n  \"category\": \"Bottles\",\n  \"location\": \"Canteen\",\n  \"date\": \"2026-10-20\",\n  \"type\": \"found\"\n}"
+              "raw": "{\n  \"title\": \"Postman Test Bottle\",\n  \"description\": \"A blue steel bottle with a dented base, created during API testing.\",\n  \"category\": \"Bottles\",\n  \"location\": \"Mamatha\",\n  \"date\": \"2026-10-20\",\n  \"type\": \"found\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/items",
@@ -595,7 +595,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"No auth\",\n  \"description\": \"Should be rejected\",\n  \"category\": \"Bags\",\n  \"location\": \"Library\",\n  \"date\": \"2026-10-20\",\n  \"type\": \"lost\"\n}"
+              "raw": "{\n  \"title\": \"No auth\",\n  \"description\": \"Should be rejected\",\n  \"category\": \"Bags\",\n  \"location\": \"AB1\",\n  \"date\": \"2026-10-20\",\n  \"type\": \"lost\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/items",
@@ -669,7 +669,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Bad category\",\n  \"description\": \"Should be rejected by validation\",\n  \"category\": \"Spaceships\",\n  \"location\": \"Library\",\n  \"date\": \"2026-10-20\",\n  \"type\": \"lost\"\n}"
+              "raw": "{\n  \"title\": \"Bad category\",\n  \"description\": \"Should be rejected by validation\",\n  \"category\": \"Spaceships\",\n  \"location\": \"AB1\",\n  \"date\": \"2026-10-20\",\n  \"type\": \"lost\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/items",
@@ -766,7 +766,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/items?type=found&category=Electronics&location=Library",
+              "raw": "{{baseUrl}}/api/items?type=found&category=Electronics&location=AB1",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -785,7 +785,7 @@
                 },
                 {
                   "key": "location",
-                  "value": "Library"
+                  "value": "AB1"
                 }
               ]
             }
