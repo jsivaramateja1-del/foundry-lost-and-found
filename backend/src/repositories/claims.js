@@ -18,6 +18,7 @@ const toClaim = (row) => (row ? {
   reviewNote: row.review_note,
   reviewedAt: row.reviewed_at,
   handoverConfirmedAt: row.handover_confirmed_at,
+  claimantMissing: Boolean(row.claimant_missing),
   createdAt: row.created_at
 } : null);
 
@@ -42,9 +43,13 @@ const findByClaimant = async (userId) =>
   (await many(`select ${COLUMNS} from claims c join users u on u.id=c.claimant
                 where c.claimant=$1 order by c.created_at desc`, [userId])).map(toClaim);
 
+// LEFT JOIN, not INNER. With an inner join a claim whose claimant row is gone
+// returns null and the caller reports "claim not found" — a different failure
+// with the same message. The flag lets the route say which one it is.
 const findById = async (id) =>
-  toClaim(await one(`select ${COLUMNS} from claims c join users u on u.id=c.claimant
-                      where c.id=$1`, [id]));
+  toClaim(await one(`select ${COLUMNS}, (u.id is null) as claimant_missing
+                       from claims c left join users u on u.id = c.claimant
+                      where c.id = $1`, [id]));
 
 /**
  * Approves one claim: marks it approved, rejects every other pending claim on

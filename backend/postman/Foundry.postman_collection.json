@@ -557,7 +557,14 @@
               "script": {
                 "exec": [
                   "pm.test('status is 201', () => pm.response.to.have.status(201));",
-                  "pm.collectionVariables.set('itemId', pm.response.json().item.id);"
+                  "// Unguarded, a failed create (429 after repeated runs, or any 4xx) left",
+                  "// itemId pointing at the PREVIOUS run's item, which that run had already",
+                  "// deleted. Every later request then targeted a deleted row.",
+                  "if (pm.response.code === 201 && pm.response.json().item) {",
+                  "  pm.collectionVariables.set('itemId', pm.response.json().item.id);",
+                  "} else {",
+                  "  pm.collectionVariables.unset('itemId');",
+                  "}"
                 ]
               }
             }
@@ -1137,12 +1144,13 @@
                   "pm.test('status is 201', () => pm.response.to.have.status(201));",
                   "const body = pm.response.json();",
                   "const created = body && body.claim ? body.claim.id : '(none)';",
-                  "// The name carries the id so the run results show which claim this",
-                  "// run created. Approve then prints the id it looked for, and the two",
-                  "// can be compared from the screenshot alone.",
                   "pm.test('created claimId = ' + created, () => pm.expect(created).to.match(/^[0-9a-f-]{36}$/));",
                   "if (pm.response.code === 201) {",
                   "  pm.collectionVariables.set('claimId', created);",
+                  "} else {",
+                  "  // A stale id is worse than none: the run that made it deleted the claim,",
+                  "  // so Approve would 404 on a claim that cannot exist.",
+                  "  pm.collectionVariables.unset('claimId');",
                   "}"
                 ]
               }
@@ -1306,7 +1314,11 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "console.log('Approve claim using claimId =', pm.collectionVariables.get('claimId'));"
+                  "const id = pm.collectionVariables.get('claimId');",
+                  "console.log('Approve claim using claimId =', id);",
+                  "if (!id) {",
+                  "  throw new Error('claimId is empty: Submit claim did not create a claim this run, so Approve would 404.');",
+                  "}"
                 ]
               }
             }
@@ -1372,15 +1384,14 @@
                   "const list = pm.response.json().claims || [];",
                   "const c = list.find((x) => x.status === 'approved');",
                   "pm.test('an approved claim exists', () => pm.expect(c).to.be.an('object'));",
-                  "// The code is issued on approval and returned ONLY to the claimant,",
-                  "// which is the whole point of the handover.",
                   "pm.test('it exposes a six-digit code', () => {",
                   "  pm.expect(c && c.handoverCode).to.be.a('string');",
-                  "  pm.expect(String(c.handoverCode)).to.match(/^\\\\d{6}$/);",
+                  "  pm.expect(String(c.handoverCode)).to.match(/^\\d{6}$/);",
                   "});",
                   "if (c && c.handoverCode) {",
                   "  pm.collectionVariables.set('handoverCode', c.handoverCode);",
-                  "  pm.collectionVariables.set('claimId', c.id);",
+                  "  // Do NOT set claimId here: find() searches priya's whole claim history,",
+                  "  // not the claim this run created.",
                   "}"
                 ]
               }

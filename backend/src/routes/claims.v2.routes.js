@@ -88,6 +88,13 @@ router.patch('/:id/review', claimIpLimit, protect, claimAccountLimit, async (req
     // Name the id in the message. "Claim not found" alone gave no way to tell a
     // wrong id from a claim that had been deleted underneath us.
     if (!claim) return res.status(404).json({ message: `No claim with id ${req.params.id}` });
+    // The claim exists but its claimant account is gone. Previously the INNER
+    // JOIN dropped the row and this reported "claim not found" instead.
+    if (claim.claimantMissing) {
+      return res.status(409).json({
+        message: `Claim ${req.params.id} exists but its claimant account is gone`
+      });
+    }
 
     const item = await items.findByIdRaw(claim.item);
     if (!item || item.reportedBy !== req.user.id) {
