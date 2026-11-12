@@ -84,6 +84,43 @@
   ],
   "item": [
     {
+      "name": "0. Reset run variables",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "health"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Every run must start from zero. claimId and itemId used to survive between",
+              "// runs, and because each run ends by deleting its own item -- which cascades",
+              "// the claim away -- a later run would send Approve at a row that no longer",
+              "// existed and get a 404 on a perfectly well-formed UUID.",
+              "['itemId','claimId','handoverCode','reportId'].forEach((k) => {",
+              "  pm.collectionVariables.unset(k);",
+              "});",
+              "pm.test('run variables cleared', () => {",
+              "  pm.expect(pm.collectionVariables.get('itemId')).to.be.oneOf([undefined, null, '']);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "Health",
       "item": [
         {
