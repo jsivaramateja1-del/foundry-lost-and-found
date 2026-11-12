@@ -20,7 +20,8 @@
     "seed:campus": "node scripts/seed-campus-pg.js",
     "reconcile:points": "node scripts/reconcile-points-pg.js",
     "test:connection": "node test/connection.test.js",
-    "seed:demo": "node scripts/seed-demo-items.js"
+    "seed:demo": "node scripts/seed-demo-items.js",
+    "seed:users": "node scripts/make-test-users.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
