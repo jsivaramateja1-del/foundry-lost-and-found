@@ -49,37 +49,50 @@ and run. It passes 80 of 80 assertions against the deployed URL. See
 
 ## AI assistance disclosure
 
-**Edit this section before submitting.** It is a required part of the submission
-and it must be accurate.
+This project was built with substantial assistance from an AI assistant (Sarvam
+AI). The disclosure below is deliberately specific, because an accurate account is
+more useful to a reader than a vague one.
 
-> This project was developed with assistance from AI coding tools. They were used
-> for [EDIT: e.g. code review, debugging, drafting documentation, generating test
-> cases]. The architectural decisions, the database schema, and the application
-> logic were reviewed and are understood by the author.
->
-> Specifically: [EDIT: name the tools and what each was used for, e.g. "Claude was
-> used to review the claim workflow and to draft this README"; "GitHub Copilot
-> autocompleted routine boilerplate in the repository layer"].
->
-> The claim workflow, the points ledger and the handover verification are covered
-> by the automated tests in `backend/test/` and by the Postman collection, so the
-> behaviour can be checked independently of how the code was written.
+**What the assistant was used for**
 
-## 1. What it does
+- Writing and refactoring application code across the backend and frontend
+- Debugging: diagnosing failing tests, CI failures and runtime errors
+- Code review: auditing the repository for defects, dead code and broken contracts
+- Drafting documentation, including this README and the project report
 
-- **Report a lost item** or **post a found item**, with a category, campus
-  location and date.
-- **Search and filter** the board by type, category, location, status, date range
-  and free text.
-- **Claim a found item.** Only found items can be claimed, never your own, and
-  never one that is already spoken for.
-- **Verify a handover.** The owner approves a claim, the claimant receives a
-  six-digit code, and the owner enters it in person to confirm the return.
-- **Earn points and badges** for verified actions — never for merely posting.
-- **Faculty applications** are reviewed by an administrator before the account
-  can be used.
-- **Campus Explorer** shows a schematic campus plan with live lost and found
-  counts per location. It is a diagram, not a map to scale, and needs no map library.
+**How much of the code**
+
+Most of the final code was produced with AI assistance. The author specified the
+requirements, made the product and architectural decisions, ran and observed the
+system, reported defects, and decided what was accepted. The submitted result is
+the author's responsibility.
+
+**What the author did directly**
+
+- Defined the scope: a lost-and-found portal for Sai University, and every feature
+  beyond the minimum brief
+- Chose the technology: PostgreSQL over MongoDB after the claim workflow proved to
+  need real transactions and row locking
+- Set the rules the system enforces — who may claim, who may approve, when points
+  are awarded, what a moderator may and may not do
+- Ran the application, tested it by hand, and identified the failures that drove
+  each round of fixes
+- Reviewed every change before it was committed
+
+**Why the behaviour can still be checked**
+
+The correctness of this system does not rest on who typed it. It rests on tests
+that can be run by anyone:
+
+- `backend/test/` — authentication, the claim workflow end to end, the points
+  ledger's exactly-once guarantee, badges, the schema's idempotency, and the deploy
+  command itself, all against a real PostgreSQL instance in CI
+- `backend/postman/` — a 52-request collection covering every endpoint, passing 80
+  of 80 assertions against the deployed URL
+- `.github/workflows/ci.yml` — runs all of it on every push
+
+A reader who doubts a specific behaviour can find the test that proves it, or the
+endpoint that demonstrates it.
 
 ---
 
