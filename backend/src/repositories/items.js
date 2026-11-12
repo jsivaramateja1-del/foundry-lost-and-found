@@ -155,7 +155,7 @@ const similar = async (item, limit = 5) => {
   return (await many(
     `select ${COLUMNS} from items i join users u on u.id = i.reported_by
       where i.category = $1 and i.type <> $2 and i.status = 'open' and i.id <> $3
-        and (i.title ilike any($4) or i.description ilike any($4))
+        and (i.title ilike any($4::text[]) or i.description ilike any($4::text[]))
       order by i.created_at desc limit $5`,
     [item.category, item.type, item.id, patterns, limit])).map(toItem);
 };
