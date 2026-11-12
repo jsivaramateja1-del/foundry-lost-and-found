@@ -5,7 +5,7 @@
  *
  * Idempotent: running it twice updates the passwords rather than failing on the
  * unique email index. Every account is created verified and approved so it can
- * sign in immediately — no email is sent, which is the point: this is for a
+ * sign in immediately -- no email is sent, which is the point: this is for a
  * demonstration on a machine where Brevo may not be configured.
  *
  * The password comes from DEMO_PASSWORD, defaulting to a value that is only ever
@@ -23,7 +23,7 @@ const DOMAIN = 'scds.saiuniversity.edu.in';
 const USERS = [
   // The owner of the listing in the claim workflow.
   { name: 'Demo Student', email: `demo.student@${DOMAIN}`, role: 'student' },
-  // The claimant — a user cannot claim their own listing, so this one is needed.
+  // The claimant -- a user cannot claim their own listing, so this one is needed.
   { name: 'Demo Other', email: `demo.other@${DOMAIN}`, role: 'student' },
   // Needed for every /api/admin request in the collection.
   { name: 'Demo Admin', email: `demo.admin@${DOMAIN}`, role: 'superadmin' }
