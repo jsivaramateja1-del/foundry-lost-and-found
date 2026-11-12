@@ -1384,7 +1384,8 @@
               "path": [
                 "api",
                 "claims",
-                "{{claimId}}"
+                "{{claimId}}",
+                "review"
               ]
             }
           }
