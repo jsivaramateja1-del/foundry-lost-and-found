@@ -1135,8 +1135,14 @@
               "script": {
                 "exec": [
                   "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "const created = body && body.claim ? body.claim.id : '(none)';",
+                  "// The name carries the id so the run results show which claim this",
+                  "// run created. Approve then prints the id it looked for, and the two",
+                  "// can be compared from the screenshot alone.",
+                  "pm.test('created claimId = ' + created, () => pm.expect(created).to.match(/^[0-9a-f-]{36}$/));",
                   "if (pm.response.code === 201) {",
-                  "  pm.collectionVariables.set('claimId', pm.response.json().claim.id);",
+                  "  pm.collectionVariables.set('claimId', created);",
                   "}"
                 ]
               }
@@ -1292,6 +1298,15 @@
                 "exec": [
                   "pm.test('status is 200', () => pm.response.to.have.status(200));",
                   "pm.test('the claim id is returned as approved', () => pm.expect(pm.response.json().approved).to.be.a('string'));"
+                ]
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "console.log('Approve claim using claimId =', pm.collectionVariables.get('claimId'));"
                 ]
               }
             }

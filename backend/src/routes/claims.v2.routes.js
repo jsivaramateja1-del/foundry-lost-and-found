@@ -85,7 +85,9 @@ router.get('/received', protect, async (req, res, next) => {
 router.patch('/:id/review', claimIpLimit, protect, claimAccountLimit, async (req, res, next) => {
   try {
     const claim = await claims.findById(req.params.id);
-    if (!claim) return res.status(404).json({ message: 'Claim not found' });
+    // Name the id in the message. "Claim not found" alone gave no way to tell a
+    // wrong id from a claim that had been deleted underneath us.
+    if (!claim) return res.status(404).json({ message: `No claim with id ${req.params.id}` });
 
     const item = await items.findByIdRaw(claim.item);
     if (!item || item.reportedBy !== req.user.id) {
