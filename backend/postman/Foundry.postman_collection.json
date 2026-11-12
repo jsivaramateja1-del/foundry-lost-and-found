@@ -999,7 +999,7 @@
               "raw": "{\n  \"reason\": \"spam\",\n  \"details\": \"Looks like an advertisement.\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/items/{{itemId}}/report",
+              "raw": "{{baseUrl}}/api/reports",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -1044,7 +1044,7 @@
               "raw": "{\n  \"reason\": \"spam\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/items/{{itemId}}/report",
+              "raw": "{{baseUrl}}/api/reports",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -1087,7 +1087,7 @@
               "raw": "{\n  \"reason\": \"not-a-reason\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/items/{{itemId}}/report",
+              "raw": "{{baseUrl}}/api/reports",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -1296,7 +1296,7 @@
               "raw": "{\n  \"status\": \"approved\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/claims/{{claimId}}",
+              "raw": "{{baseUrl}}/api/claims/{{claimId}}/review",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -1319,7 +1319,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/claims/{{claimId}}/handover",
+              "raw": "{{baseUrl}}/api/claims/{{claimId}}/review/complete",
               "host": [
                 "{{baseUrl}}"
               ],

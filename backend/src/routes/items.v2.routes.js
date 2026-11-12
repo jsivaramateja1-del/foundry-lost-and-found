@@ -1,6 +1,9 @@
 const express = require('express');
 const items = require('../repositories/items');
 const { protect, requireRole } = require('../middleware/auth.v2');
+// These were defined and exported but never mounted, so listing creation was
+// unthrottled while the README documented a limit that did not exist.
+const { itemIpLimit, itemAccountLimit } = require('../middleware/rateLimit');
 
 const router = express.Router();
 
@@ -110,7 +113,7 @@ router.get('/:id/similar', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post('/', protect, async (req, res, next) => {
+router.post('/', itemIpLimit, protect, itemAccountLimit, async (req, res, next) => {
   try {
     const b = req.body || {};
     const title = oneValue(b.title);
@@ -118,6 +121,21 @@ router.post('/', protect, async (req, res, next) => {
     const location = oneValue(b.location);
     const type = oneValue(b.type);
     const date = oneValue(b.date);
+
+    // The client shrinks photos to fit, but a client-side limit is not a limit.
+    // Without this, a curl call stores megabytes in a text column, and any URL
+    // shape at all — including javascript: — is accepted into image_url.
+    const IMAGE_LIMIT_BYTES = 400 * 1024;
+    const rawImage = oneValue(b.imageUrl);
+    if (rawImage) {
+      if (rawImage.length > IMAGE_LIMIT_BYTES) {
+        return res.status(400).json({ message: 'That photo is too large (max 400 KB).' });
+      }
+      if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(rawImage)) {
+        return res.status(400).json({ message: 'The photo must be a PNG, JPEG or WebP image.' });
+      }
+    }
+
 
     if (title.length < 2) return res.status(400).json({ message: 'A title is required' });
     if (title.length > 120) return res.status(400).json({ message: 'Title is too long (max 120 characters)' });
