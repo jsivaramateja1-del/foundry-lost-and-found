@@ -103,6 +103,11 @@ router.patch('/:id/review', claimIpLimit, protect, claimAccountLimit, async (req
       : await claims.reject(claim.id, req.user.id, note);
 
     if (result.error === 'not-found') return res.status(404).json({ message: 'Claim not found' });
+    if (result.error === 'item-missing') {
+      return res.status(409).json({
+        message: 'The listing this claim belongs to no longer exists. It was probably deleted.'
+      });
+    }
     if (result.error === 'not-pending') return res.status(409).json({ message: 'That claim was already reviewed' });
     if (result.error === 'item-not-open') {
       return res.status(409).json({ message: 'That listing is no longer open for claims' });

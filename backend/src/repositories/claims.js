@@ -62,7 +62,10 @@ const approve = (claimId, reviewerId, note = '') => transaction(async (client) =
   // moderator-hidden listing back onto the board.
   const itemRow = (await client.query(
     'select status from items where id=$1 for update', [claim.item])).rows[0];
-  if (!itemRow) return { error: 'not-found' };
+  // A distinct error: the claim exists but the listing it points at does not.
+  // Reporting this as 'not-found' made a missing item look like a missing claim
+  // and sent me hunting through the wrong table.
+  if (!itemRow) return { error: 'item-missing' };
   if (itemRow.status !== 'open') return { error: 'item-not-open' };
 
   await client.query(
