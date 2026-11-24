@@ -122,9 +122,10 @@ module.exports = { audienceFor, threadFor, conversationsFor, send, markRead, unr
 /**
  * Every conversation this user is part of, newest first.
  *
- * The Conversations page has no item in its URL, so it needs a way to find the
- * threads you are already in. A thread is (item, the other person); this rolls
- * up each pair with its last message and unread count.
+ * This includes CLAIMS, not just chat messages. A claim carries a message the
+ * claimant wrote, and that is often the only thing a person has said about an
+ * item - so a conversations page that ignored claims looked empty even when the
+ * user had clearly written something.
  */
 async function myConversations(userId) {
   return many(
@@ -134,6 +135,17 @@ async function myConversations(userId) {
               m.body, m.created_at, m.read_at, m.sender_id
          from messages m
         where m.sender_id = $1 or m.recipient_id = $1
+       union all
+       select c.item as item_id,
+              case when c.claimant = $1 then i.reported_by else c.claimant end as other_id,
+              c.message as body,
+              c.created_at,
+              null::timestamptz as read_at,
+              c.claimant as sender_id
+         from claims c
+         join items i on i.id = c.item
+        where (c.claimant = $1 or i.reported_by = $1)
+          and c.message is not null
      )
      select p.item_id,
             i.title as item_title,
