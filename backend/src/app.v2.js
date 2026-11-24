@@ -21,6 +21,9 @@ app.use(helmet({
     directives: {
       ...helmet.contentSecurityPolicy.getDefaultDirectives(),
       'script-src': ["'self'"],
+      // Nothing embeds Foundry in a frame, so refuse to be framed at all rather
+      // than helmet's default 'self'.
+      'frame-ancestors': ["'none'"],
       // Google Fonts supplies the three typefaces; nothing else is external.
       'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       'font-src': ["'self'", 'https://fonts.gstatic.com'],
@@ -30,11 +33,39 @@ app.use(helmet({
   }
 }));
 
-const origins = String(process.env.CLIENT_ORIGIN || '')
+/**
+ * CORS allow-list.
+ *
+ * This used to reflect ANY origin outside production (`origin: true`) with
+ * `credentials: true`. A dev build left running, or a staging deploy without
+ * NODE_ENV=production, would then accept credentialed cross-origin requests
+ * from any site on the internet.
+ *
+ * The allow-list now applies in every environment. CLIENT_ORIGIN is the source
+ * of truth; when it is unset outside production the usual local dev origins are
+ * allowed so `npm run dev` keeps working, and in production an unset
+ * CLIENT_ORIGIN means no cross-origin access at all.
+ */
+const configured = String(process.env.CLIENT_ORIGIN || '')
   .split(',').map((o) => o.trim()).filter(Boolean);
 
+const DEV_ORIGINS = [
+  'http://localhost:5000', 'http://127.0.0.1:5000',
+  'http://localhost:3000', 'http://127.0.0.1:3000',
+  'http://localhost:5173', 'http://127.0.0.1:5173'
+];
+
+const origins = configured.length
+  ? configured
+  : (process.env.NODE_ENV === 'production' ? [] : DEV_ORIGINS);
+
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' ? (origins.length ? origins : false) : true,
+  origin(origin, callback) {
+    // No Origin header: same-origin navigation, curl, health checks.
+    if (!origin) return callback(null, true);
+    if (origins.includes(origin)) return callback(null, true);
+    return callback(null, false);
+  },
   credentials: true
 }));
 
@@ -61,7 +92,11 @@ app.get('/api/health/ready', async (req, res) => {
     const pool = db();
     if (pool) { await pool.query('select 1'); ok = true; reason = 'ok'; }
   } catch (err) {
-    reason = err.code || err.message;
+    // Log the real driver error server-side; never return it. err.message can
+    // carry hostnames, ports, role names and TLS detail, and this endpoint is
+    // unauthenticated.
+    console.error('[health] readiness probe failed:', err && (err.code || err.message));
+    reason = 'database unavailable';
   }
   res.status(ok ? 200 : 503).json({
     status: ok ? 'ready' : 'not-ready', service: 'foundry-api',

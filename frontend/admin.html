@@ -4,12 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin — Foundry</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <script src="assets/js/theme-init.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700&family=DM+Sans:wght@400;500;700&family=Caveat:wght@600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400;1,9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/foundit.css" />
   <meta name="theme-color" content="#F4EDE0" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#121110" media="(prefers-color-scheme: dark)">
@@ -19,7 +17,7 @@
   <header class="site-header">
     <div class="wrap site-header__inner">
       <a href="index.html" class="logo">foundry <span>Sai Campus / Lost + Found</span></a>
-      <nav class="nav" aria-label="Primary">
+      <nav class="nav" id="primary-nav" aria-label="Primary">
         <a href="index.html">Home</a>
         <a href="dashboard.html">Dashboard</a>
         <a href="admin.html" aria-current="page">Admin</a>
@@ -34,6 +32,7 @@
             <div class="notifications__head">
               <strong>Notifications <span class="notifications__count" data-notif-count></span></strong>
               <button class="btn btn--ghost" data-notif-read-all>Mark all read</button>
+        <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">Menu</button>
             </div>
             <ul class="notifications__list" data-notif-list></ul>
           </div>

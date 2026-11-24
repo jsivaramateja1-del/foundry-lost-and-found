@@ -118,6 +118,19 @@ const setPasswordAndBumpVersion = async (id, hash) =>
       where id = $1
       returning *`, [id, hash]));
 
+/**
+ * Retires every token already issued to this user.
+ *
+ * `protect` compares the token's `tv` claim against `users.token_version` on
+ * every authenticated request, so incrementing it invalidates all existing
+ * sessions for that account and nobody else's. Used by logout and by password
+ * reset (which does it inline in setPasswordAndBumpVersion).
+ */
+const bumpTokenVersion = async (id) =>
+  toUser(await one(
+    `update users set token_version = token_version + 1
+      where id = $1 returning *`, [id]));
+
 const approve = async (id) =>
   toUser(await one(
     // An administrator approving an application is vouching for the person, so
@@ -139,5 +152,6 @@ module.exports = {
   findByEmail, findById, findByIdWithSecrets, create,
   markVerified, setVerificationToken, findByVerificationHash,
   setResetToken, findByResetHash, setPasswordAndBumpVersion,
-  approve, reject
+  approve, reject,
+  bumpTokenVersion,
 };

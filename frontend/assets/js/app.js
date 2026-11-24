@@ -185,6 +185,50 @@ function cardMarkup(item) {
     </button>`;
 }
 
+/**
+ * Paint the active-filter chips.
+ *
+ * Built from the same `state` object the request is assembled from, so the
+ * chips cannot drift from what was actually sent. Each chip carries its own
+ * remove action; the row disappears entirely when nothing is applied.
+ */
+const FILTER_LABELS = {
+  type: { lost: 'Lost', found: 'Found' },
+  status: { open: 'Open', claimed: 'Claimed', returned: 'Returned', hidden: 'Hidden' }
+};
+
+function renderActiveFilters() {
+  const bar = document.getElementById('active-filters');
+  if (!bar) return;
+  const chips = [];
+  const add = (key, label, clear) => chips.push({ key, label, clear });
+
+  if (state.q) add('q', `“${state.q}”`, () => { state.q = ''; el.search.value = ''; });
+  if (state.type !== 'all') add('type', FILTER_LABELS.type[state.type] || state.type, () => { state.type = 'all'; el.type.value = 'all'; });
+  if (state.status !== 'all') add('status', FILTER_LABELS.status[state.status] || state.status, () => { state.status = 'all'; el.status.value = 'all'; });
+  if (state.category !== 'all') add('category', state.category, () => { state.category = 'all'; el.category.value = 'all'; });
+  if (state.subcategory !== 'all') add('subcategory', state.subcategory, () => { state.subcategory = 'all'; el.subcategory.value = 'all'; });
+  if (state.location !== 'all') add('location', state.location, () => { state.location = 'all'; el.location.value = 'all'; });
+  if (state.from) add('from', `From ${state.from}`, () => { state.from = ''; el.from.value = ''; });
+  if (state.to) add('to', `To ${state.to}`, () => { state.to = ''; el.to.value = ''; });
+  if (state.sort && state.sort !== 'newest') add('sort', `Sort: ${state.sort}`, () => { state.sort = 'newest'; el.sort.value = 'newest'; });
+
+  if (!chips.length) { bar.hidden = true; bar.innerHTML = ''; return; }
+  bar.hidden = false;
+  bar.innerHTML = chips.map((c, i) =>
+    `<button class="chip" type="button" data-chip="${i}" aria-label="Remove filter: ${ui.esc(c.label)}">` +
+    `${ui.esc(c.label)}<span class="chip__x" aria-hidden="true">&times;</span></button>`
+  ).join('');
+
+  bar.querySelectorAll('[data-chip]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      chips[Number(btn.dataset.chip)].clear();
+      renderActiveFilters();
+      loadItems({ page: 1 });
+    });
+  });
+}
+
 function hasActiveFilters() {
   return Boolean(state.q) || state.type !== 'all' || state.status !== 'all'
     || state.category !== 'all' || state.subcategory !== 'all'
@@ -193,6 +237,9 @@ function hasActiveFilters() {
 
 async function loadItems({ page = 1, append = false } = {}) {
   const requestId = ++state.requestId;
+  // Repaint the chips from state before every request, so what the user sees
+  // always matches what is about to be sent.
+  renderActiveFilters();
   el.count.textContent = 'Loading listings…';
   const params = new URLSearchParams();
   if (state.q) params.set('q', state.q);
@@ -350,17 +397,29 @@ async function loadStats() {
  * is disorienting for keyboard and screen-reader users.
  */
 function trapFocus(modal) {
-  const nodes = [...modal.querySelectorAll(FOCUSABLE)].filter((n) => n.offsetParent !== null);
-  if (!nodes.length) return;
-  const first = nodes[0];
-  const last = nodes[nodes.length - 1];
+  /* The focusable set is recomputed on every Tab, not cached when the modal
+     opens. Capturing it once was a real keyboard bug: the item modal reveals its
+     "report this listing" form after opening, so those fields were missing from
+     the cached list and Tab wrapped past them to the close button. The reason
+     select, the details box and the submit button were unreachable by keyboard
+     (WCAG 2.1.1). */
+  const visible = () =>
+    [...modal.querySelectorAll(FOCUSABLE)].filter((n) => n.offsetParent !== null);
 
   const handler = (event) => {
     if (event.key !== 'Tab') return;
-    if (event.shiftKey && document.activeElement === first) {
+    const nodes = visible();
+    if (!nodes.length) return;
+
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    const active = document.activeElement;
+
+    if (!modal.contains(active)) { event.preventDefault(); first.focus(); return; }
+    if (event.shiftKey && active === first) {
       event.preventDefault();
       last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
+    } else if (!event.shiftKey && active === last) {
       event.preventDefault();
       first.focus();
     }
@@ -376,7 +435,8 @@ function openModal(id) {
   lastFocused = document.activeElement;
   modal.dataset.open = 'true';
   document.body.style.overflow = 'hidden';
-  const focusable = modal.querySelector(FOCUSABLE);
+  const focusable = [...modal.querySelectorAll(FOCUSABLE)]
+    .find((n) => n.offsetParent !== null);
   if (focusable) focusable.focus({ preventScroll: true });
   trapFocus(modal);
 }
@@ -399,6 +459,9 @@ function closeAllModals() {
 
 /* ---------------- item detail ---------------- */
 async function openItem(id) {
+  /* The campus plan needs to open the same detail dialog from outside this
+     closure. Exposing the one function keeps a single detail implementation —
+     a second one would drift from the claim and report logic that lives here. */
   try {
     const { item } = await api(`/items/${id}`);
     state.activeItemId = item.id;
@@ -415,13 +478,21 @@ async function openItem(id) {
       ? `<div class="detail-media"><img src="${ui.esc(item.imageUrl)}" alt="Photo of ${ui.esc(item.title)}" /></div>`
       : '';
 
+    // Status is a badge rather than a word in a definition list: it is the one
+    // field that decides what the reader can do next, so it should not be the
+    // same weight as "Date reported". Colour is paired with the word itself, so
+    // it survives greyscale.
+    const statusTone = { open: 'open', claimed: 'claimed', returned: 'returned', hidden: 'hidden' }[item.status] || 'open';
     document.getElementById('modal-item-body').innerHTML = `
       ${photo}
+      <div class="detail-status">
+        <span class="status-pill status-pill--${statusTone}">${ui.esc(item.status)}</span>
+        <span class="detail-status__place">${ui.esc(place)} · ${ui.date(item.date)}</span>
+      </div>
       <div><dt>Description</dt><dd>${ui.esc(item.description)}</dd></div>
       <div><dt>Category</dt><dd>${ui.esc(categoryLine)}</dd></div>
       <div><dt>Location</dt><dd>${ui.esc(place)}</dd></div>
       <div><dt>Date reported</dt><dd>${ui.date(item.date)}</dd></div>
-      <div><dt>Status</dt><dd>${ui.esc(item.status)}</dd></div>
       <div><dt>Posted by</dt><dd>${ui.esc(item.reporterName || 'A student')}</dd></div>`;
 
     const claimBtn = document.getElementById('btn-claim');
@@ -485,6 +556,17 @@ function prepareReportForm(meta) {
   const category = document.getElementById('rf-category');
   const location = document.getElementById('rf-location');
 
+  /* loadMeta() already wrote an explanation into both selects and disabled the
+     submit button when the request failed. Rebuilding the selects from the empty
+     arrays it returns wiped that explanation, leaving two blank required fields
+     and a dead button with no message anywhere. */
+  if (!Array.isArray(meta.categories) || !meta.categories.length ||
+      !Array.isArray(meta.locations) || !meta.locations.length) {
+    state.metaFailed = true;
+    return;
+  }
+  state.metaFailed = false;
+
   category.innerHTML = meta.categories.map((c) => `<option value="${ui.esc(c)}">${ui.esc(c)}</option>`).join('');
   location.innerHTML = meta.locations.map((l) => `<option value="${ui.esc(l)}">${ui.esc(l)}</option>`).join('');
 
@@ -517,19 +599,51 @@ function prepareReportForm(meta) {
   const fileInput = document.getElementById('rf-image');
   const preview = document.getElementById('rf-image-preview');
 
+  // The filename and a remove control live beside the preview. Without them the
+  // only way to change a chosen photo was to re-open the file picker, and there
+  // was no way at all to say "actually, no photo".
+  const fileNameEl = document.getElementById('rf-image-name');
+  const removeBtn = document.getElementById('rf-image-remove');
+
+  const clearImage = () => {
+    state.pendingImage = '';
+    fileInput.value = '';
+    preview.hidden = true;
+    preview.innerHTML = '';
+    if (fileNameEl) { fileNameEl.textContent = ''; fileNameEl.hidden = true; }
+    if (removeBtn) removeBtn.hidden = true;
+  };
+
+  if (removeBtn) {
+    removeBtn.addEventListener('click', () => {
+      clearImage();
+      fileInput.focus();
+    });
+  }
+
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files && fileInput.files[0];
     state.pendingImage = '';
     preview.hidden = true;
     preview.innerHTML = '';
+    if (fileNameEl) { fileNameEl.textContent = ''; fileNameEl.hidden = true; }
+    if (removeBtn) removeBtn.hidden = true;
     if (!file) return;
 
     try {
       state.pendingImage = await shrinkImage(file);
       preview.innerHTML = `<img src="${ui.esc(state.pendingImage)}" alt="Photo preview" />`;
       preview.hidden = false;
+      if (fileNameEl) {
+        // The shrunk size is what will actually be sent, so say so rather than
+        // showing the original size the user picked.
+        const kb = Math.max(1, Math.round(state.pendingImage.length * 0.75 / 1024));
+        fileNameEl.textContent = `${file.name} — ${kb} KB after shrinking`;
+        fileNameEl.hidden = false;
+      }
+      if (removeBtn) removeBtn.hidden = false;
     } catch (err) {
-      fileInput.value = '';
+      clearImage();
       showFormMessage('report-error', err.message);
     }
   });
@@ -674,19 +788,47 @@ document.addEventListener('DOMContentLoaded', async () => {
   const meta = await loadMeta();
   prepareReportForm(meta);
 
-  // The Campus Explorer links here as index.html?location=Lords. This has to run
-  // AFTER prepareReportForm, because the Location select has no options until
-  // then — reading it earlier found nothing and silently did nothing.
+  // Deep links. The Campus Explorer links here as index.html?location=Lords,
+  // and the homepage sends ?q=, ?type= and ?category= from its search box and
+  // category tiles. All of it must run AFTER prepareReportForm, because the
+  // selects have no options until then — reading them earlier found nothing and
+  // silently did nothing.
+  //
+  // Every value is matched against the options that actually exist, so a
+  // hand-typed query string cannot put the board into a state the API rejects.
   try {
-    const wanted = new URLSearchParams(window.location.search).get('location');
-    if (wanted) {
-      const option = [].slice.call(el.location.options)
-        .find((o) => o.value.toLowerCase() === wanted.toLowerCase());
-      if (option) {
-        el.location.value = option.value;
-        state.location = option.value;
-        el.count.textContent = 'Showing ' + option.value + ' only.';
-      }
+    const qs = new URLSearchParams(window.location.search);
+
+    const pick = (selectEl, wanted) => {
+      if (!selectEl || !wanted) return false;
+      const option = [].slice.call(selectEl.options)
+        .find((o) => o.value.toLowerCase() === String(wanted).toLowerCase());
+      if (!option) return false;
+      selectEl.value = option.value;
+      return option.value;
+    };
+
+    const appliedLocation = pick(el.location, qs.get('location'));
+    if (appliedLocation) state.location = appliedLocation;
+
+    const appliedType = pick(el.type, qs.get('type'));
+    if (appliedType) state.type = appliedType;
+
+    const appliedCategory = pick(el.category, qs.get('category'));
+    if (appliedCategory) state.category = appliedCategory;
+
+    // A free-text query is not validated against options: it goes to the API
+    // as-is and the server caps it at 80 characters.
+    const q = (qs.get('q') || '').trim();
+    if (q) {
+      el.search.value = q;
+      state.q = q;
+    }
+
+    // ?report=1 (or #report) opens the report modal, so "Report an item" from
+    // the homepage lands on the form instead of the top of the board.
+    if (qs.get('report') === '1' || window.location.hash === '#report') {
+      if (typeof openModal === 'function') openModal('modal-report');
     }
   } catch (e) { /* a malformed query string must not break the board */ }
 
@@ -742,8 +884,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         Auth.requireLogin('index.html');
         return;
       }
-      showFormMessage('report-error', '');
       showFormMessage('report-success', '');
+      // Do not clear #report-error when the category/location lists never
+      // loaded: that message is the only thing telling the user why the form is
+      // unusable, and opening the dialog must not erase it.
+      if (!state.metaFailed) showFormMessage('report-error', '');
       const wanted = btn.dataset.openReport;
       if (wanted === 'lost' || wanted === 'found') {
         document.getElementById('rf-type').value = wanted;
@@ -817,6 +962,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 });
+
+/* Exposed for assets/js/plan.js — see the note on openItem above. */
+window.FoundryOpenItem = openItem;
 
 // Campus Explorer location names are not in the server's fixed location list,
 // so appending them to the report form's select made every such listing fail

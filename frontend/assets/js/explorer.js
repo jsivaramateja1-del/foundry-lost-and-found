@@ -91,8 +91,14 @@
       if (titles[i]) titles[i].textContent = it.title || 'Untitled';
     });
 
-    itemsEl.insertAdjacentHTML('beforeend',
-      '<a class="btn btn--sm" href="index.html">See these on the board</a>');
+    /* Carry the place through. This used to be a bare href="index.html", so
+       clicking a campus block then "see these on the board" showed the whole
+       unfiltered board — a link that looks like a filter and is not. */
+    var boardLink = document.createElement('a');
+    boardLink.className = 'btn btn--sm';
+    boardLink.href = 'index.html?location=' + encodeURIComponent(loc);
+    boardLink.textContent = 'See these on the board';
+    itemsEl.appendChild(boardLink);
   }
 
   function select(g) {
@@ -113,8 +119,54 @@
 
   /* Load the listings once and paint the plan. A failure leaves the plan
      visible with no counts rather than an empty page. */
-  fetch('/api/items?limit=50')
-    .then(function (r) { return r.ok ? r.json() : { items: [] }; })
-    .then(function (data) { tally(Array.isArray(data.items) ? data.items : []); paintCounts(); paintSummary(); })
-    .catch(function () { paintCounts(); paintSummary(); });
+  /* A failure must never be presented as an empty campus. The old code turned
+     any non-OK response into { items: [] }, so an outage printed "Nothing has
+     been reported yet." Now the two states are distinct and retryable. */
+  var loaded = false;
+  var summaryEl = document.getElementById('plan-summary');
+
+  function showLoadError() {
+    loaded = false;
+    if (summaryEl) {
+      summaryEl.innerHTML = '';
+      summaryEl.textContent = 'Could not load the listings. The plan is still shown, but the counts are missing.';
+      var retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'btn btn--sm';
+      retry.style.marginLeft = '10px';
+      retry.textContent = 'Try again';
+      retry.addEventListener('click', load);
+      summaryEl.appendChild(retry);
+    }
+    blocks.forEach(function (b) {
+      var label = b.querySelector('[data-count]');
+      if (!label) return;
+      label.textContent = '?';
+      label.classList.remove('has-lost', 'has-found');
+    });
+    if (detail) {
+      var itemsEl = document.getElementById('pd-items');
+      var descEl = document.getElementById('pd-desc');
+      if (itemsEl) itemsEl.innerHTML = '<p class="pd-empty">The listings could not be loaded, so this panel is empty. The campus plan above is still correct.</p>';
+      if (descEl) descEl.textContent = 'Listings unavailable.';
+    }
+  }
+
+  function load() {
+    if (summaryEl) summaryEl.textContent = 'Loading listings…';
+    fetch('/api/items?limit=50')
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        loaded = true;
+        tally(Array.isArray(data.items) ? data.items : []);
+        paintCounts();
+        paintSummary();
+      })
+      .catch(showLoadError);
+  }
+
+  load();
 })();

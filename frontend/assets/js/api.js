@@ -380,3 +380,55 @@ async function initNotifications() {
 
   await load();
 }
+
+/* ---------------------------------------------------------------------------
+   Mobile disclosure menu.
+   Below 640px the header collapses to brand + theme toggle + Menu. This wires
+   the button: aria-expanded, a data attribute the CSS keys on, Escape to close,
+   and a click outside to dismiss. Kept here because api.js loads on every page
+   that has a header, so there is one implementation rather than seven.
+   --------------------------------------------------------------------------- */
+(function () {
+  function init() {
+    var toggle = document.querySelector('.menu-toggle');
+    var bar = document.querySelector('.site-header__inner');
+    if (!toggle || !bar) return;
+
+    var setOpen = function (open) {
+      bar.setAttribute('data-nav-open', open ? 'true' : 'false');
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+    setOpen(false);
+
+    toggle.addEventListener('click', function () {
+      setOpen(bar.getAttribute('data-nav-open') !== 'true');
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && bar.getAttribute('data-nav-open') === 'true') {
+        setOpen(false);
+        toggle.focus();
+      }
+    });
+
+    document.addEventListener('click', function (e) {
+      if (bar.getAttribute('data-nav-open') !== 'true') return;
+      if (bar.contains(e.target) || toggle.contains(e.target)) return;
+      setOpen(false);
+    });
+
+    // a resize past the breakpoint must not leave the panel stuck open
+    if (window.matchMedia) {
+      var mq = window.matchMedia('(min-width: 641px)');
+      var onChange = function () { if (mq.matches) setOpen(false); };
+      if (mq.addEventListener) mq.addEventListener('change', onChange);
+      else if (mq.addListener) mq.addListener(onChange);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();

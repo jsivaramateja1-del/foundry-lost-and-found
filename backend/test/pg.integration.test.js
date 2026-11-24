@@ -63,7 +63,14 @@ const { connectDB, closeDB, many, one, transaction } = require('../src/config/pg
 
     const dup = await request(app).post('/api/auth/register')
       .send({ name: 'Integration Student', email: 'integration@scds.saiuniversity.edu.in', password: 'secret123' });
-    check('a duplicate email is refused (409)', dup.status === 409, `got ${dup.status}`);
+    // The requirement changed deliberately in B-12: registration must not
+    // reveal whether an address already has an account, so a duplicate now gets
+    // the same status and shape as a fresh sign-up. The security property is
+    // asserted below; the old 409 was the enumeration signal itself.
+    check('a duplicate email is indistinguishable from a new one (201)',
+      dup.status === reg.status && dup.status === 201, `dup=${dup.status} new=${reg.status}`);
+    check('the duplicate response does not confirm the account exists',
+      !/already exists/i.test(JSON.stringify(dup.body)), JSON.stringify(dup.body));
 
     const badDomain = await request(app).post('/api/auth/register')
       .send({ name: 'Outsider', email: 'someone@gmail.com', password: 'secret123' });

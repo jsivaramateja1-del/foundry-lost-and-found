@@ -43,6 +43,30 @@ const isUniversityEmail = (email) => {
   return domain === PARENT_DOMAIN || domain.endsWith('.' + PARENT_DOMAIN);
 };
 
+/**
+ * Password policy.
+ *
+ * bcrypt silently truncates its input at 72 bytes, so anything past that is not
+ * part of the password — a 100-character passphrase and its first 72 bytes are
+ * the same credential. Measuring UTF-8 bytes (not JavaScript characters) means a
+ * multibyte password is judged on what bcrypt actually sees.
+ *
+ * The minimum stays at 8 characters; the maximum is enforced so the stated
+ * policy matches the stored reality.
+ */
+const PASSWORD_MIN_CHARS = 8;
+const PASSWORD_MAX_BYTES = 72;
+
+const passwordProblem = (password) => {
+  if (typeof password !== 'string' || password.length < PASSWORD_MIN_CHARS) {
+    return `Password must be at least ${PASSWORD_MIN_CHARS} characters`;
+  }
+  if (Buffer.byteLength(password, 'utf8') > PASSWORD_MAX_BYTES) {
+    return `Password must be at most ${PASSWORD_MAX_BYTES} bytes (about ${PASSWORD_MAX_BYTES} characters)`;
+  }
+  return null;
+};
+
 const signToken = (user) => jwt.sign(
   { id: user.id, role: user.role, tv: user.tokenVersion },
   process.env.JWT_SECRET,
@@ -51,27 +75,105 @@ const signToken = (user) => jwt.sign(
 
 const publicUser = (u) => ({ ...users.toSafeObject(u), leaderboardOptOut: u.leaderboardOptOut });
 
+/**
+ * Rate-limit bucket key.
+ *
+ * Login and register both trim and lowercase the email before looking the
+ * account up. The limiter must normalise identically, or one account has two
+ * keys: "victim@x.edu" and "victim@x.edu " landed in different buckets, so a
+ * trailing space bought a fresh allowance of 20 attempts and password guessing
+ * against one account was effectively unlimited. Exported so it is testable.
+ */
+function rateLimitKey(req) {
+  const b = (req && req.body) || {};
+  const who = b.email
+    ? String(b.email).trim().toLowerCase()
+    : String(b.token || '').trim().slice(-16) || 'anon';
+  const ip = (req && req.ip) || 'unknown';
+  return `${ip}:${who}`;
+}
+
+/**
+ * Authentication rate limiting, three layers.
+ *
+ * A single `ip:account` bucket protects one account from one network, but it
+ * leaves two holes:
+ *
+ *   - an attacker with a proxy pool gets a fresh 20 attempts per address
+ *     against the same account, so there is no account-wide ceiling at all;
+ *   - one address can work through an unlimited number of accounts, because
+ *     each account is a separate bucket.
+ *
+ * So three buckets are mounted together. A request must pass all three.
+ *
+ *   1. ip:account  (20 / 15 min) — the original, unchanged. Stops ordinary
+ *      guessing against one account from one place.
+ *   2. account only (20 / 15 min) — closes the proxy-pool hole. A real student
+ *      never types their password 20 times in a quarter of an hour.
+ *   3. ip only (120 / 15 min) — closes the spray hole. Deliberately six times
+ *      the account limit, because a whole campus shares one NAT address and a
+ *      tight per-IP cap is exactly what locks out a lecture hall.
+ *
+ * All three are configurable so the limits can be tuned without a code change.
+ */
+const WINDOW_MS = 15 * 60 * 1000;
+const positiveInt = (name, fallback) => {
+  const v = Number(process.env[name]);
+  return Number.isFinite(v) && v > 0 ? Math.floor(v) : fallback;
+};
+
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: Number(process.env.RATE_LIMIT_AUTH_MAX || 20),
+  windowMs: WINDOW_MS,
+  max: positiveInt('RATE_LIMIT_AUTH_MAX', 20),
   standardHeaders: true,
   legacyHeaders: false,
   // A campus sits behind one NAT address, so an IP-only key meant twenty students
   // mistyping a password locked out everyone else — on exactly the network this
   // ships to. Keying on ip + account keeps brute-force protection per account
   // while letting every student sign in.
+  keyGenerator: rateLimitKey,
+  message: { message: 'Too many attempts. Please try again in a few minutes.' }
+});
+
+/**
+ * Account-wide ceiling, independent of where the request comes from.
+ *
+ * Uses the same normalisation as `rateLimitKey` (trim + lowercase) so a
+ * trailing space or different casing cannot mint a fresh bucket. Falls back to
+ * the token, then to a shared 'anon' bucket, so a request with no email is
+ * still counted rather than escaping the limiter.
+ */
+const authAccountLimiter = rateLimit({
+  windowMs: WINDOW_MS,
+  max: positiveInt('RATE_LIMIT_AUTH_ACCOUNT_MAX', 20),
+  standardHeaders: true,
+  legacyHeaders: false,
   keyGenerator: (req) => {
-    const b = req.body || {};
-    // Login and register carry an email; /verify-email and /reset-password carry
-    // only a token. Without this fallback those routes keyed on "<ip>:" alone, so
-    // every user behind one NAT shared a single bucket of 20 attempts.
+    const b = (req && req.body) || {};
     const who = b.email
-      ? String(b.email).toLowerCase()
-      : String(b.token || '').slice(-16) || 'anon';
-    return `${req.ip}:${who}`;
+      ? String(b.email).trim().toLowerCase()
+      : `token:${String(b.token || '').trim().slice(-16) || 'anon'}`;
+    return who;
   },
   message: { message: 'Too many attempts. Please try again in a few minutes.' }
 });
+
+/**
+ * Per-network ceiling across every account.
+ *
+ * Generous on purpose: this exists to stop one address spraying thousands of
+ * accounts, not to police a shared campus connection.
+ */
+const authIpLimiter = rateLimit({
+  windowMs: WINDOW_MS,
+  max: positiveInt('RATE_LIMIT_AUTH_IP_MAX', 120),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many attempts from this network. Please try again in a few minutes.' }
+});
+
+/** All three, in the order a request must pass them. */
+const authLimits = [authIpLimiter, authAccountLimiter, authLimiter];
 
 /** GET /api/auth/config — what the browser needs to validate before submitting. */
 router.get('/config', (req, res) => {
@@ -91,7 +193,7 @@ router.get('/config', (req, res) => {
 });
 
 /** POST /api/auth/register */
-router.post('/register', authLimiter, async (req, res, next) => {
+router.post('/register', ...authLimits, async (req, res, next) => {
   try {
     const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
     const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
@@ -101,7 +203,8 @@ router.post('/register', authLimiter, async (req, res, next) => {
     if (!isUniversityEmail(email)) {
       return res.status(400).json({ message: `Register with your Sai University address (@${PARENT_DOMAIN})` });
     }
-    if (password.length < 8) return res.status(400).json({ message: 'Password must be at least 8 characters' });
+    const pwProblem = passwordProblem(password);
+    if (pwProblem) return res.status(400).json({ message: pwProblem });
 
     // Staff are not self-service: a faculty address creates a pending
     // application that an administrator must approve before it can be used.
@@ -113,7 +216,24 @@ router.post('/register', authLimiter, async (req, res, next) => {
       role: faculty ? 'faculty' : 'student',
       pendingApproval: faculty
     });
-    if (!user) return res.status(409).json({ message: 'An account with that email already exists' });
+    // Registration must not reveal whether an address already has an account.
+    //
+    // This used to answer 409 "An account with that email already exists",
+    // which let anyone test a list of university addresses for membership. The
+    // response is now identical in shape and status to a successful sign-up.
+    //
+    // The wording is deliberately true in both cases: it does NOT claim an
+    // email was sent, because for an existing account none is. Someone who
+    // genuinely owns the address is pointed at sign-in and password reset,
+    // which is where they actually need to go.
+    if (!user) {
+      return res.status(201).json({
+        message: 'If that address can be registered, check your email to verify it. '
+               + 'If you already have an account, sign in or reset your password instead.',
+        pendingVerification: true,
+        verificationRequired: true
+      });
+    }
 
     const token = newToken();
     const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -157,7 +277,9 @@ router.post('/register', authLimiter, async (req, res, next) => {
 });
 
 /** GET /api/auth/verify?token=... — used by links that carry the token in the URL. */
-router.get('/verify', async (req, res, next) => {
+// Throttled like POST /verify-email. Tokens are 256-bit so guessing is
+// infeasible, but an unthrottled public endpoint is free load.
+router.get('/verify', ...authLimits, async (req, res, next) => {
   try {
     const token = typeof req.query.token === 'string' ? req.query.token : '';
     if (!token) return res.status(400).json({ message: 'A verification token is required' });
@@ -180,7 +302,7 @@ router.get('/verify', async (req, res, next) => {
  * token in the request body. The GET above stays for links that carry it in the
  * URL. Both run the same verification.
  */
-router.post('/verify-email', authLimiter, async (req, res, next) => {
+router.post('/verify-email', ...authLimits, async (req, res, next) => {
   try {
     const raw = req.body && req.body.token;
     const token = typeof raw === 'string' ? raw.trim() : '';
@@ -206,7 +328,7 @@ router.post('/verify-email', authLimiter, async (req, res, next) => {
  * expires after 24 hours. Answers identically whether or not the account
  * exists, so it cannot be used to enumerate addresses.
  */
-router.post('/resend-verification', authLimiter, async (req, res, next) => {
+router.post('/resend-verification', ...authLimits, async (req, res, next) => {
   try {
     const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
     const user = await users.findByEmail(email);
@@ -226,7 +348,7 @@ router.post('/resend-verification', authLimiter, async (req, res, next) => {
 });
 
 /** POST /api/auth/login */
-router.post('/login', authLimiter, async (req, res, next) => {
+router.post('/login', ...authLimits, async (req, res, next) => {
   try {
     const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
     const password = typeof req.body.password === 'string' ? req.body.password : '';
@@ -270,7 +392,7 @@ router.post('/login', authLimiter, async (req, res, next) => {
 });
 
 /** POST /api/auth/forgot-password — always answers the same way. */
-router.post('/forgot-password', authLimiter, async (req, res, next) => {
+router.post('/forgot-password', ...authLimits, async (req, res, next) => {
   try {
     const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
     const user = await users.findByEmail(email);
@@ -292,11 +414,12 @@ router.post('/forgot-password', authLimiter, async (req, res, next) => {
 });
 
 /** POST /api/auth/reset-password */
-router.post('/reset-password', authLimiter, async (req, res, next) => {
+router.post('/reset-password', ...authLimits, async (req, res, next) => {
   try {
     const token = typeof req.body.token === 'string' ? req.body.token : '';
     const password = typeof req.body.password === 'string' ? req.body.password : '';
-    if (password.length < 8) return res.status(400).json({ message: 'Password must be at least 8 characters' });
+    const pwProblem = passwordProblem(password);
+    if (pwProblem) return res.status(400).json({ message: pwProblem });
 
     const user = await users.findByResetHash(sha256(token));
     if (!user) return res.status(400).json({ message: 'That link is invalid or has expired.' });
@@ -341,9 +464,25 @@ const updatePreferences = async (req, res, next) => {
 router.patch('/preferences', protect, updatePreferences);
 router.post('/preferences', protect, updatePreferences);
 
-/** POST /api/auth/logout — tokens are stateless, so this is an acknowledgement. */
-router.post('/logout', protect, (req, res) => {
-  res.status(200).json({ message: 'Signed out' });
+/**
+ * POST /api/auth/logout
+ *
+ * This used to return a success message and change nothing, so a token copied
+ * from localStorage or a shared machine kept working for the rest of its seven
+ * days. It now increments token_version, which `protect` compares on every
+ * authenticated request — every token already issued to this account stops
+ * working immediately, and no other account is affected.
+ *
+ * The response is identical either way, so a failure to bump cannot be used to
+ * probe whether a token was valid.
+ */
+router.post('/logout', protect, async (req, res, next) => {
+  try {
+    await users.bumpTokenVersion(req.user.id);
+    res.status(200).json({ message: 'Signed out' });
+  } catch (err) {
+    next(err);
+  }
 });
 
 /** GET /api/auth/me */
@@ -354,3 +493,6 @@ router.get('/me', protect, async (req, res) => {
 module.exports = router;
 module.exports.isUniversityEmail = isUniversityEmail;
 module.exports.isFacultyEmail = isFacultyEmail;
+module.exports.rateLimitKey = rateLimitKey;
+module.exports.passwordProblem = passwordProblem;
+module.exports.PASSWORD_MAX_BYTES = PASSWORD_MAX_BYTES;

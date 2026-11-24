@@ -10,9 +10,38 @@ const { claimIpLimit, claimAccountLimit } = require('../middleware/rateLimit');
 
 const router = express.Router();
 
-/** Six-digit handover code, derived from the claim id and the server secret. */
+/**
+ * Six-digit handover code, derived from the claim id and a server secret.
+ *
+ * There used to be a `|| 'dev'` fallback. A deployment missing JWT_SECRET would
+ * still issue codes, derived from a literal anyone who has read this file knows.
+ * It is gone.
+ *
+ * HANDOVER_SECRET when set, otherwise JWT_SECRET. Falling back to JWT_SECRET
+ * rather than throwing is deliberate: codes for already-approved claims were
+ * derived from it, and switching the key would invalidate every handover in
+ * flight. If neither exists we throw — a missing secret is a configuration
+ * error, not a reason to invent a key.
+ */
+let warnedAboutHandoverKey = false;
+const handoverKey = () => {
+  const dedicated = process.env.HANDOVER_SECRET;
+  if (dedicated) return dedicated;
+  const jwt = process.env.JWT_SECRET;
+  if (!jwt) {
+    throw new Error('Neither HANDOVER_SECRET nor JWT_SECRET is set. ' +
+      'Handover codes cannot be derived safely.');
+  }
+  if (!warnedAboutHandoverKey) {
+    warnedAboutHandoverKey = true;
+    console.warn('Handover codes: derived from JWT_SECRET because HANDOVER_SECRET ' +
+      'is not set. Set HANDOVER_SECRET to separate the two key usages.');
+  }
+  return jwt;
+};
+
 const handoverCode = (claimId) => {
-  const h = crypto.createHmac('sha256', process.env.JWT_SECRET || 'dev')
+  const h = crypto.createHmac('sha256', handoverKey())
     .update(String(claimId)).digest('hex');
   return (parseInt(h.slice(0, 8), 16) % 900000 + 100000).toString();
 };
@@ -203,3 +232,4 @@ router.post('/:id/complete', claimIpLimit, protect, claimAccountLimit, async (re
 
 module.exports = router;
 module.exports.handoverCode = handoverCode;
+module.exports.handoverKey = handoverKey;

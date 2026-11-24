@@ -355,16 +355,30 @@ admin.patch('/items/:id/verify', protect, requireRole(...STAFF), async (req, res
     if (item.status === 'hidden') {
       return res.status(409).json({ message: 'Restore the listing before verifying it' });
     }
-    // A moderator must not verify their own listing: that is unbounded point
-    // farming, and it contradicts the self-dealing rule on the status route.
-    if (req.user.role === 'moderator' && item.reportedBy === req.user.id) {
-      return res.status(403).json({ message: 'A moderator cannot verify their own listing' });
+    // Nobody verifies their own listing. The restriction used to name only the
+    // moderator role, so an admin or superadmin could verify their own found
+    // item and award themselves points — the same self-dealing the moderator
+    // rule exists to prevent, just with a different role name.
+    if (item.reportedBy === req.user.id) {
+      return res.status(403).json({ message: 'You cannot verify your own listing' });
     }
 
-    const verified = await items.verify(item.id, req.user.id);
-    await points.awardOnce({
-      userId: item.reportedBy, type: 'found_item',
-      eventKey: `found:${item.id}`, itemId: item.id
+    // One transaction: the listing becomes verified and the reporter is
+    // credited together, or neither happens. award() is idempotent via the
+    // unique (user_id, event_key) index, so a retry cannot double-credit.
+    const { transaction } = require('../config/pg');
+    const verified = await transaction(async (client) => {
+      const v = await items.verify(item.id, req.user.id, client);
+      if (!v) {
+        const err = new Error('That listing is already verified');
+        err.statusCode = 409;
+        throw err;
+      }
+      await points.award(client, {
+        userId: item.reportedBy, type: 'found_item',
+        eventKey: `found:${item.id}`, itemId: item.id
+      });
+      return v;
     });
 
     notify.create(null, {

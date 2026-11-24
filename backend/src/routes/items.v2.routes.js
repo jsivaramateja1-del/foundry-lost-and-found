@@ -1,9 +1,52 @@
 const express = require('express');
+const jwt = require('jsonwebtoken');
+const users = require('../repositories/users');
 const items = require('../repositories/items');
 const { protect, requireRole } = require('../middleware/auth.v2');
 // These were defined and exported but never mounted, so listing creation was
 // unthrottled while the README documented a limit that did not exist.
 const { itemIpLimit, itemAccountLimit } = require('../middleware/rateLimit');
+
+/**
+ * Validate an uploaded photo by its bytes, not its label.
+ *
+ * The previous check accepted anything shaped like `data:image/png;base64,...`
+ * — the declared type was never compared to the content, so arbitrary bytes
+ * labelled as an image were stored and served back. The first bytes of a real
+ * image are fixed per format, so check those.
+ */
+const IMAGE_LIMIT_BYTES = 400 * 1024;
+
+const MAGIC = [
+  { type: 'png',  sig: Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) },
+  { type: 'jpeg', sig: Buffer.from([0xFF, 0xD8, 0xFF]) },
+  { type: 'webp', sig: Buffer.from('RIFF'), extra: { offset: 8, value: Buffer.from('WEBP') } }
+];
+
+function imageProblem(raw) {
+  if (!raw) return null;
+  if (raw.length > IMAGE_LIMIT_BYTES) return 'That photo is too large (max 400 KB).';
+
+  const m = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(raw);
+  if (!m) return 'The photo must be a PNG, JPEG or WebP image.';
+
+  const declared = m[1];
+  let bytes;
+  try { bytes = Buffer.from(m[2], 'base64'); } catch { return 'That photo could not be read.'; }
+  if (!bytes.length) return 'That photo is empty.';
+
+  const match = MAGIC.find((f) =>
+    bytes.length >= f.sig.length &&
+    bytes.subarray(0, f.sig.length).equals(f.sig) &&
+    (!f.extra || (bytes.length >= f.extra.offset + f.extra.value.length &&
+                  bytes.subarray(f.extra.offset, f.extra.offset + f.extra.value.length).equals(f.extra.value))));
+
+  if (!match) return 'That file is not a valid image.';
+  if (match.type !== declared) {
+    return `That file says ${declared} but its contents are ${match.type}.`;
+  }
+  return null;
+}
 
 const router = express.Router();
 
@@ -71,7 +114,8 @@ router.get('/', async (req, res, next) => {
     const { total, items: rows } = await items.list(filter, { page, limit, sort });
     res.status(200).json({
       count: rows.length, total, page,
-      pages: Math.ceil(total / limit) || 1, items: rows
+      pages: Math.ceil(total / limit) || 1,
+      items: rows.map(items.toPublicItem)
     });
   } catch (err) { next(err); }
 });
@@ -90,6 +134,28 @@ router.get('/meta', (req, res) => {
   });
 });
 
+/**
+ * Resolve the caller from the bearer token, or null.
+ *
+ * Unlike `protect` this never rejects: a missing, expired or malformed token
+ * just means "anonymous". Used where a response is public but slightly richer
+ * for its owner.
+ */
+async function optionalViewer(req) {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (!token) return null;
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
+    const user = await users.findById(decoded.id);
+    if (!user) return null;
+    if ((decoded.tv === undefined ? 0 : decoded.tv) !== (user.tokenVersion || 0)) return null;
+    return user;
+  } catch {
+    return null;
+  }
+}
+
 router.get('/:id', async (req, res, next) => {
   try {
     if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) {
@@ -97,7 +163,15 @@ router.get('/:id', async (req, res, next) => {
     }
     const item = await items.findById(req.params.id);
     if (!item) return res.status(404).json({ message: 'Listing not found' });
-    res.status(200).json({ item });
+
+    // The owner needs to know this listing is theirs, so the board can show
+    // owner-only controls. Everyone else gets the public shape. Ownership is
+    // decided from the bearer token when one is present; an anonymous request
+    // simply never sees it.
+    const viewer = await optionalViewer(req);
+    const out = items.toPublicItem(item);
+    if (viewer && viewer.id === item.reportedBy) out.reportedBy = item.reportedBy;
+    res.status(200).json({ item: out });
   } catch (err) { next(err); }
 });
 
@@ -125,16 +199,8 @@ router.post('/', itemIpLimit, protect, itemAccountLimit, async (req, res, next) 
     // The client shrinks photos to fit, but a client-side limit is not a limit.
     // Without this, a curl call stores megabytes in a text column, and any URL
     // shape at all — including javascript: — is accepted into image_url.
-    const IMAGE_LIMIT_BYTES = 400 * 1024;
-    const rawImage = oneValue(b.imageUrl);
-    if (rawImage) {
-      if (rawImage.length > IMAGE_LIMIT_BYTES) {
-        return res.status(400).json({ message: 'That photo is too large (max 400 KB).' });
-      }
-      if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(rawImage)) {
-        return res.status(400).json({ message: 'The photo must be a PNG, JPEG or WebP image.' });
-      }
-    }
+    const imgProblem = imageProblem(oneValue(b.imageUrl));
+    if (imgProblem) return res.status(400).json({ message: imgProblem });
 
 
     if (title.length < 2) return res.status(400).json({ message: 'A title is required' });
@@ -159,6 +225,15 @@ router.post('/', itemIpLimit, protect, itemAccountLimit, async (req, res, next) 
     }
     if (oneValue(b.subcategory).length > 60) {
       return res.status(400).json({ message: 'Subcategory is too long (max 60 characters)' });
+    }
+    // customCategory and customLocation are free text and previously had no cap
+    // at all — the only ceiling was the 2 MB JSON body limit. 60 characters is
+    // the same budget the fixed category and location lists use.
+    if (oneValue(b.customCategory).trim().length > 60) {
+      return res.status(400).json({ message: 'Custom category is too long (max 60 characters)' });
+    }
+    if (oneValue(b.customLocation).trim().length > 60) {
+      return res.status(400).json({ message: 'Custom location is too long (max 60 characters)' });
     }
     // isValidSubcategory was written for this rule and never called, so any
     // client could store category 'Bottles' with subcategory 'Laptops'.
@@ -207,11 +282,21 @@ router.put('/:id', protect, async (req, res, next) => {
       : String(existing.date || '').slice(0, 10);
     const nextDate = /^\d{4}-\d{2}-\d{2}$/.test(oneValue(b.date)) ? oneValue(b.date) : existingDate;
     const nextImage = b.imageUrl !== undefined ? oneValue(b.imageUrl) : existing.imageUrl;
+    if (b.imageUrl !== undefined) {
+      const imgProblem = imageProblem(oneValue(b.imageUrl));
+      if (imgProblem) return res.status(400).json({ message: imgProblem });
+    }
 
     if (nextTitle.length < 2) return res.status(400).json({ message: 'A title is required' });
     if (nextTitle.length > 120) return res.status(400).json({ message: 'Title is too long (max 120 characters)' });
     if (nextDesc.length > 2000) return res.status(400).json({ message: 'Description is too long (max 2000 characters)' });
     if (nextSub.length > 60) return res.status(400).json({ message: 'Subcategory is too long (max 60 characters)' });
+    if (String(nextCustomCategory || '').trim().length > 60) {
+      return res.status(400).json({ message: 'Custom category is too long (max 60 characters)' });
+    }
+    if (String(b.customLocation !== undefined ? oneValue(b.customLocation) : existing.customLocation || '').trim().length > 60) {
+      return res.status(400).json({ message: 'Custom location is too long (max 60 characters)' });
+    }
     // POST rejects these; PUT silently fell back to the existing value, so an edit
     // could leave a listing in a state create exists to prevent.
     if (b.category !== undefined && !CATEGORIES.includes(oneValue(b.category))) {
@@ -323,9 +408,16 @@ router.patch('/:id/status', protect, async (req, res, next) => {
     }
     // A returned listing is settled: reopening it would erase the completed
     // handover and the points already credited to both parties.
-    if (!isStaff && existing.status === 'returned' && next_ !== 'returned') {
+    // A returned listing is settled. Reopening it to 'open' makes it claimable
+    // again, and a second claimant completing a second handover earns a fresh
+    // return credit because the points key includes the claimant id. That is a
+    // duplicate reward for one item, so 'open' is refused for every role.
+    //
+    // Staff keep a correction path: they may still hide a settled listing,
+    // which removes a bad listing without resurrecting the handover.
+    if (existing.status === 'returned' && next_ === 'open') {
       return res.status(403).json({
-        message: 'This listing is marked returned and can only be reopened by a moderator'
+        message: 'This listing was returned and cannot be reopened. Hide it instead if it should be removed.'
       });
     }
 

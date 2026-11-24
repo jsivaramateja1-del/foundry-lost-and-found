@@ -18,7 +18,9 @@ const protect = async (req, res, next) => {
 
     let decoded;
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
+      // Pin the algorithm. Without this the verifier accepts any HMAC algorithm,
+      // and any token minted with this secret for another purpose would pass.
+      decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
     } catch {
       return res.status(401).json({ message: 'Your session has expired. Please sign in again.' });
     }

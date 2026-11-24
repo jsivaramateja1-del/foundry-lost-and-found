@@ -13,6 +13,18 @@ const PORT = process.env.PORT || 5000;
     if (!process.env.JWT_SECRET) {
       throw new Error('JWT_SECRET is not set. Add it to backend/.env (see .env.example).');
     }
+    // A short JWT_SECRET is as good as none: it is an HMAC key, and a short key
+    // is brute-forced quickly. Fail at boot rather than at first login.
+    if (String(process.env.JWT_SECRET).length < 32) {
+      throw new Error('JWT_SECRET is shorter than 32 characters. ' +
+        'Generate one with 48 random bytes, hex encoded.');
+    }
+    // Handover codes use their own key when provided, so rotating the JWT secret
+    // does not invalidate claims mid-handover. Not fatal if absent.
+    if (!process.env.HANDOVER_SECRET) {
+      console.warn('HANDOVER_SECRET is not set: handover codes fall back to ' +
+        'JWT_SECRET. Set it to keep the two key usages separate.');
+    }
     await connectDB();
 
     // Say once, at boot, whether mail can work. A missing key then shows up in

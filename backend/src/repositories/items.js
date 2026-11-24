@@ -29,6 +29,25 @@ const toItem = (row) => (row ? {
   updatedAt: row.updated_at
 } : null);
 
+/**
+ * Public shape of a listing.
+ *
+ * `reportedBy` is the reporter's internal user UUID. Publishing it on a public,
+ * unauthenticated endpoint lets anyone correlate every listing by one person —
+ * "show me everything this student posted" — which is not information the board
+ * needs to function. `reporterName` stays, because the detail dialog shows who
+ * posted it and that is deliberate product behaviour.
+ *
+ * The owner still needs to know which listings are theirs, so the id is added
+ * back only on the detail route, and only when the caller is authenticated as
+ * that user (see GET /api/items/:id).
+ */
+const toPublicItem = (item) => {
+  if (!item) return null;
+  const { reportedBy, ...rest } = item;
+  return rest;
+};
+
 // Every sort ends in i.id so LIMIT/OFFSET is deterministic. The seed inserts all
 // rows in one transaction and now() is transaction-scoped, so equal created_at
 // values are normal — without a tie-breaker a row can appear on two pages or none.
@@ -113,10 +132,22 @@ const update = async (id, data) =>
 const setStatus = async (id, status) =>
   toItem(await one('update items set status=$2 where id=$1 returning *', [id, status]));
 
-const verify = async (id, adminId) =>
-  toItem(await one(
-    `update items set verified_at = now(), verified_by = $2 where id = $1 returning *`,
+/**
+ * Mark a listing verified.
+ *
+ * Takes an optional transaction client so "verified" and "points credited" can
+ * be one atomic step; otherwise a failure between them leaves a verified
+ * listing whose reporter was never credited.
+ */
+const verify = async (id, adminId, client) => {
+  const run = client
+    ? (text, params) => client.query(text, params).then((r) => r.rows[0])
+    : one;
+  return toItem(await run(
+    `update items set verified_at = now(), verified_by = $2
+      where id = $1 and verified_at is null returning *`,
     [id, adminId]));
+};
 
 const remove = async (id) =>
   one('delete from items where id = $1 returning id', [id]);
@@ -164,6 +195,18 @@ const similar = async (item, limit = 5) => {
 };
 
 module.exports = {
-  toItem, list, findById, findByIdRaw, create, update, setStatus, verify, remove,
-  stats, similar, buildFilter, db
+  toItem,
+  toPublicItem,
+  list,
+  findById,
+  findByIdRaw,
+  create,
+  update,
+  setStatus,
+  verify,
+  remove,
+  stats,
+  similar,
+  buildFilter,
+  db,
 };
