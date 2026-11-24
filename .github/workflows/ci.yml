@@ -78,12 +78,14 @@ jobs:
         run: npm run test:auth-v2
 
       # The connection-string and TLS decisions that broke a real deploy.
-      - name: WhatsApp client unit tests (no network, no database)
-        run: npm run test:whatsapp
-
       - name: Connection and TLS unit tests (no database needed)
         working-directory: backend
         run: npm run test:connection
+
+      # The WhatsApp client is stubbed, so this needs no network and no database.
+      - name: WhatsApp client unit tests
+        working-directory: backend
+        run: npm run test:whatsapp
 
       - name: PostgreSQL integration tests
         working-directory: backend
