@@ -854,6 +854,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (qs.get('report') === '1' || window.location.hash === '#report') {
       if (typeof openModal === 'function') openModal('modal-report');
     }
+
+    // ?item=<id> opens that listing's detail dialog. This is the link the
+    // WhatsApp share button produces, so without it a shared link landed on the
+    // bare board and the recipient had to hunt for the item. An unknown id is
+    // swallowed: a stale link should leave the reader on the board, not on an
+    // error.
+    const deepItem = (qs.get('item') || '').trim();
+    if (deepItem) {
+      openItem(deepItem).catch(() => { /* unknown or deleted item */ });
+    }
   } catch (e) { /* a malformed query string must not break the board */ }
 
   await Promise.all([loadItems(), loadStats()]);
