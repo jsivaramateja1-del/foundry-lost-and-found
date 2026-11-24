@@ -64,7 +64,10 @@ const base = `http://127.0.0.1:${PORT}`;
       PORT: String(PORT),
       DATABASE_URL: URL,
       PG_NO_SSL: 'true',
-      JWT_SECRET: 'deploy_check_secret_only',
+      // Same floor as boot-v2: the server refuses a JWT_SECRET under 32
+      // characters, so the deploy fixture must clear it too.
+      JWT_SECRET: 'deploy_check_secret_that_is_over_32_chars_long',
+      HANDOVER_SECRET: 'deploy_handover_secret_that_is_over_32_chars',
       NODE_ENV: 'production',
       APP_URL: base,
       CLIENT_ORIGIN: base
