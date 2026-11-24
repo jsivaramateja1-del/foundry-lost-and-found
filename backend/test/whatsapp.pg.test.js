@@ -2,14 +2,28 @@
  * WhatsApp opt-in routes — integration tests against the real database.
  *
  * Proves the consent lifecycle and the authorisation boundaries. It does not
- * prove a message is delivered: WHATSAPP_TOKEN is never set here, so every
- * send path short-circuits.
+ * prove a message is delivered: WHATSAPP_TOKEN is never set for a real send, so
+ * every outbound path short-circuits.
  */
 
 const assert = require('node:assert');
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
 
+/* The pg config reads DATABASE_URL the first time it is required, so it must be
+   set before anything pulls in the app. CI supplies TEST_DATABASE_URL. */
+const URL = process.env.TEST_DATABASE_URL;
+if (!URL) {
+  if (process.env.CI === 'true') {
+    console.error('\n  FAILED - TEST_DATABASE_URL is required in CI.\n');
+    process.exit(1);
+  }
+  console.log('\n  SKIPPED - TEST_DATABASE_URL is not set.');
+  console.log('\n0 passed, 0 failed, SUITE SKIPPED\n');
+  process.exit(0);
+}
+process.env.DATABASE_URL = URL;
+process.env.PG_NO_SSL = 'true';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'whatsapp_test_secret_that_is_over_32_chars';
 
 const app = require('../src/app.v2');
@@ -81,7 +95,6 @@ async function main() {
     assert.strictEqual(res.status, 503);
   });
 
-  // Turn the feature on for the rest of the run.
   process.env.WHATSAPP_TOKEN = 'test-token';
   process.env.WHATSAPP_PHONE_ID = '1234567890';
 
