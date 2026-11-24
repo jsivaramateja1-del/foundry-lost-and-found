@@ -495,6 +495,30 @@ async function openItem(id) {
       <div><dt>Date reported</dt><dd>${ui.date(item.date)}</dd></div>
       <div><dt>Posted by</dt><dd>${ui.esc(item.reporterName || 'A student')}</dd></div>`;
 
+    /* ---- Share to WhatsApp ----------------------------------------------
+       Builds a wa.me link carrying the listing, so a student can drop it into
+       their class group. Nothing is sent by the server: the link only opens
+       WhatsApp with the text pre-filled, and the student presses send.
+       Every field is URL-encoded, because a title containing '&' or '#' would
+       otherwise truncate the message. */
+    const shareLink = document.getElementById('btn-share-wa');
+    if (shareLink) {
+      const base = window.location.origin + window.location.pathname;
+      const pageUrl = base + '?item=' + encodeURIComponent(item.id);
+      const heading = item.type === 'lost'
+        ? 'Lost on campus: ' + item.title
+        : 'Found on campus: ' + item.title;
+      const lines = [
+        heading,
+        place + ' \u00b7 ' + ui.date(item.date),
+        item.description ? item.description : '',
+        'Seen on Foundry \u2014 ' + pageUrl
+      ].filter(Boolean);
+      shareLink.href = 'https://wa.me/?text=' + encodeURIComponent(lines.join('\n'));
+      shareLink.setAttribute('aria-label',
+        'Share "' + item.title + '" on WhatsApp');
+    }
+
     const claimBtn = document.getElementById('btn-claim');
     const mine = Auth.user && Auth.user && item.reportedBy === Auth.user.id;
     if (mine) {

@@ -333,10 +333,11 @@
         </div>
         <div data-reveal>
           <div class="note">
-            <strong>WhatsApp integration — not implemented</strong>
-            A future version could post new listings into a campus group automatically. This build
-            does not connect to any group, read any messages, or send anything. Any such button here
-            would be a placeholder only.
+            <strong>Sharing to WhatsApp — implemented, one listing at a time</strong>
+            Every listing has a share button that opens WhatsApp with the item pre-filled, so you can
+            drop it into your class group yourself. What this build does not do is post into a group
+            automatically: it does not connect to any group, read any messages, or send anything on
+            its own.
           </div>
           <div class="note" style="margin-top:1rem;">
             <strong>Claims are reviewed by the person who posted the item</strong>
@@ -394,6 +395,11 @@
       <dl class="detail-list" id="modal-item-body"></dl>
       <div class="modal__actions">
         <button class="btn btn--solid" id="btn-claim">Claim this item</button>
+        <!-- A real link, not a button: it can be copied, opened in a new tab and
+             works with WhatsApp Web as well as the phone app. -->
+        <a class="btn" id="btn-share-wa" href="#" target="_blank" rel="noopener noreferrer">
+          Share on WhatsApp
+        </a>
         <button class="btn" data-close-modal>Close</button>
       </div>
       <p class="form-note modal__note">
