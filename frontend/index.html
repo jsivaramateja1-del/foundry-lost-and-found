@@ -383,6 +383,28 @@
   </footer>
 
   <!-- ============ ITEM DETAIL MODAL ============ -->
+  <!-- Conversation about one listing. Only the reporter and a claimant can
+       open it; the server enforces that, this is only the surface. -->
+  <div class="modal" id="modal-thread" role="dialog" aria-modal="true" aria-labelledby="thread-title">
+    <div class="modal__panel">
+      <div class="modal__head">
+        <div>
+          <p class="eyebrow">Conversation</p>
+          <h2 id="thread-title">Messages</h2>
+        </div>
+        <button class="modal__close" data-close-modal aria-label="Close">✕</button>
+      </div>
+      <div class="thread" id="thread-list" aria-live="polite"></div>
+      <p class="form-error" id="thread-error" data-show="false"></p>
+      <form id="thread-form" class="thread__form">
+        <label class="visually-hidden" for="thread-body">Your message</label>
+        <textarea id="thread-body" class="textarea" rows="2" maxlength="1000"
+                  placeholder="Write a message…" required></textarea>
+        <button type="submit" class="btn btn--solid" id="thread-send">Send</button>
+      </form>
+    </div>
+  </div>
+
   <div class="modal" id="modal-item" role="dialog" aria-modal="true" aria-labelledby="modal-item-title">
     <div class="modal__panel">
       <div class="modal__head">

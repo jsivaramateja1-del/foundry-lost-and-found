@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Returned items — Foundry</title>
+  <script src="assets/js/theme-init.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/foundit.css" />
+  <meta name="theme-color" content="#F4EDE0" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121110" media="(prefers-color-scheme: dark)">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="wrap site-header__inner">
+    <a href="index.html" class="logo">foundry <span>Sai Campus / Lost + Found</span></a>
+    <nav class="nav" id="primary-nav" aria-label="Primary">
+      <a href="index.html">Browse items</a>
+      <a href="returned.html" aria-current="page">Returned</a>
+    </nav>
+    <div class="header-actions">
+      <button class="btn btn--ghost theme-toggle" data-theme-toggle aria-label="Switch colour theme">
+        <span data-theme-icon>☾</span>
+      </button>
+      <a class="btn" href="index.html">Back to the board</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <section class="wrap page-head">
+    <div>
+      <p class="eyebrow">Closed listings</p>
+      <h1 class="display">Returned to their owners</h1>
+      <p class="note">Everything here has been handed back. These listings are kept as a record and are no
+        longer part of the board.</p>
+    </div>
+  </section>
+
+  <section class="wrap section" aria-labelledby="ret-heading">
+    <div class="section-head">
+      <h2 id="ret-heading">The record</h2>
+      <span class="ct" id="ret-count">—</span>
+    </div>
+    <div id="ret-empty" class="empty" hidden>
+      <p><strong>Nothing has been returned yet.</strong></p>
+      <p class="note">When an item is handed back, it moves here from the board.</p>
+      <div class="empty__actions"><a class="btn btn--solid" href="index.html">Back to the board</a></div>
+    </div>
+    <div class="grid" id="ret-grid" aria-busy="true"></div>
+    <p class="form-error" id="ret-error" data-show="false"></p>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer__bottom">
+      <span>Foundry — Sai Campus Lost &amp; Found</span>
+      <span>Returned listings</span>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/js/api.js"></script>
+<script>
+(function () {
+  "use strict";
+  var grid = document.getElementById('ret-grid');
+  var empty = document.getElementById('ret-empty');
+  var count = document.getElementById('ret-count');
+  var errorBox = document.getElementById('ret-error');
+
+  function show(msg) {
+    errorBox.textContent = msg;
+    errorBox.dataset.show = msg ? 'true' : 'false';
+  }
+
+  function card(item) {
+    var place = item.location === 'Other' && item.customLocation ? item.customLocation : item.location;
+    return '<article class="card" style="cursor:default">' +
+      '<div class="card__top">' +
+        '<span class="tag tag--' + item.type + '">' + (item.type === 'lost' ? 'Lost' : 'Found') + '</span>' +
+        '<span class="status-pill status-pill--returned">Returned</span>' +
+      '</div>' +
+      '<h3 class="card__title">' + ui.esc(item.title) + '</h3>' +
+      '<p class="card__desc">' + ui.esc(item.description) + '</p>' +
+      '<div class="card__meta"><span>' + ui.esc(place) + '</span><span>' + ui.date(item.date) + '</span></div>' +
+    '</article>';
+  }
+
+  api('/items?status=returned&limit=60').then(function (data) {
+    var items = data.items || [];
+    grid.setAttribute('aria-busy', 'false');
+    count.textContent = items.length + (items.length === 1 ? ' item' : ' items');
+    if (!items.length) { empty.hidden = false; return; }
+    grid.innerHTML = items.map(card).join('');
+  }).catch(function (err) {
+    grid.setAttribute('aria-busy', 'false');
+    show(err.message || 'Could not load returned items');
+    empty.hidden = false;
+  });
+})();
+</script>
+</body>
+</html>

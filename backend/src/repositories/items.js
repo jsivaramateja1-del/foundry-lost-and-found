@@ -74,6 +74,9 @@ const buildFilter = (f = {}) => {
 
   // Hidden listings are never part of the public board unless asked for.
   if (!f.includeHidden) clauses.push("i.status <> 'hidden'");
+  /* Returned items have their own page. Unless a status is asked for
+     explicitly, the board shows only what can still be acted on. */
+  if (!f.status) clauses.push("i.status <> 'returned'");
   if (f.type) add('i.type = $?', f.type);
   if (f.category) add('i.category = $?', f.category);
   if (f.subcategory) add('i.subcategory = $?', f.subcategory);

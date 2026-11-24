@@ -53,7 +53,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 let lastFocused = null;
 
 // Matches IMAGE_LIMIT_BYTES in backend/src/routes/item.routes.js
-const MAX_IMAGE_BYTES = 700 * 1024;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 // How many listings arrive per request. The API paginates, so the board is
 // never silently cut off at a fixed number.
@@ -129,7 +129,7 @@ function shrinkImage(file) {
       const img = new Image();
       img.onerror = () => reject(new Error('That file is not a readable image.'));
       img.onload = () => {
-        const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+        const scale = Math.min(1, 4096 / Math.max(img.width, img.height));
         const canvas = document.createElement('canvas');
         canvas.width = Math.round(img.width * scale);
         canvas.height = Math.round(img.height * scale);
@@ -138,7 +138,7 @@ function shrinkImage(file) {
     _ctx.fillRect(0, 0, canvas.width, canvas.height);
     _ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-        for (const quality of [0.92, 0.86, 0.8, 0.72, 0.62]) {
+        for (const quality of [0.95, 0.9, 0.85, 0.78, 0.7]) {
           const dataUrl = canvas.toDataURL('image/jpeg', quality);
           const bytes = Math.floor(((dataUrl.split(',')[1] || '').length * 3) / 4);
           if (bytes <= MAX_IMAGE_BYTES) {
@@ -172,7 +172,7 @@ function cardMarkup(item) {
          <span>No photo</span>
        </div>`;
   return `
-    <button class="card" data-item-id="${item.id}" aria-label="View ${ui.esc(item.title)}">
+    <div class="card" data-item-id="${item.id}" role="button" tabindex="0" aria-label="View ${ui.esc(item.title)}">
       ${photo}
       <div class="card__top">
         <span class="tag tag--${item.type}">${item.type === 'lost' ? 'Lost' : 'Found'}</span>
@@ -185,7 +185,8 @@ function cardMarkup(item) {
         <span>${ui.esc(place)}</span>
         <span>${ui.date(item.date)}</span>
       </div>
-    </button>`;
+      <a class="card__msg" href="conversations.html?item=${encodeURIComponent(item.id)}" aria-label="Message about ${ui.esc(item.title)}">Message</a>
+    </div>`;
 }
 
 /**
@@ -258,7 +259,7 @@ async function loadItems({ page = 1, append = false } = {}) {
   params.set('page', String(page));
 
   try {
-    const data = await api(`/items?${params.toString()}`);
+    const data = await api(`/items?${params.toString()}`, { auth: Auth.isLoggedIn });
     // A newer request has already been sent: this reply is stale, drop it
     if (requestId !== state.requestId) return;
     state.items = append ? state.items.concat(data.items) : data.items;
@@ -461,6 +462,90 @@ function closeAllModals() {
 }
 
 /* ---------------- item detail ---------------- */
+/* ---------------- conversations ---------------- */
+
+/* Which item's thread is open, and the recipient the server says we may
+   address. Both come from the API, never from the DOM. */
+const threadState = { itemId: null, recipientId: null, timer: null };
+
+function renderThread(list, messages, meId) {
+  if (!messages.length) {
+    list.innerHTML = '<p class="thread__empty">No messages yet. Say hello.</p>';
+    return;
+  }
+  list.innerHTML = messages.map((m) => {
+    const mine = m.sender_id === meId;
+    return `<div class="bubble ${mine ? 'bubble--mine' : ''}">
+      <p class="bubble__body">${ui.esc(m.body)}</p>
+      <p class="bubble__meta">${ui.esc(m.sender_name)} · ${ui.date(m.created_at)}</p>
+    </div>`;
+  }).join('');
+  list.scrollTop = list.scrollHeight;
+}
+
+async function loadThread() {
+  if (!threadState.itemId) return;
+  const list = document.getElementById('thread-list');
+  try {
+    const data = await api(`/items/${threadState.itemId}/messages`, { auth: true });
+    const meId = Auth.user && Auth.user.id;
+    renderThread(list, data.messages || [], meId);
+    const others = data.canMessage || [];
+    threadState.recipientId = others.length === 1 ? others[0] : (others[0] || null);
+    const send = document.getElementById('thread-send');
+    if (send) send.disabled = !threadState.recipientId;
+  } catch (err) {
+    list.innerHTML = `<p class="thread__empty">${ui.esc(err.message || 'Could not load this conversation')}</p>`;
+  }
+}
+
+async function openThread(itemId) {
+  if (!Auth.isLoggedIn) {
+    ui.toast('Please log in to message about an item');
+    Auth.requireLogin('index.html');
+    return;
+  }
+  threadState.itemId = itemId;
+  document.getElementById('thread-title').textContent = 'Messages';
+  document.getElementById('thread-list').innerHTML = '<p class="thread__empty">Loading…</p>';
+  showFormMessage('thread-error', '');
+  openModal('modal-thread');
+  await loadThread();
+  /* Polling, not websockets: this stack has no socket infrastructure, and
+     pretending otherwise would be worse than a simple refresh. */
+  clearInterval(threadState.timer);
+  threadState.timer = setInterval(loadThread, 5000);
+}
+
+function stopThreadPolling() {
+  clearInterval(threadState.timer);
+  threadState.timer = null;
+}
+
+async function sendThreadMessage(event) {
+  event.preventDefault();
+  const box = document.getElementById('thread-body');
+  const btn = document.getElementById('thread-send');
+  const body = (box.value || '').trim();
+  if (!body || !threadState.recipientId) return;
+
+  btn.disabled = true;
+  try {
+    await api(`/items/${threadState.itemId}/messages`, {
+      method: 'POST',
+      auth: true,
+      body: { recipientId: threadState.recipientId, body }
+    });
+    box.value = '';
+    showFormMessage('thread-error', '');
+    await loadThread();
+  } catch (err) {
+    showFormMessage('thread-error', err.message || 'That message did not send');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 async function openItem(id) {
   /* The campus plan needs to open the same detail dialog from outside this
      closure. Exposing the one function keeps a single detail implementation —
@@ -907,10 +992,33 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   el.clearFromEmpty.addEventListener('click', resetFilters);
 
+  const threadForm = document.getElementById('thread-form');
+  if (threadForm) threadForm.addEventListener('submit', sendThreadMessage);
+  document.querySelectorAll('[data-close-modal]').forEach((b) => {
+    b.addEventListener('click', stopThreadPolling);
+  });
+
   // grid clicks
   el.grid.addEventListener('click', (event) => {
+    // The message button sits inside the card, so it must be checked first.
+    const msg = event.target.closest('[data-message-item]');
+    if (msg) {
+      event.stopPropagation();
+      openThread(msg.dataset.messageItem);
+      return;
+    }
     const card = event.target.closest('[data-item-id]');
     if (card) openItem(card.dataset.itemId);
+  });
+
+  /* The card is a div with role="button", so it must answer the keyboard the
+     way a real button does. */
+  el.grid.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const card = event.target.closest('[data-item-id]');
+    if (!card || event.target.closest('[data-message-item]')) return;
+    event.preventDefault();
+    openItem(card.dataset.itemId);
   });
 
   // open report modal from anywhere; the button decides lost or found

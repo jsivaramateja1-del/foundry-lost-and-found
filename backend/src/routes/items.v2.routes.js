@@ -6,6 +6,8 @@ const { protect, requireRole } = require('../middleware/auth.v2');
 // These were defined and exported but never mounted, so listing creation was
 // unthrottled while the README documented a limit that did not exist.
 const { itemIpLimit, itemAccountLimit } = require('../middleware/rateLimit');
+const { optionalAuth } = require('../middleware/auth.v2');
+const { many } = require('../config/pg');
 
 /**
  * Validate an uploaded photo by its bytes, not its label.
@@ -15,7 +17,7 @@ const { itemIpLimit, itemAccountLimit } = require('../middleware/rateLimit');
  * labelled as an image were stored and served back. The first bytes of a real
  * image are fixed per format, so check those.
  */
-const IMAGE_LIMIT_BYTES = 700 * 1024;
+const IMAGE_LIMIT_BYTES = 5 * 1024 * 1024;
 
 const MAGIC = [
   { type: 'png',  sig: Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) },
@@ -25,7 +27,7 @@ const MAGIC = [
 
 function imageProblem(raw) {
   if (!raw) return null;
-  if (raw.length > IMAGE_LIMIT_BYTES) return 'That photo is too large (max 700 KB).';
+  if (raw.length > IMAGE_LIMIT_BYTES) return 'That photo is too large (max 5 MB).';
 
   const m = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(raw);
   if (!m) return 'The photo must be a PNG, JPEG or WebP image.';
@@ -61,7 +63,7 @@ const STATUSES = ['open','claimed','returned','hidden'];
 /** Rejects an array or object arriving where a single value is expected. */
 const oneValue = (v) => (typeof v === 'string' ? v.trim() : '');
 
-router.get('/', async (req, res, next) => {
+router.get('/', optionalAuth, async (req, res, next) => {
   try {
     for (const key of ['type','category','location','status','subcategory','q','sort',
                        'from','to','page','limit']) {
@@ -112,10 +114,23 @@ router.get('/', async (req, res, next) => {
     const sort = oneValue(req.query.sort) || 'newest';
 
     const { total, items: rows } = await items.list(filter, { page, limit, sort });
+
+    /* A signed-in reader is told which listings they may message about, so the
+       card can offer the button only where it will work. The server still
+       decides who may talk; this only stops the UI advertising something that
+       would answer 403. */
+    let publicRows = rows.map(items.toPublicItem);
+    if (req.user) {
+      const mine = await many('select id from items where reported_by = $1', [req.user.id]);
+      const claimed = await many('select distinct item as id from claims where claimant = $1', [req.user.id]);
+      const allowed = new Set([...mine.map((r) => r.id), ...claimed.map((r) => r.id)]);
+      publicRows = publicRows.map((it) => ({ ...it, canMessage: allowed.has(it.id) }));
+    }
+
     res.status(200).json({
-      count: rows.length, total, page,
+      count: publicRows.length, total, page,
       pages: Math.ceil(total / limit) || 1,
-      items: rows.map(items.toPublicItem)
+      items: publicRows
     });
   } catch (err) { next(err); }
 });

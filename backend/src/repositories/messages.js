@@ -1,48 +1,47 @@
 /**
- * Messages between a reporter and a claimant of one item.
+ * Conversations about one item.
  *
- * Authorisation lives here, not in the route and never in the UI: every
- * function takes the acting user and refuses when that user is neither the
- * reporter nor a claimant of the item.
+ * Anyone signed in may open a conversation with the reporter of a listing; the
+ * reporter may reply to anyone who has written to them about it. A thread is
+ * therefore a pair - (item, the other person) - and each party only ever sees
+ * their own exchange with the reporter.
  */
 
 const { many, one } = require('../config/pg');
 
 /**
- * Everyone entitled to see the thread on an item: the reporter, plus anyone
- * holding a claim on it. A withdrawn claim keeps its row, so a person who was
- * once part of the conversation can still read what was said to them.
+ * Resolve the conversation between `userId` and the item's reporter.
+ * Returns null when the item does not exist or the reader is neither party.
  */
-async function participants(itemId) {
-  const row = await one('select reported_by from items where id = $1', [itemId]);
-  if (!row) return null;
+async function audienceFor(itemId, userId) {
+  const item = await one('select reported_by from items where id = $1', [itemId]);
+  if (!item) return null;
 
-  const claimants = await many(
-    'select distinct claimant from claims where item = $1',
-    [itemId]
-  );
+  const reporterId = item.reported_by;
+  const isReporter = reporterId === userId;
 
-  const ids = new Set([row.reported_by, ...claimants.map((c) => c.claimant)]);
-  return { reporterId: row.reported_by, ids };
+  if (isReporter) {
+    // Everyone who has written to the reporter about this item.
+    const rows = await many(
+      'select distinct sender_id as id from messages where item_id = $1 and recipient_id = $2',
+      [itemId, reporterId]
+    );
+    return { isReporter: true, reporterId, others: rows.map((r) => r.id) };
+  }
+
+  return { isReporter: false, reporterId, others: [reporterId] };
 }
 
 /**
- * May `userId` take part in this item's thread?
- * Returns who they may address, or null when they have no place in it.
+ * The messages of one conversation, oldest first.
+ * The reporter sees their exchange with `withId`; anyone else sees their own.
  */
-async function audienceFor(itemId, userId) {
-  const parts = await participants(itemId);
-  if (!parts) return null;
-  if (!parts.ids.has(userId)) return null;
-
-  const others = [...parts.ids].filter((id) => id !== userId);
-  return { isReporter: parts.reporterId === userId, others };
-}
-
-/** The thread visible to this user, oldest first, with sender names. */
-async function threadFor(itemId, userId) {
+async function threadFor(itemId, userId, withId) {
   const audience = await audienceFor(itemId, userId);
   if (!audience) return null;
+
+  const other = withId || audience.others[0];
+  if (!other) return [];
 
   return many(
     `select m.id, m.item_id, m.sender_id, m.recipient_id, m.body, m.read_at, m.created_at,
@@ -50,23 +49,47 @@ async function threadFor(itemId, userId) {
        from messages m
        join users s on s.id = m.sender_id
       where m.item_id = $1
-        and (m.sender_id = $2 or m.recipient_id = $2)
+        and ((m.sender_id = $2 and m.recipient_id = $3) or (m.sender_id = $3 and m.recipient_id = $2))
       order by m.created_at asc`,
-    [itemId, userId]
+    [itemId, userId, other]
   );
 }
 
-/**
- * Send a message. Refuses when the sender has no place in the thread, when the
- * recipient is not the other party, or when the body is empty or oversized.
- */
+/** Every conversation on an item, for the reporter's inbox. */
+async function conversationsFor(itemId, userId) {
+  const audience = await audienceFor(itemId, userId);
+  if (!audience) return null;
+
+  if (!audience.isReporter) {
+    const rows = await threadFor(itemId, userId, audience.reporterId);
+    return [{ otherId: audience.reporterId, otherName: 'The person who posted it', count: rows.length, last: rows.length ? rows[rows.length - 1] : null }];
+  }
+
+  const rows = await many(
+    `select m.sender_id as other_id, u.name as other_name,
+            count(*)::int as n, max(m.created_at) as last_at
+       from messages m join users u on u.id = m.sender_id
+      where m.item_id = $1 and m.recipient_id = $2
+      group by m.sender_id, u.name
+      order by last_at desc`,
+    [itemId, userId]
+  );
+  return rows.map((r) => ({ otherId: r.other_id, otherName: r.other_name, count: r.n, lastAt: r.last_at }));
+}
+
 async function send(itemId, senderId, recipientId, body) {
   const audience = await audienceFor(itemId, senderId);
-  if (!audience) return { ok: false, status: 403, error: 'You are not part of this conversation' };
+  if (!audience) return { ok: false, status: 403, error: 'That listing does not exist' };
 
-  if (!audience.others.includes(recipientId)) {
-    return { ok: false, status: 400, error: 'That person is not part of this conversation' };
+  // A non-reporter may only address the reporter; the reporter may address
+  // anyone who has written to them.
+  if (!audience.isReporter && recipientId !== audience.reporterId) {
+    return { ok: false, status: 400, error: 'You can only message the person who posted this item' };
   }
+  if (audience.isReporter && !audience.others.includes(recipientId)) {
+    return { ok: false, status: 400, error: 'That person has not written to you about this item' };
+  }
+  if (senderId === recipientId) return { ok: false, status: 400, error: 'You cannot message yourself' };
 
   const text = String(body == null ? '' : body).trim();
   if (!text) return { ok: false, status: 400, error: 'Write a message first' };
@@ -74,32 +97,24 @@ async function send(itemId, senderId, recipientId, body) {
 
   const row = await one(
     `insert into messages (item_id, sender_id, recipient_id, body)
-     values ($1, $2, $3, $4)
+     values ($1,$2,$3,$4)
      returning id, item_id, sender_id, recipient_id, body, read_at, created_at`,
     [itemId, senderId, recipientId, text]
   );
   return { ok: true, message: row };
 }
 
-/** Mark everything addressed to this user on this item as read. */
 async function markRead(itemId, userId) {
-  const audience = await audienceFor(itemId, userId);
-  if (!audience) return null;
   return many(
     `update messages set read_at = now()
-      where item_id = $1 and recipient_id = $2 and read_at is null
-      returning id`,
+      where item_id = $1 and recipient_id = $2 and read_at is null returning id`,
     [itemId, userId]
   );
 }
 
-/** Unread count across all of a user's threads, for a badge. */
 async function unreadCount(userId) {
-  const row = await one(
-    'select count(*)::int as n from messages where recipient_id = $1 and read_at is null',
-    [userId]
-  );
+  const row = await one('select count(*)::int as n from messages where recipient_id = $1 and read_at is null', [userId]);
   return row ? row.n : 0;
 }
 
-module.exports = { participants, audienceFor, threadFor, send, markRead, unreadCount };
+module.exports = { audienceFor, threadFor, conversationsFor, send, markRead, unreadCount };

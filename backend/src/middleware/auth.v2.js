@@ -10,6 +10,31 @@ const users = require('../repositories/users');
 const ADMIN_ROLES = ['admin', 'superadmin'];
 const MODERATION_ROLES = ['moderator', 'admin', 'superadmin'];
 
+/**
+ * Populates req.user when a valid token is present, and does nothing when it is
+ * not. For routes that are public but can say more to a signed-in reader -
+ * the board uses it to decide whether to offer a Message button.
+ *
+ * It never rejects: a bad token on a public route is treated as anonymous
+ * rather than as an error, because the route does not require identity.
+ */
+const optionalAuth = async (req, res, next) => {
+  const header = req.headers.authorization || '';
+  if (!header.startsWith('Bearer ')) return next();
+  try {
+    const decoded = jwt.verify(header.slice(7), process.env.JWT_SECRET, { algorithms: ['HS256'] });
+    const user = await users.findByIdWithSecrets(decoded.id);
+    if (!user) return next();
+    const version = decoded.tv === undefined ? 0 : decoded.tv;
+    if (version !== (user.tokenVersion || 0)) return next();
+    if (user.pendingApproval || user.suspended) return next();
+    req.user = user;
+  } catch (e) {
+    /* anonymous */
+  }
+  next();
+};
+
 const protect = async (req, res, next) => {
   try {
     const header = req.headers.authorization || '';
@@ -55,4 +80,6 @@ const requireRole = (...roles) => (req, res, next) => {
   next();
 };
 
-module.exports = { protect, requireRole, ADMIN_ROLES, MODERATION_ROLES };
+module.exports = { protect, requireRole, ADMIN_ROLES, MODERATION_ROLES,
+  optionalAuth
+};
