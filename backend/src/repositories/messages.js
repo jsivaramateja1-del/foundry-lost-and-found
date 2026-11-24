@@ -118,3 +118,41 @@ async function unreadCount(userId) {
 }
 
 module.exports = { audienceFor, threadFor, conversationsFor, send, markRead, unreadCount };
+
+/**
+ * Every conversation this user is part of, newest first.
+ *
+ * The Conversations page has no item in its URL, so it needs a way to find the
+ * threads you are already in. A thread is (item, the other person); this rolls
+ * up each pair with its last message and unread count.
+ */
+async function myConversations(userId) {
+  return many(
+    `with pairs as (
+       select m.item_id,
+              case when m.sender_id = $1 then m.recipient_id else m.sender_id end as other_id,
+              m.body, m.created_at, m.read_at, m.sender_id
+         from messages m
+        where m.sender_id = $1 or m.recipient_id = $1
+     )
+     select p.item_id,
+            i.title as item_title,
+            i.status as item_status,
+            i.type as item_type,
+            p.other_id,
+            u.name as other_name,
+            count(*)::int as message_count,
+            max(p.created_at) as last_at,
+            (array_agg(p.body order by p.created_at desc))[1] as last_body,
+            count(*) filter (where p.sender_id <> $1 and p.read_at is null)::int as unread
+       from pairs p
+       join items i on i.id = p.item_id
+       join users u on u.id = p.other_id
+      group by p.item_id, i.title, i.status, i.type, p.other_id, u.name
+      order by last_at desc
+      limit 100`,
+    [userId]
+  );
+}
+
+module.exports.myConversations = myConversations;
