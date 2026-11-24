@@ -144,7 +144,7 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 }
 .site-header__inner {
   max-width:var(--max); margin:0 auto; padding:0 var(--pad); min-height:70px;
-  display:flex; align-items:center; gap:20px; flex-wrap:nowrap;
+  display:flex; align-items:center; gap:20px; flex-wrap:wrap;
 }
 .logo {
   font-family:var(--serif); font-weight:700; font-size:var(--t-xl); letter-spacing:-.02em;
