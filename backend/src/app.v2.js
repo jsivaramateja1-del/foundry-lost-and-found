@@ -108,6 +108,7 @@ app.get('/api/health/ready', async (req, res) => {
 app.use('/api/auth', require('./routes/auth.v2.routes'));
 app.use('/api/items', require('./routes/items.v2.routes'));
 app.use('/api/claims', require('./routes/claims.v2.routes'));
+app.use('/api/whatsapp', require('./routes/whatsapp.v2.routes'));
 
 const misc = require('./routes/misc.v2.routes');
 app.use('/api/notifications', misc.notifications);

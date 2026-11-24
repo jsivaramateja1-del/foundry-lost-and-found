@@ -187,6 +187,28 @@ router.get('/:id/similar', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * Fire-and-forget WhatsApp fanout for a new listing.
+ *
+ * Wrapped so nothing here can reach the caller: if the subscriber query fails,
+ * if Meta is down, or if the module is unconfigured, the listing still stands
+ * and the reporter still gets their 201.
+ */
+function announceToSubscribers(item) {
+  (async () => {
+    try {
+      const whatsapp = require('../lib/whatsapp');
+      if (!whatsapp.isConfigured()) return;
+      const subscriptions = require('../repositories/whatsapp');
+      const people = await subscriptions.listSubscribers();
+      if (!people.length) return;
+      await whatsapp.notifyNewListing(people, item);
+    } catch (err) {
+      console.log('[whatsapp] announcement skipped:', err && err.message);
+    }
+  })();
+}
+
 router.post('/', itemIpLimit, protect, itemAccountLimit, async (req, res, next) => {
   try {
     const b = req.body || {};
@@ -253,6 +275,11 @@ router.post('/', itemIpLimit, protect, itemAccountLimit, async (req, res, next) 
       location, customLocation: oneValue(b.customLocation), date, type,
       imageUrl: oneValue(b.imageUrl), reportedBy: req.user.id
     });
+    /* Announce the listing to students who opted in to WhatsApp alerts.
+       Deliberately not awaited: a messaging failure must never delay or fail
+       the response the reporter is waiting for, and the row is already saved. */
+    announceToSubscribers(created);
+
     res.status(201).json({ item: created });
   } catch (err) { next(err); }
 });

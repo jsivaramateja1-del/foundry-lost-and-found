@@ -91,6 +91,10 @@ jobs:
         working-directory: backend
         run: npm run test:pg
 
+      - name: WhatsApp opt-in routes (database)
+        working-directory: backend
+        run: npm run test:whatsapp-pg
+
       - name: Boot the real server against Postgres
         working-directory: backend
         run: npm run test:boot-v2

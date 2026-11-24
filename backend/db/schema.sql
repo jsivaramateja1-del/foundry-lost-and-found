@@ -225,3 +225,22 @@ CREATE TABLE IF NOT EXISTS user_badges (
 
 CREATE INDEX IF NOT EXISTS user_badges_user_idx ON user_badges (user_id);
 
+
+-- ---------------------------------------------------------------------------
+-- WhatsApp notification opt-in.
+--
+-- A separate table rather than columns on users: consent is its own fact with
+-- its own lifecycle, and it keeps the users table free of messaging concerns.
+-- Deleting a user removes their consent with them.
+--
+-- Absence of a row means "not subscribed". There is no default-on: messaging
+-- someone who did not ask for it would be wrong, and Meta requires consent.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS whatsapp_subscriptions (
+  user_id    uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  phone      text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS whatsapp_subscriptions_phone_idx ON whatsapp_subscriptions (phone);
