@@ -23,7 +23,10 @@ module.exports = defineConfig({
       PORT: String(PORT),
       DATABASE_URL: process.env.TEST_DATABASE_URL || '',
       PG_NO_SSL: 'true',
-      JWT_SECRET: process.env.JWT_SECRET || 'browser_test_secret_only',
+      // The server refuses a JWT_SECRET under 32 characters (it is an HMAC key),
+      // so this fixture must clear that floor.
+      JWT_SECRET: process.env.JWT_SECRET || 'browser_test_secret_that_is_over_32_chars',
+      HANDOVER_SECRET: process.env.HANDOVER_SECRET || 'browser_handover_secret_that_is_over_32',
       NODE_ENV: 'test',
       APP_URL: BASE,
       CLIENT_ORIGIN: BASE
