@@ -15,7 +15,7 @@ const { itemIpLimit, itemAccountLimit } = require('../middleware/rateLimit');
  * labelled as an image were stored and served back. The first bytes of a real
  * image are fixed per format, so check those.
  */
-const IMAGE_LIMIT_BYTES = 400 * 1024;
+const IMAGE_LIMIT_BYTES = 700 * 1024;
 
 const MAGIC = [
   { type: 'png',  sig: Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) },
@@ -25,7 +25,7 @@ const MAGIC = [
 
 function imageProblem(raw) {
   if (!raw) return null;
-  if (raw.length > IMAGE_LIMIT_BYTES) return 'That photo is too large (max 400 KB).';
+  if (raw.length > IMAGE_LIMIT_BYTES) return 'That photo is too large (max 700 KB).';
 
   const m = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(raw);
   if (!m) return 'The photo must be a PNG, JPEG or WebP image.';

@@ -53,7 +53,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 let lastFocused = null;
 
 // Matches IMAGE_LIMIT_BYTES in backend/src/routes/item.routes.js
-const MAX_IMAGE_BYTES = 400 * 1024;
+const MAX_IMAGE_BYTES = 700 * 1024;
 
 // How many listings arrive per request. The API paginates, so the board is
 // never silently cut off at a fixed number.
@@ -111,8 +111,11 @@ async function loadMeta() {
 
 /**
  * Shrink a chosen photo in the browser before it is sent.
- * The longest side is capped at 900px and the JPEG quality is stepped down
- * until the encoded string fits the server's 400 KB limit.
+ *
+ * The longest side is capped at 1600px and quality starts at 0.92, stepping
+ * down only as far as needed to fit the server's 700 KB limit. The previous
+ * 900px / 0.4 floor made item photos visibly soft, which matters when the
+ * whole point of the photo is recognising an object.
  */
 function shrinkImage(file) {
   return new Promise((resolve, reject) => {
@@ -126,7 +129,7 @@ function shrinkImage(file) {
       const img = new Image();
       img.onerror = () => reject(new Error('That file is not a readable image.'));
       img.onload = () => {
-        const scale = Math.min(1, 900 / Math.max(img.width, img.height));
+        const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
         const canvas = document.createElement('canvas');
         canvas.width = Math.round(img.width * scale);
         canvas.height = Math.round(img.height * scale);
@@ -135,7 +138,7 @@ function shrinkImage(file) {
     _ctx.fillRect(0, 0, canvas.width, canvas.height);
     _ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-        for (const quality of [0.82, 0.7, 0.55, 0.4]) {
+        for (const quality of [0.92, 0.86, 0.8, 0.72, 0.62]) {
           const dataUrl = canvas.toDataURL('image/jpeg', quality);
           const bytes = Math.floor(((dataUrl.split(',')[1] || '').length * 3) / 4);
           if (bytes <= MAX_IMAGE_BYTES) {

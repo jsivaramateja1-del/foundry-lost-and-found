@@ -20,7 +20,10 @@ const toItem = (row) => (row ? {
   date: row.date,
   type: row.type,
   status: row.status,
-  imageUrl: row.image_url,
+  /* Once an item is returned, its photo stops being public. The listing stays
+     visible for the record, but a picture of someone's property is no longer
+     needed by anyone browsing, and keeping it up invites it to be scraped. */
+  imageUrl: row.status === 'returned' ? null : row.image_url,
   verifiedAt: row.verified_at,
   verifiedBy: row.verified_by,
   reportedBy: row.reported_by,
