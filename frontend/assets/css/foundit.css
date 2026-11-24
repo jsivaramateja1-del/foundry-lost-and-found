@@ -1627,55 +1627,13 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
 
 .hero__aside { position: relative; }
 
-/* The object layer is deliberately inset beyond its parent so the composition
-   bleeds past the board. At 1100–1200px that bleed reached past the viewport
-   edge and produced 76px of horizontal scroll. `clip` trims it without
-   creating a scroll container, so nothing else on the page changes behaviour. */
+/* Backstop against any decorative bleed producing horizontal scroll. `clip`
+   trims it without creating a scroll container, so nothing else changes. */
 .hero { overflow-x: clip; }
-
-.objs {
-  position: absolute;
-  /* generous enough that objects sit around the board, not on top of it */
-  inset: -34px -64px -56px -72px;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.obj {
-  position: absolute;
-  margin: 0;
-  width: var(--w, 92px);
-  will-change: transform;
-  /* the parallax offset is written into these two variables by plan.js */
-  transform:
-    translate3d(calc(var(--px, 0) * var(--d, 1) * 1px), calc(var(--py, 0) * var(--d, 1) * 1px), 0)
-    rotate(var(--rot, 0deg));
-  transition: transform .35s cubic-bezier(.2,.7,.3,1);
-  filter: drop-shadow(0 14px 18px rgba(43,38,34,.16));
-  animation: floaty var(--dur, 9s) ease-in-out infinite;
-  animation-delay: var(--delay, 0s);
-}
-
-.obj svg { display: block; width: 100%; height: auto; }
-
-/* Depth is carried by size, blur and shadow softness together. Each object is
-   placed on the board's perimeter so none of them covers the caption or the
-   cards — they frame the composition instead of sitting on top of it. */
-.obj--keys   { --w: 76px;  --d: 0.9;  --rot: -10deg; --dur: 11s;   --delay: -.4s;  top: 10%;  left: -4%;  }
-.obj--phones { --w: 84px;  --d: 0.55; --rot: 8deg;   --dur: 13s;   --delay: -2.6s; top: 4%;   right: 6%;  filter: blur(.6px) drop-shadow(0 20px 24px rgba(43,38,34,.12)); }
-.obj--wallet { --w: 88px;  --d: 1.15; --rot: -6deg;  --dur: 9.5s;  --delay: -1.2s; bottom: 9%; left: -7%; }
-.obj--bottle { --w: 66px;  --d: 0.4;  --rot: 11deg;  --dur: 15s;   --delay: -3.8s; bottom: 2%; right: -5%; filter: blur(1.1px) drop-shadow(0 24px 28px rgba(43,38,34,.10)); }
-.obj--book   { --w: 74px;  --d: 0.75; --rot: 14deg;  --dur: 12s;   --delay: -5.1s; top: 34%;  right: -7%; }
 
 /* the hero needs room above so the top objects clear the fixed header */
 .hero { padding-top: clamp(28px, 4vw, 52px); }
 
-@keyframes floaty {
-  0%, 100% { translate: 0 0; }
-  50%      { translate: 0 -12px; }
-}
-
-/* the board sits above the objects and keeps its own presence */
 .hero__aside .slot,
 .hero__aside .slot__cap,
 .hero__aside .slot__note { position: relative; z-index: 1; }
@@ -2103,4 +2061,21 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
 @media (min-width: 821px) {
   /* desktop inline links: comfortably above the 24px AA floor */
   main a:not(.btn):not(.card):not(.chip) { min-height: 24px; display: inline-block; }
+}
+
+/* ---------------------------------------------------------------------------
+   Back to top
+   The pill stretches to its container, so the label was hugging the left edge.
+   An id selector is used because a later `.btn` rule was overriding the base
+   `justify-content`. Centring the label is the intent at every width.
+   --------------------------------------------------------------------------- */
+#back-to-top {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  width: 100%;
+}
+@media (min-width: 641px) {
+  #back-to-top { width: auto; min-width: 168px; }
 }
