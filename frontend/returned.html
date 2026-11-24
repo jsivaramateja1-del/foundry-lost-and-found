@@ -15,21 +15,44 @@
 <body>
 <a class="skip-link" href="#main">Skip to content</a>
 
-<header class="site-header">
-  <div class="wrap site-header__inner">
-    <a href="index.html" class="logo">foundry <span>Sai Campus / Lost + Found</span></a>
-    <nav class="nav" id="primary-nav" aria-label="Primary">
-      <a href="index.html">Browse items</a>
-      <a href="returned.html" aria-current="page">Returned</a>
-    </nav>
-    <div class="header-actions">
-      <button class="btn btn--ghost theme-toggle" data-theme-toggle aria-label="Switch colour theme">
-        <span data-theme-icon>☾</span>
-      </button>
-      <a class="btn" href="index.html">Back to the board</a>
+  <header class="site-header">
+    <div class="wrap site-header__inner">
+      <a href="index.html" class="logo">foundry <span>Sai Campus / Lost + Found</span></a>
+
+      <nav class="nav" id="primary-nav" aria-label="Primary">
+        <a href="index.html">Browse items</a>
+        <a href="returned.html">Returned</a>
+        <a href="conversations.html">Conversations</a>
+        <a href="index.html#cplan">Campus plan</a>
+        <a href="index.html#how">How it works</a>
+      </nav>
+
+      <div class="header-actions">
+        
+        <a href="dashboard.html" class="btn btn--ghost" data-auth-only hidden>Dashboard</a>
+        <a href="admin.html" class="btn btn--ghost" data-admin-only hidden>Admin</a>
+        <button class="btn btn--ghost" data-auth-only id="header-logout" hidden>Log out</button>
+        <a href="auth.html" class="btn btn--ghost" data-guest-only>Log in</a>
+        <div class="notifications" data-notifications data-auth-only hidden>
+          <button class="btn btn--ghost" data-notif-toggle aria-expanded="false" aria-controls="notif-panel">
+            Alerts <span class="notifications__badge" data-notif-badge hidden>0</span>
+          </button>
+          <div class="notifications__panel" id="notif-panel" data-notif-panel hidden>
+            <div class="notifications__head">
+              <strong>Notifications <span class="notifications__count" data-notif-count></span></strong>
+              <button class="btn btn--ghost" data-notif-read-all>Mark all read</button>
+            </div>
+            <ul class="notifications__list" data-notif-list></ul>
+          </div>
+        </div>
+        <button class="btn btn--solid" data-open-report="lost">Report an item</button>
+        <button class="btn btn--ghost theme-toggle" data-theme-toggle aria-label="Switch colour theme" title="Switch colour theme">
+          <span data-theme-icon>☾</span>
+        </button>
+        <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">Menu</button>
+      </div>
     </div>
-  </div>
-</header>
+  </header>
 
 <main id="main">
   <section class="wrap page-head">
@@ -46,26 +69,63 @@
       <h2 id="ret-heading">The record</h2>
       <span class="ct" id="ret-count">—</span>
     </div>
-    <div id="ret-empty" class="empty" hidden>
-      <p><strong>Nothing has been returned yet.</strong></p>
-      <p class="note">When an item is handed back, it moves here from the board.</p>
-      <div class="empty__actions"><a class="btn btn--solid" href="index.html">Back to the board</a></div>
+
+    <!-- The same filter set as the board, because a record is only useful if you
+         can search it. -->
+    <div class="filters" style="border:0;background:transparent;padding:0 0 14px;">
+      <div class="filters__row">
+        <div class="field">
+          <label for="ret-q">Keyword</label>
+          <input class="input" id="ret-q" type="search" placeholder="Bottle, ID card, headset" />
+        </div>
+        <div class="field">
+          <label for="ret-type">Type</label>
+          <select class="select" id="ret-type">
+            <option value="">Lost and found</option>
+            <option value="lost">Lost only</option>
+            <option value="found">Found only</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="ret-cat">Category</label>
+          <select class="select" id="ret-cat"><option value="">All categories</option></select>
+        </div>
+        <div class="field">
+          <label for="ret-loc">Location</label>
+          <select class="select" id="ret-loc"><option value="">All locations</option></select>
+        </div>
+        <div class="field">
+          <label for="ret-sort">Sort</label>
+          <select class="select" id="ret-sort">
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+          </select>
+        </div>
+      </div>
     </div>
-    <div class="grid" id="ret-grid" aria-busy="true"></div>
+
+    <div id="ret-empty" class="empty" hidden>
+      <p><strong id="ret-empty-title">Nothing has been returned yet.</strong></p>
+      <p class="note" id="ret-empty-note">When an item is handed back, it moves here from the board.</p>
+      <div class="empty__actions">
+        <a class="btn btn--solid" href="index.html">Back to the board</a>
+        <button class="btn" type="button" id="ret-reset">Clear filters</button>
+      </div>
+    </div>
+
     <p class="form-error" id="ret-error" data-show="false"></p>
+    <div class="grid" id="ret-grid" aria-busy="true"></div>
   </section>
 </main>
 
 <footer class="site-footer">
-  <div class="wrap">
-    <div class="footer__bottom">
-      <span>Foundry — Sai Campus Lost &amp; Found</span>
-      <span>Returned listings</span>
-    </div>
-  </div>
+  <div class="wrap"><div class="footer__bottom">
+    <span>Foundry — Sai Campus Lost &amp; Found</span><span>Returned listings</span>
+  </div></div>
 </footer>
 
 <script src="assets/js/api.js"></script>
+<script src="assets/js/nav.js"></script>
 <script>
 (function () {
   "use strict";
@@ -73,9 +133,14 @@
   var empty = document.getElementById('ret-empty');
   var count = document.getElementById('ret-count');
   var errorBox = document.getElementById('ret-error');
+  var q = document.getElementById('ret-q');
+  var type = document.getElementById('ret-type');
+  var cat = document.getElementById('ret-cat');
+  var loc = document.getElementById('ret-loc');
+  var sort = document.getElementById('ret-sort');
 
-  function show(msg) {
-    errorBox.textContent = msg;
+  function showError(msg) {
+    errorBox.textContent = msg || '';
     errorBox.dataset.show = msg ? 'true' : 'false';
   }
 
@@ -92,17 +157,65 @@
     '</article>';
   }
 
-  api('/items?status=returned&limit=60').then(function (data) {
-    var items = data.items || [];
-    grid.setAttribute('aria-busy', 'false');
-    count.textContent = items.length + (items.length === 1 ? ' item' : ' items');
-    if (!items.length) { empty.hidden = false; return; }
-    grid.innerHTML = items.map(card).join('');
-  }).catch(function (err) {
-    grid.setAttribute('aria-busy', 'false');
-    show(err.message || 'Could not load returned items');
-    empty.hidden = false;
+  function load() {
+    showError('');
+    grid.setAttribute('aria-busy', 'true');
+    var p = new URLSearchParams();
+    p.set('status', 'returned');
+    p.set('limit', '60');
+    if (q.value.trim()) p.set('q', q.value.trim());
+    if (type.value) p.set('type', type.value);
+    if (cat.value) p.set('category', cat.value);
+    if (loc.value) p.set('location', loc.value);
+    if (sort.value) p.set('sort', sort.value);
+
+    api('/items?' + p.toString()).then(function (data) {
+      var items = (data && data.items) || [];
+      grid.setAttribute('aria-busy', 'false');
+      count.textContent = items.length + (items.length === 1 ? ' item' : ' items');
+      if (!items.length) {
+        grid.innerHTML = '';
+        document.getElementById('ret-empty-title').textContent =
+          (q.value || type.value || cat.value || loc.value)
+            ? 'No returned items match those filters.'
+            : 'Nothing has been returned yet.';
+        document.getElementById('ret-empty-note').textContent =
+          (q.value || type.value || cat.value || loc.value)
+            ? 'Try clearing a filter.'
+            : 'When an item is handed back, it moves here from the board.';
+        empty.hidden = false;
+        return;
+      }
+      empty.hidden = true;
+      grid.innerHTML = items.map(card).join('');
+    }).catch(function (err) {
+      grid.setAttribute('aria-busy', 'false');
+      count.textContent = '—';
+      empty.hidden = true;
+      showError((err && err.message) || 'Could not load returned items.');
+    });
+  }
+
+  // fill the category and location lists from the server, so they can never
+  // drift from what the API accepts
+  api('/items/meta').then(function (meta) {
+    (meta.categories || []).forEach(function (c) {
+      var o = document.createElement('option'); o.value = c; o.textContent = c; cat.appendChild(o);
+    });
+    (meta.locations || []).forEach(function (l) {
+      var o = document.createElement('option'); o.value = l; o.textContent = l; loc.appendChild(o);
+    });
+  }).catch(function () { /* filters still work without the lists */ });
+
+  var timer = null;
+  function debounce() { clearTimeout(timer); timer = setTimeout(load, 250); }
+  q.addEventListener('input', debounce);
+  [type, cat, loc, sort].forEach(function (el) { el.addEventListener('change', load); });
+  document.getElementById('ret-reset').addEventListener('click', function () {
+    q.value = ''; type.value = ''; cat.value = ''; loc.value = ''; sort.value = 'newest'; load();
   });
+
+  load();
 })();
 </script>
 </body>

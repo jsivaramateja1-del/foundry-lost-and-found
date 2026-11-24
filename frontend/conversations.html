@@ -14,21 +14,43 @@
 <a class="skip-link" href="#main">Skip to content</a>
 
 <header class="site-header">
-  <div class="wrap site-header__inner">
-    <a href="index.html" class="logo">foundry <span>Sai Campus / Lost + Found</span></a>
-    <nav class="nav" id="primary-nav" aria-label="Primary">
-      <a href="index.html">Browse items</a>
-      <a href="returned.html">Returned</a>
-      <a href="conversations.html" aria-current="page">Conversations</a>
-    </nav>
-    <div class="header-actions">
-      <button class="btn btn--ghost theme-toggle" data-theme-toggle aria-label="Switch colour theme">
-        <span data-theme-icon>☾</span>
-      </button>
-      <a class="btn" href="index.html">Back to the board</a>
+    <div class="wrap site-header__inner">
+      <a href="index.html" class="logo">foundry <span>Sai Campus / Lost + Found</span></a>
+
+      <nav class="nav" id="primary-nav" aria-label="Primary">
+        <a href="index.html">Browse items</a>
+        <a href="returned.html">Returned</a>
+        <a href="conversations.html">Conversations</a>
+        <a href="index.html#cplan">Campus plan</a>
+        <a href="index.html#how">How it works</a>
+      </nav>
+
+      <div class="header-actions">
+        
+        <a href="dashboard.html" class="btn btn--ghost" data-auth-only hidden>Dashboard</a>
+        <a href="admin.html" class="btn btn--ghost" data-admin-only hidden>Admin</a>
+        <button class="btn btn--ghost" data-auth-only id="header-logout" hidden>Log out</button>
+        <a href="auth.html" class="btn btn--ghost" data-guest-only>Log in</a>
+        <div class="notifications" data-notifications data-auth-only hidden>
+          <button class="btn btn--ghost" data-notif-toggle aria-expanded="false" aria-controls="notif-panel">
+            Alerts <span class="notifications__badge" data-notif-badge hidden>0</span>
+          </button>
+          <div class="notifications__panel" id="notif-panel" data-notif-panel hidden>
+            <div class="notifications__head">
+              <strong>Notifications <span class="notifications__count" data-notif-count></span></strong>
+              <button class="btn btn--ghost" data-notif-read-all>Mark all read</button>
+            </div>
+            <ul class="notifications__list" data-notif-list></ul>
+          </div>
+        </div>
+        <button class="btn btn--solid" data-open-report="lost">Report an item</button>
+        <button class="btn btn--ghost theme-toggle" data-theme-toggle aria-label="Switch colour theme" title="Switch colour theme">
+          <span data-theme-icon>☾</span>
+        </button>
+        <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">Menu</button>
+      </div>
     </div>
-  </div>
-</header>
+  </header>
 
 <main id="main">
   <section class="wrap page-head">
@@ -84,6 +106,7 @@
 </footer>
 
 <script src="assets/js/api.js"></script>
+<script src="assets/js/nav.js"></script>
 <script>
 (function () {
   "use strict";
