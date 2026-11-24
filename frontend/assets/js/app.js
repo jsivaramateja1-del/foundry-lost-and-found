@@ -922,6 +922,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const appliedLocation = pick(el.location, qs.get('location'));
     if (appliedLocation) state.location = appliedLocation;
 
+    /* ?status=returned comes from the Returned link in the nav. It reuses the
+       board's own status filter, which is the mechanism that already works,
+       rather than a separate page. */
+    const appliedStatus = pick(el.status, qs.get('status'));
+    if (appliedStatus) state.status = appliedStatus;
+
     const appliedType = pick(el.type, qs.get('type'));
     if (appliedType) state.type = appliedType;
 
