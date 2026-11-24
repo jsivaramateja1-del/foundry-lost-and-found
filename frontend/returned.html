@@ -131,6 +131,21 @@
    problem in that helper cannot leave the page blank with no explanation. */
 (function () {
   "use strict";
+
+  /* Anything that goes wrong in this file must be visible on the page. A blank
+     panel tells nobody anything, and this page has been blank twice. */
+  function fatal(e) {
+    var box = document.getElementById('ret-error');
+    if (box) {
+      box.textContent = 'This page could not load its data: ' +
+        ((e && e.message) || e || 'unknown error');
+      box.dataset.show = 'true';
+    }
+    try { console.error('[returned]', e); } catch (_) {}
+  }
+  window.addEventListener('error', function (ev) { fatal(ev.error || ev.message); });
+  window.addEventListener('unhandledrejection', function (ev) { fatal(ev.reason); });
+
   var grid = document.getElementById('ret-grid');
   var empty = document.getElementById('ret-empty');
   var count = document.getElementById('ret-count');
