@@ -185,7 +185,7 @@ function cardMarkup(item) {
         <span>${ui.esc(place)}</span>
         <span>${ui.date(item.date)}</span>
       </div>
-      <a class="card__msg" href="conversations.html?item=${encodeURIComponent(item.id)}" aria-label="Message about ${ui.esc(item.title)}">Message</a>
+      <a class="card__msg" href="conversations.html?item=${encodeURIComponent(item.id)}" aria-label="Message or claim ${ui.esc(item.title)}">Message or claim</a>
     </div>`;
 }
 

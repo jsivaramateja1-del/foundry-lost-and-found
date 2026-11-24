@@ -66,6 +66,11 @@
           <textarea id="cv-body" class="textarea" rows="2" maxlength="1000" placeholder="Write a message…" required></textarea>
           <button type="submit" class="btn btn--solid" id="cv-send">Send</button>
         </form>
+        <p class="form-success" id="cv-claim-ok" data-show="false"></p>
+        <div id="cv-claim-wrap" hidden style="margin-top:12px;">
+          <button type="button" class="btn" id="cv-claim">Claim this item</button>
+          <p class="note" style="margin-top:6px;">Write why it is yours in the box above, then press Claim. The person who posted it decides.</p>
+        </div>
         <p class="note" style="margin-top:8px;">Photos and files can be shared by pasting a link into your message.</p>
       </div>
     </div>
@@ -157,6 +162,9 @@
         ? 'Only you can see these. Reply to anyone who has written about this item.'
         : 'Only the person who posted this item can see what you write.';
       renderPeople(data.conversations, data.isReporter);
+      /* One place to both talk and claim: the claim lives here so a reader has
+         a single next step instead of two buttons that do similar things. */
+      claimWrap.hidden = data.isReporter;
 
       var list = (state.withId ? data.messages : []);
       thread.innerHTML = list.length ? list.map(bubble).join('')
@@ -186,6 +194,29 @@
     } catch (err) {
       show('cv-send-error', err && err.message ? err.message : 'That message did not send');
     } finally { sendBtn.disabled = false; }
+  });
+
+  var claimBtn = document.getElementById('cv-claim');
+  var claimWrap = document.getElementById('cv-claim-wrap');
+  claimBtn.addEventListener('click', async function () {
+    var reason = (body.value || '').trim();
+    if (!reason) {
+      show('cv-send-error', 'Write why this item is yours in the box above, then press Claim.');
+      return;
+    }
+    claimBtn.disabled = true;
+    try {
+      await api('/claims', { method: 'POST', auth: true, body: { item: itemId, message: reason } });
+      body.value = '';
+      var ok = document.getElementById('cv-claim-ok');
+      ok.textContent = 'Claim sent. The person who posted this item has been notified and will reply here.';
+      ok.dataset.show = 'true';
+      claimWrap.hidden = true;
+      show('cv-send-error', '');
+      await load();
+    } catch (err) {
+      show('cv-send-error', err && err.message ? err.message : 'That claim did not send');
+    } finally { claimBtn.disabled = false; }
   });
 
   load();
