@@ -24,7 +24,6 @@
         <a href="returned.html">Returned</a>
         <a href="conversations.html">Conversations</a>
         <a href="index.html#cplan">Campus plan</a>
-        <a href="index.html#how">How it works</a>
       </nav>
 
       <div class="header-actions">
@@ -127,6 +126,9 @@
 <script src="assets/js/api.js"></script>
 <script src="assets/js/nav.js"></script>
 <script>
+/* Self-contained on purpose: this page must never fail silently. It talks to
+   the API with fetch directly rather than through the shared helper, so a
+   problem in that helper cannot leave the page blank with no explanation. */
 (function () {
   "use strict";
   var grid = document.getElementById('ret-grid');
@@ -139,6 +141,16 @@
   var loc = document.getElementById('ret-loc');
   var sort = document.getElementById('ret-sort');
 
+  function esc(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function when(v) {
+    var d = new Date(v);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
   function showError(msg) {
     errorBox.textContent = msg || '';
     errorBox.dataset.show = msg ? 'true' : 'false';
@@ -148,12 +160,12 @@
     var place = item.location === 'Other' && item.customLocation ? item.customLocation : item.location;
     return '<article class="card" style="cursor:default">' +
       '<div class="card__top">' +
-        '<span class="tag tag--' + item.type + '">' + (item.type === 'lost' ? 'Lost' : 'Found') + '</span>' +
+        '<span class="tag tag--' + esc(item.type) + '">' + (item.type === 'lost' ? 'Lost' : 'Found') + '</span>' +
         '<span class="status-pill status-pill--returned">Returned</span>' +
       '</div>' +
-      '<h3 class="card__title">' + ui.esc(item.title) + '</h3>' +
-      '<p class="card__desc">' + ui.esc(item.description) + '</p>' +
-      '<div class="card__meta"><span>' + ui.esc(place) + '</span><span>' + ui.date(item.date) + '</span></div>' +
+      '<h3 class="card__title">' + esc(item.title) + '</h3>' +
+      '<p class="card__desc">' + esc(item.description) + '</p>' +
+      '<div class="card__meta"><span>' + esc(place) + '</span><span>' + when(item.date) + '</span></div>' +
     '</article>';
   }
 
@@ -169,47 +181,60 @@
     if (loc.value) p.set('location', loc.value);
     if (sort.value) p.set('sort', sort.value);
 
-    api('/items?' + p.toString()).then(function (data) {
-      var items = (data && data.items) || [];
-      grid.setAttribute('aria-busy', 'false');
-      count.textContent = items.length + (items.length === 1 ? ' item' : ' items');
-      if (!items.length) {
-        grid.innerHTML = '';
-        document.getElementById('ret-empty-title').textContent =
-          (q.value || type.value || cat.value || loc.value)
-            ? 'No returned items match those filters.'
-            : 'Nothing has been returned yet.';
-        document.getElementById('ret-empty-note').textContent =
-          (q.value || type.value || cat.value || loc.value)
-            ? 'Try clearing a filter.'
-            : 'When an item is handed back, it moves here from the board.';
-        empty.hidden = false;
-        return;
-      }
-      empty.hidden = true;
-      grid.innerHTML = items.map(card).join('');
-    }).catch(function (err) {
-      grid.setAttribute('aria-busy', 'false');
-      count.textContent = '—';
-      empty.hidden = true;
-      showError((err && err.message) || 'Could not load returned items.');
-    });
+    var base = (typeof window.FOUNDRY_API_BASE === 'string' && window.FOUNDRY_API_BASE)
+      ? window.FOUNDRY_API_BASE.replace(/\/+$/, '')
+      : window.location.origin + '/api';
+
+    fetch(base + '/items?' + p.toString(), { headers: { Accept: 'application/json' } })
+      .then(function (r) {
+        if (!r.ok) throw new Error('The server answered ' + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        var items = (data && data.items) || [];
+        grid.setAttribute('aria-busy', 'false');
+        count.textContent = items.length + (items.length === 1 ? ' item' : ' items');
+        if (!items.length) {
+          grid.innerHTML = '';
+          var filtered = !!(q.value.trim() || type.value || cat.value || loc.value);
+          document.getElementById('ret-empty-title').textContent =
+            filtered ? 'No returned items match those filters.' : 'Nothing has been returned yet.';
+          document.getElementById('ret-empty-note').textContent =
+            filtered ? 'Try clearing a filter.' : 'When an item is handed back, it moves here from the board.';
+          empty.hidden = false;
+          return;
+        }
+        empty.hidden = true;
+        grid.innerHTML = items.map(card).join('');
+      })
+      .catch(function (err) {
+        grid.setAttribute('aria-busy', 'false');
+        count.textContent = '—';
+        empty.hidden = true;
+        showError((err && err.message) || 'Could not load returned items.');
+      });
   }
 
-  // fill the category and location lists from the server, so they can never
-  // drift from what the API accepts
-  api('/items/meta').then(function (meta) {
-    (meta.categories || []).forEach(function (c) {
-      var o = document.createElement('option'); o.value = c; o.textContent = c; cat.appendChild(o);
-    });
-    (meta.locations || []).forEach(function (l) {
-      var o = document.createElement('option'); o.value = l; o.textContent = l; loc.appendChild(o);
-    });
-  }).catch(function () { /* filters still work without the lists */ });
+  // Fill the lists from the server so they cannot drift from what it accepts.
+  (function meta() {
+    var base = (typeof window.FOUNDRY_API_BASE === 'string' && window.FOUNDRY_API_BASE)
+      ? window.FOUNDRY_API_BASE.replace(/\/+$/, '')
+      : window.location.origin + '/api';
+    fetch(base + '/items/meta', { headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (m) {
+        (m.categories || []).forEach(function (c) {
+          var o = document.createElement('option'); o.value = c; o.textContent = c; cat.appendChild(o);
+        });
+        (m.locations || []).forEach(function (l) {
+          var o = document.createElement('option'); o.value = l; o.textContent = l; loc.appendChild(o);
+        });
+      })
+      .catch(function () { /* filters still work without the lists */ });
+  })();
 
   var timer = null;
-  function debounce() { clearTimeout(timer); timer = setTimeout(load, 250); }
-  q.addEventListener('input', debounce);
+  q.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(load, 250); });
   [type, cat, loc, sort].forEach(function (el) { el.addEventListener('change', load); });
   document.getElementById('ret-reset').addEventListener('click', function () {
     q.value = ''; type.value = ''; cat.value = ''; loc.value = ''; sort.value = 'newest'; load();
