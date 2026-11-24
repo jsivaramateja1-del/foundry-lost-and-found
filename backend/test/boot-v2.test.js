@@ -51,7 +51,11 @@ const waitFor = async (url, tries = 40) => {
       PORT: String(PORT),
       DATABASE_URL: URL,
       PG_NO_SSL: 'true',
-      JWT_SECRET: 'boot_v2_test_secret_only',
+      // The server refuses a JWT_SECRET under 32 characters (it is an HMAC key),
+      // so this fixture must clear that floor. The value is still obviously a
+      // test fixture, and it is generated per run rather than reused.
+      JWT_SECRET: 'boot_v2_test_secret_that_is_over_32_chars_long',
+      HANDOVER_SECRET: 'boot_v2_handover_secret_that_is_over_32_chars',
       NODE_ENV: 'test',
       APP_URL: base
     },
