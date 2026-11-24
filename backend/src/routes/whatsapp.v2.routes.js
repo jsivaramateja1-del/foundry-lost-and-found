@@ -10,6 +10,7 @@ const express = require('express');
 const { protect } = require('../middleware/auth.v2');
 const subs = require('../repositories/whatsapp');
 const wa = require('../lib/whatsapp');
+const { whatsappIpLimit, whatsappAccountLimit } = require('../middleware/rateLimit');
 
 const router = express.Router();
 
@@ -25,7 +26,7 @@ router.get('/', protect, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post('/', protect, async (req, res, next) => {
+router.post('/', whatsappIpLimit, protect, whatsappAccountLimit, async (req, res, next) => {
   try {
     if (!wa.isConfigured()) {
       return res.status(503).json({
@@ -52,7 +53,7 @@ router.post('/', protect, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.delete('/', protect, async (req, res, next) => {
+router.delete('/', whatsappIpLimit, protect, whatsappAccountLimit, async (req, res, next) => {
   try {
     await subs.remove(req.user.id);
     res.json({ subscribed: false });

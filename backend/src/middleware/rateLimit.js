@@ -61,6 +61,11 @@ const claimIpLimit = ipLimiter('RATE_LIMIT_CLAIMS_IP_MAX', 60);
 const claimAccountLimit = accountLimiter('RATE_LIMIT_CLAIMS_MAX', 20);
 const reportIpLimit = ipLimiter('RATE_LIMIT_REPORTS_IP_MAX', 30);
 const reportAccountLimit = accountLimiter('RATE_LIMIT_REPORTS_MAX', 10);
+/* Opting a phone number in or out is a write. It is authenticated, but an
+   unthrottled write path is still a way to hammer the database, so it gets the
+   same treatment as every other write. */
+const whatsappIpLimit = ipLimiter('RATE_LIMIT_WHATSAPP_IP_MAX', 30);
+const whatsappAccountLimit = accountLimiter('RATE_LIMIT_WHATSAPP_MAX', 10);
 
 module.exports = {
   ipLimiter,
@@ -70,5 +75,7 @@ module.exports = {
   claimIpLimit,
   claimAccountLimit,
   reportIpLimit,
-  reportAccountLimit
+  reportAccountLimit,
+  whatsappIpLimit,
+  whatsappAccountLimit
 };
