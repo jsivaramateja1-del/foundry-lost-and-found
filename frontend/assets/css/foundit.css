@@ -1316,7 +1316,14 @@ html { scroll-padding-top:84px; }
   .site-header .header-actions { display: flex; position: static; gap: 0; }
   .site-header .nav { display: none; }
   /* only the two toggles survive the collapse */
-  .site-header .header-actions > *:not(.theme-toggle):not(.menu-toggle) { display: none; }
+  /* Hide navigation actions on mobile, but never hide #who: it is the signed-in
+     user's identity, not an action, and it must stay readable. */
+  .site-header .header-actions > *:not(.theme-toggle):not(.menu-toggle):not(#who) { display: none; }
+  .site-header .header-actions #who {
+    display: block; order: -1; flex: 1 0 100%; text-align: right;
+    font-size: var(--t-xs); margin: 0 0 2px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
 
   .site-header .theme-toggle,
   .site-header .menu-toggle {
