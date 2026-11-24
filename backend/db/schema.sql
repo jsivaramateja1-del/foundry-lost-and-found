@@ -244,3 +244,28 @@ CREATE TABLE IF NOT EXISTS whatsapp_subscriptions (
 );
 
 CREATE INDEX IF NOT EXISTS whatsapp_subscriptions_phone_idx ON whatsapp_subscriptions (phone);
+
+-- ---------------------------------------------------------------------------
+-- Messages between the reporter of an item and the people who claimed it.
+--
+-- A thread belongs to an ITEM, not to two people: authorisation is then "are
+-- you the reporter, or a claimant of this item", which is one rule to enforce
+-- and one rule to test. A person-to-person thread would also reveal that two
+-- students had dealt with each other before.
+--
+-- sender_id and recipient_id are both stored so a thread can be listed without
+-- a join on claims, and so a message survives its claim being withdrawn.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS messages (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  item_id      uuid NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  sender_id    uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  recipient_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body         text NOT NULL CHECK (char_length(body) BETWEEN 1 AND 1000),
+  read_at      timestamptz,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT messages_no_self_send CHECK (sender_id <> recipient_id)
+);
+
+CREATE INDEX IF NOT EXISTS messages_item_idx ON messages (item_id, created_at);
+CREATE INDEX IF NOT EXISTS messages_inbox_idx ON messages (recipient_id, read_at);

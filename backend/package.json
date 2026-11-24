@@ -21,6 +21,7 @@
     "reconcile:points": "node scripts/reconcile-points-pg.js",
     "test:whatsapp": "node test/whatsapp.test.js",
     "test:whatsapp-pg": "node test/whatsapp.pg.test.js",
+    "test:messages-pg": "node test/messages.pg.test.js",
     "test:connection": "node test/connection.test.js",
     "seed:demo": "node scripts/seed-demo-items.js",
     "seed:users": "node scripts/make-test-users.js",

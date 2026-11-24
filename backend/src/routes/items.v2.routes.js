@@ -284,6 +284,8 @@ router.post('/', itemIpLimit, protect, itemAccountLimit, async (req, res, next) 
   } catch (err) { next(err); }
 });
 
+router.use('/:id/messages', require('./messages.v2.routes'));
+
 router.put('/:id', protect, async (req, res, next) => {
   try {
     const existing = await items.findByIdRaw(req.params.id);
