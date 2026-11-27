@@ -614,6 +614,16 @@ function prepareReportForm(meta) {
     customCategoryField.hidden = !isOther;
     if (!isOther) document.getElementById('rf-custom-category').value = '';
 
+    /* With Category set to Other the subcategory list is empty, so it could
+       never be satisfied - it stayed on "Choose a subcategory" with a red
+       border and blocked the form. The free-text box replaces it. */
+    const subField = subcategoryField.closest('.field');
+    if (subField) subField.hidden = isOther;
+    if (isOther) {
+      subcategoryField.value = '';
+      subcategoryField.required = false;
+    }
+
     syncSubcategories();
   });
   location.addEventListener('change', () => {
