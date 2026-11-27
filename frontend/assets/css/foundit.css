@@ -2251,3 +2251,8 @@ html.theme-changing .btn {
   box-shadow:var(--shadow);
 }
 .file-input::file-selector-button:hover { background:var(--sunken); }
+
+/* the file field must never be covered by anything */
+.file-input { position:relative; z-index:2; pointer-events:auto; }
+.avatar-url { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.avatar-url .input { min-width:220px; flex:1 1 220px; }

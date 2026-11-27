@@ -499,10 +499,14 @@ router.patch('/me/avatar', protect, async (req, res, next) => {
       await one('update users set avatar_url = null where id = $1', [req.user.id]);
       return res.status(200).json({ avatarUrl: null });
     }
-    if (!/^data:image\/(png|jpeg|webp);base64,/.test(raw)) {
-      return res.status(400).json({ message: 'Choose a PNG, JPEG or WebP image' });
+    /* Either an uploaded image (a data URL) or a link to one. Both are stored
+       the same way; the browser loads whichever it is. */
+    var isData = /^data:image\/(png|jpeg|webp);base64,/.test(raw);
+    var isLink = /^https:\/\/[^\s]+$/i.test(raw);
+    if (!isData && !isLink) {
+      return res.status(400).json({ message: 'Choose a PNG, JPEG or WebP image, or paste a link to one' });
     }
-    if (raw.length > 400 * 1024) {
+    if (isData && raw.length > 400 * 1024) {
       return res.status(400).json({ message: 'That photo is too large (max 400 KB)' });
     }
     const row = await one('update users set avatar_url = $2 where id = $1 returning avatar_url', [req.user.id, raw]);
