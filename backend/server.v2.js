@@ -27,6 +27,26 @@ const PORT = process.env.PORT || 5000;
     }
     await connectDB();
 
+    /* Apply the schema on boot.
+       db/schema.sql is written with CREATE TABLE IF NOT EXISTS and CREATE INDEX
+       IF NOT EXISTS throughout, so this is additive: it creates anything missing
+       and never drops or alters an existing table or row. Without it a deploy
+       that adds a table (messages, whatsapp_subscriptions) would 500 on the
+       endpoints that read it, because nothing ever ran the migration. */
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const schemaPath = path.join(__dirname, 'db', 'schema.sql');
+      if (fs.existsSync(schemaPath)) {
+        const sql = fs.readFileSync(schemaPath, 'utf8');
+        const { db } = require('./src/config/pg');
+        await db().query(sql);
+        console.log('Schema: applied (additive only)');
+      }
+    } catch (err) {
+      console.error('Schema: could not be applied —', err.message);
+    }
+
     // Say once, at boot, whether mail can work. A missing key then shows up in
     // the deploy log instead of surfacing as a silent signup failure.
     if (process.env.BREVO_API_KEY && process.env.BREVO_SENDER) {
