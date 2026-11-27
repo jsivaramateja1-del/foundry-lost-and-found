@@ -110,30 +110,6 @@
     });
   }
 
-  /* Paste a link. No dialog, no file reading - just a URL the browser loads. */
-  var urlInput = document.getElementById("avatar-url");
-  var urlSave = document.getElementById("avatar-url-save");
-  if (urlInput && urlSave) {
-    urlSave.addEventListener("click", function () {
-      var note = document.getElementById("avatar-note");
-      var link = (urlInput.value || "").trim();
-      if (!/^https?:\/\//i.test(link)) {
-        note.textContent = "Paste a link starting with http:// or https://";
-        return;
-      }
-      note.textContent = "Saving…";
-      api("/auth/me/avatar", { method: "PATCH", auth: true, body: { avatar: link } })
-        .then(function (r) {
-          var av = document.getElementById("avatar-preview");
-          av.style.backgroundImage = "url(" + r.avatarUrl + ")";
-          av.textContent = "";
-          note.textContent = "Photo updated.";
-          urlInput.value = "";
-        })
-        .catch(function (e) { note.textContent = (e && e.message) || "That link could not be saved."; });
-    });
-  }
-
   if (document.getElementById("avatar-clear")) {
     document.getElementById("avatar-clear").addEventListener("click", function () {
       api("/auth/me/avatar", { method: "PATCH", auth: true, body: { avatar: "" } })
