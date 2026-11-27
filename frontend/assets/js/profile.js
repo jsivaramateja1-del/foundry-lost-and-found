@@ -54,33 +54,45 @@
 
   function upload(f) {
     if (!f) return;
-      var note = document.getElementById("avatar-note");
-      note.textContent = "Reading the file…";
-      var reader = new FileReader();
-      reader.onload = function () {
-        var img = new Image();
-        img.onload = function () {
-          var scale = Math.min(1, 320 / Math.max(img.width, img.height));
-          var c = document.createElement("canvas");
-          c.width = Math.round(img.width * scale);
-          c.height = Math.round(img.height * scale);
-          c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-          var data = c.toDataURL("image/jpeg", 0.85);
-          note.textContent = "Uploading… (" + Math.round(data.length / 1024) + " KB)";
-          api("/auth/me/avatar", { method: "PATCH", auth: true, body: { avatar: data } })
-            .then(function (r) {
-              var av = document.getElementById("avatar-preview");
-              av.style.backgroundImage = "url(" + r.avatarUrl + ")";
-              av.textContent = "";
-              note.textContent = "Photo updated.";
-            })
-            .catch(function (e) { note.textContent = (e && e.message) || "That photo could not be saved."; });
-        };
-        img.onerror = function () { note.textContent = "That file could not be read as an image."; };
-        img.src = reader.result;
-      };
-      reader.onerror = function () { note.textContent = "That file could not be read."; };
-      reader.readAsDataURL(f);
+    var note = document.getElementById("avatar-note");
+
+    /* URL.createObjectURL instead of FileReader.
+       FileReader pulls the whole file into a data URL in memory and reports
+       "could not be read" when that fails - which is what happened with a real
+       camera photo. An object URL is a reference, not a copy, so the browser
+       decodes the image straight from disk. It is also revoked afterwards so
+       the memory is released. */
+    var url = URL.createObjectURL(f);
+    var img = new Image();
+
+    img.onload = function () {
+      try {
+        var scale = Math.min(1, 320 / Math.max(img.width, img.height));
+        var c = document.createElement("canvas");
+        c.width = Math.round(img.width * scale) || 1;
+        c.height = Math.round(img.height * scale) || 1;
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        var data = c.toDataURL("image/jpeg", 0.85);
+        note.textContent = "Uploading… (" + Math.round(data.length / 1024) + " KB)";
+        api("/auth/me/avatar", { method: "PATCH", auth: true, body: { avatar: data } })
+          .then(function (r) {
+            var av = document.getElementById("avatar-preview");
+            av.style.backgroundImage = "url(" + r.avatarUrl + ")";
+            av.textContent = "";
+            note.textContent = "Photo updated.";
+          })
+          .catch(function (e) { note.textContent = (e && e.message) || "That photo could not be saved."; });
+      } catch (e) {
+        note.textContent = "That image could not be processed: " + (e && e.message);
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    };
+    img.onerror = function () {
+      URL.revokeObjectURL(url);
+      note.textContent = "That file is not an image this browser can open.";
+    };
+    img.src = url;
   }
 
   if (fileInput) {
