@@ -2254,3 +2254,7 @@ html.theme-changing .btn {
 
 /* the file field must never be covered by anything */
 .file-input { position:relative; z-index:2; pointer-events:auto; }
+
+/* a photo attached to a chat message */
+.bubble__photo { display:block; max-width:260px; width:100%; height:auto;
+  border:2px solid var(--line); border-radius:8px; margin-bottom:6px; }

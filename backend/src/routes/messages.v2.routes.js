@@ -37,7 +37,7 @@ router.get('/', protect, async (req, res, next) => {
 router.post('/', protect, async (req, res, next) => {
   try {
     const body = req.body || {};
-    const result = await messages.send(req.params.id, req.user.id, body.recipientId, body.body);
+    const result = await messages.send(req.params.id, req.user.id, body.recipientId, body.body, body.image);
     if (!result.ok) return res.status(result.status).json({ message: result.error });
     res.status(201).json({ message: result.message });
   } catch (err) { next(err); }

@@ -288,3 +288,14 @@ CREATE INDEX IF NOT EXISTS typing_item_idx ON typing (item_id, updated_at);
 -- Profile photo. Stored the same way item photos are (a data URL), so it needs
 -- no extra service. Nullable: most accounts will never set one.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url text;
+
+-- A photo can be attached to a chat message, stored the same way item photos
+-- are: a data URL. Nullable, because most messages are text only.
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS image_url text;
+
+-- A message may now be a photo with no text, so the body check has to allow an
+-- empty body when an image is present. Dropped and re-added each boot so the
+-- rule is always the current one.
+ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_body_check;
+ALTER TABLE messages ADD CONSTRAINT messages_body_check
+  CHECK ((char_length(btrim(body)) BETWEEN 1 AND 1000) OR (image_url IS NOT NULL));

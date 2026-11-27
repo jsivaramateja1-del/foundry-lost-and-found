@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Conversations — Foundry</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <script src="assets/js/theme-init.js?v=20261127t"></script>
+  <script src="assets/js/theme-init.js?v=20261127u"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/foundit.css?v=20261127t" />
+  <link rel="stylesheet" href="assets/css/foundit.css?v=20261127u" />
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to content</a>
@@ -87,8 +87,11 @@
         <p class="form-error" id="cv-send-error" data-show="false"></p>
         <form id="cv-form" class="thread__form">
           <label class="visually-hidden" for="cv-body">Your message</label>
-          <textarea id="cv-body" class="textarea" rows="2" maxlength="1000" placeholder="Write a message…" required></textarea>
+          <textarea id="cv-body" class="textarea" rows="2" maxlength="1000" placeholder="Write a message…"></textarea>
+          <input id="cv-photo" type="file" class="visually-hidden" accept="image/png,image/jpeg,image/webp">
+          <button type="button" class="btn" id="cv-attach">Attach photo</button>
           <button type="submit" class="btn btn--solid" id="cv-send">Send</button>
+          <p class="note" id="cv-attach-note" style="flex:1 1 100%;margin:6px 0 0"></p>
         </form>
         <p class="form-success" id="cv-claim-ok" data-show="false"></p>
         <div id="cv-claim-wrap" hidden style="margin-top:12px;">
@@ -107,9 +110,9 @@
   </div></div>
 </footer>
 
-<script src="assets/js/api.js?v=20261127t"></script>
-<script src="assets/js/nav.js?v=20261127t"></script>
-<script src="assets/js/theme.js?v=20261127t"></script>
-<script src="assets/js/conversations.js?v=20261127t"></script>
+<script src="assets/js/api.js?v=20261127u"></script>
+<script src="assets/js/nav.js?v=20261127u"></script>
+<script src="assets/js/theme.js?v=20261127u"></script>
+<script src="assets/js/conversations.js?v=20261127u"></script>
 </body>
 </html>

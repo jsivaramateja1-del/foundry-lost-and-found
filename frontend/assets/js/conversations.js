@@ -40,8 +40,11 @@
 
   function bubble(m) {
     var mine = m.sender_id === state.me;
-    return '<div class="bubble ' + (mine ? 'bubble--mine' : '') + '">' +
-      '<p class="bubble__body">' + ui.esc(m.body) + '</p>' +
+    var photo = m.image_url
+      ? '<img class="bubble__photo" src="' + ui.esc(m.image_url) + '" alt="Photo attached to this message">'
+      : '';
+    var text = m.body ? '<p class="bubble__body">' + ui.esc(m.body) + '</p>' : '';
+    return '<div class="bubble ' + (mine ? 'bubble--mine' : '') + '">' + photo + text +
       '<p class="bubble__meta">' + ui.esc(m.sender_name) + ' · ' + ui.date(m.created_at) + '</p>' +
     '</div>';
   }
@@ -143,17 +146,61 @@
       .catch(function () { /* a missed ping is harmless */ });
   });
 
+  /* A photo is shrunk here before it is sent, the same way item photos are,
+     so a phone picture does not travel at full size. */
+  var pendingPhoto = "";
+  var photoInput = document.getElementById("cv-photo");
+  var attachBtn = document.getElementById("cv-attach");
+  var attachNote = document.getElementById("cv-attach-note");
+
+  if (attachBtn && photoInput) {
+    attachBtn.addEventListener("click", function () { photoInput.click(); });
+    photoInput.addEventListener("change", function () {
+      var f = photoInput.files && photoInput.files[0];
+      if (!f) return;
+      if (!/^image\//.test(f.type || "")) {
+        attachNote.textContent = "That is not an image: " + (f.type || "unknown type");
+        return;
+      }
+      attachNote.textContent = "Reading…";
+      var reader = new FileReader();
+      reader.onerror = function () { attachNote.textContent = "That file could not be read."; };
+      reader.onload = function () {
+        var img = new Image();
+        img.onerror = function () { attachNote.textContent = "That image could not be decoded."; };
+        img.onload = function () {
+          var scale = Math.min(1, 1200 / Math.max(img.width, img.height));
+          var c = document.createElement("canvas");
+          c.width = Math.max(1, Math.round(img.width * scale));
+          c.height = Math.max(1, Math.round(img.height * scale));
+          var ctx = c.getContext("2d");
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, c.width, c.height);
+          ctx.drawImage(img, 0, 0, c.width, c.height);
+          pendingPhoto = c.toDataURL("image/jpeg", 0.8);
+          attachNote.textContent = "Photo ready (" +
+            Math.round(((pendingPhoto.split(",")[1] || "").length * 3) / 4 / 1024) + " KB). Press Send.";
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(f);
+    });
+  }
+
   form.addEventListener('submit', async function (e) {
     e.preventDefault();
     var text = (body.value || '').trim();
-    if (!text) return;
+    if (!text && !pendingPhoto) return;
     var to = state.withId || state.reporterId;
     if (!to) { show('cv-send-error', 'There is no one to send to yet'); return; }
     sendBtn.disabled = true;
     try {
       await api('/items/' + encodeURIComponent(itemId) + '/messages',
-        { method: 'POST', auth: true, body: { recipientId: to, body: text } });
+        { method: 'POST', auth: true, body: { recipientId: to, body: text, image: pendingPhoto } });
       body.value = '';
+      pendingPhoto = '';
+      if (photoInput) photoInput.value = '';
+      if (attachNote) attachNote.textContent = '';
       show('cv-send-error', '');
       await loadThread();
     } catch (err) {

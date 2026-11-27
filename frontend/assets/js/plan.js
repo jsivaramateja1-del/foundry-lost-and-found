@@ -437,47 +437,4 @@
   if (reduced) root.classList.add('no-motion');
 })();
 
-/* ---------------------------------------------------------------------------
-   Hero parallax.
-   Each object carries a data-depth multiplier; the pointer position is mapped
-   to a small offset and written into CSS variables, so the movement is pure
-   transform and never triggers layout. Skipped entirely when the user prefers
-   reduced motion, and never bound on touch devices where there is no pointer
-   to track.
-   --------------------------------------------------------------------------- */
-(function heroParallax() {
-  var root = document.querySelector('[data-parallax-root]');
-  if (!root) return;
 
-  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
-  if (reduce && reduce.matches) return;
-  if (window.matchMedia && window.matchMedia('(hover: none)').matches) return;
-
-  var objs = [].slice.call(root.querySelectorAll('[data-depth]'));
-  if (!objs.length) return;
-  objs.forEach(function (el) { el.style.setProperty('--d', el.getAttribute('data-depth') || '1'); });
-
-  var frame = null;
-  function apply(nx, ny) {
-    // 18px of travel at most: enough to feel alive, not enough to distract.
-    var px = nx * 18;
-    var py = ny * 18;
-    objs.forEach(function (el) {
-      el.style.setProperty('--px', px.toFixed(2));
-      el.style.setProperty('--py', py.toFixed(2));
-    });
-  }
-
-  window.addEventListener('pointermove', function (e) {
-    if (frame) return;
-    frame = requestAnimationFrame(function () {
-      frame = null;
-      var nx = (e.clientX / window.innerWidth) * 2 - 1;
-      var ny = (e.clientY / window.innerHeight) * 2 - 1;
-      apply(nx, ny);
-    });
-  }, { passive: true });
-
-  // Returning the pointer to rest lets the objects settle back.
-  document.addEventListener('pointerleave', function () { apply(0, 0); });
-})();

@@ -49,7 +49,7 @@ async function threadFor(itemId, userId, withId) {
   return many(
     `select * from (
        select m.id::text as id, m.item_id, m.sender_id, m.recipient_id, m.body,
-              m.read_at, m.created_at, s.name as sender_name
+              m.image_url, m.read_at, m.created_at, s.name as sender_name
          from messages m
          join users s on s.id = m.sender_id
         where m.item_id = $1
@@ -59,6 +59,7 @@ async function threadFor(itemId, userId, withId) {
        select c.id::text as id, c.item as item_id, c.claimant as sender_id,
               i.reported_by as recipient_id,
               coalesce(nullif(btrim(c.message), ''), 'Claimed this item') as body,
+              null::text as image_url,
               null::timestamptz as read_at, c.created_at, u.name as sender_name
          from claims c
          join items i on i.id = c.item
@@ -93,7 +94,7 @@ async function conversationsFor(itemId, userId) {
   return rows.map((r) => ({ otherId: r.other_id, otherName: r.other_name, count: r.n, lastAt: r.last_at }));
 }
 
-async function send(itemId, senderId, recipientId, body) {
+async function send(itemId, senderId, recipientId, body, image) {
   const audience = await audienceFor(itemId, senderId);
   if (!audience) return { ok: false, status: 403, error: 'That listing does not exist' };
 
@@ -108,14 +109,26 @@ async function send(itemId, senderId, recipientId, body) {
   if (senderId === recipientId) return { ok: false, status: 400, error: 'You cannot message yourself' };
 
   const text = String(body == null ? '' : body).trim();
-  if (!text) return { ok: false, status: 400, error: 'Write a message first' };
+  const photo = image == null ? '' : String(image);
+
+  /* A photo on its own is a complete message; text on its own is a complete
+     message; neither is not. */
+  if (!text && !photo) return { ok: false, status: 400, error: 'Write a message or attach a photo' };
   if (text.length > 1000) return { ok: false, status: 400, error: 'That message is too long (max 1000 characters)' };
+  if (photo) {
+    if (!/^data:image\/(png|jpeg|webp);base64,/.test(photo)) {
+      return { ok: false, status: 400, error: 'Attach a PNG, JPEG or WebP image' };
+    }
+    if (photo.length > 700 * 1024) {
+      return { ok: false, status: 400, error: 'That photo is too large (max 700 KB after shrinking)' };
+    }
+  }
 
   const row = await one(
-    `insert into messages (item_id, sender_id, recipient_id, body)
-     values ($1,$2,$3,$4)
-     returning id, item_id, sender_id, recipient_id, body, read_at, created_at`,
-    [itemId, senderId, recipientId, text]
+    `insert into messages (item_id, sender_id, recipient_id, body, image_url)
+     values ($1,$2,$3,$4,$5)
+     returning id, item_id, sender_id, recipient_id, body, image_url, read_at, created_at`,
+    [itemId, senderId, recipientId, text, photo || null]
   );
   return { ok: true, message: row };
 }
