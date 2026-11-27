@@ -90,7 +90,12 @@
     };
     img.onerror = function () {
       URL.revokeObjectURL(url);
-      note.textContent = "That file is not an image this browser can open.";
+      /* This message used to claim the file was not an image. It was wrong: a
+         Content-Security-Policy block also lands here, and that hid the real
+         cause for hours. Name both possibilities. */
+      note.textContent = "That image could not be displayed. Either the file is " +
+        "not an image this browser can open, or the page's security policy " +
+        "blocked it - check the Console for a Content-Security-Policy message.";
     };
     img.src = url;
   }
