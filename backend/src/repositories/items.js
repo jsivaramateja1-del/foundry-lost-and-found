@@ -82,7 +82,19 @@ const buildFilter = (f = {}) => {
   if (f.reportedBy) add('i.reported_by = $?', f.reportedBy);
   if (f.from) add('i.date >= $?', f.from);
   if (f.to) add('i.date <= $?', f.to);
-  if (f.q) add("to_tsvector('simple', i.title || ' ' || i.description) @@ plainto_tsquery('simple', $?)", f.q);
+  /* Full-text search alone only matches whole words, so typing "Blu" found
+     nothing until "Blue" was complete. The ILIKE arms make it a prefix and
+     substring match as well, which is what a search box is expected to do.
+     Three placeholders because add() only substitutes the first $?. */
+  if (f.q) {
+    params.push(f.q, f.q, f.q);
+    const n = params.length;
+    clauses.push(
+      `(to_tsvector('simple', i.title || ' ' || i.description) @@ plainto_tsquery('simple', $${n - 2})
+        or i.title ilike '%' || $${n - 1} || '%'
+        or i.description ilike '%' || $${n} || '%')`
+    );
+  }
 
   return { where: clauses.length ? `where ${clauses.join(' and ')}` : '', params };
 };
