@@ -2206,7 +2206,7 @@ a.card { text-decoration:none; color:inherit; }
 }
 ::view-transition-old(root) {
   z-index: 1;
-  animation: theme-fade-out 500ms cubic-bezier(.4,0,.2,1) forwards;
+  animation: theme-fade-out 260ms cubic-bezier(.4,0,.2,1) forwards;
 }
 ::view-transition-new(root) {
   z-index: 2;
@@ -2222,9 +2222,9 @@ html.theme-changing .site-header,
 html.theme-changing .card,
 html.theme-changing .panel,
 html.theme-changing .btn {
-  transition: background-color 500ms cubic-bezier(.4,0,.2,1),
-              color 500ms cubic-bezier(.4,0,.2,1),
-              border-color 500ms cubic-bezier(.4,0,.2,1);
+  transition: background-color 380ms cubic-bezier(.4,0,.2,1),
+              color 380ms cubic-bezier(.4,0,.2,1),
+              border-color 380ms cubic-bezier(.4,0,.2,1);
 }
 
 [data-theme-toggle] [data-theme-icon] {

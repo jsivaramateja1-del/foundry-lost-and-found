@@ -13,7 +13,10 @@
 (function () {
   "use strict";
 
-  var DURATION = 500;
+  /* Tuned down from 500ms. A theme switch is a small state change and half a
+     second reads as lag; 380ms is still clearly animated but feels immediate.
+     The fade-out is shorter still (see the CSS) so the circle leads the eye. */
+  var DURATION = 380;
   var root = document.documentElement;
 
   function prefersReduced() {
@@ -37,7 +40,7 @@
     icon.animate(
       [
         { transform: "rotate(0deg) scale(1)" },
-        { transform: "rotate(180deg) scale(0.6)" },
+        { transform: "rotate(180deg) scale(0.72)" },
         { transform: "rotate(360deg) scale(1)" }
       ],
       { duration: DURATION, easing: "cubic-bezier(.4,0,.2,1)" }
