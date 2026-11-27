@@ -40,8 +40,13 @@ const findByItem = async (itemId) =>
                 where c.item=$1 order by c.created_at desc`, [itemId])).map(toClaim);
 
 const findByClaimant = async (userId) =>
-  (await many(`select ${COLUMNS} from claims c join users u on u.id=c.claimant
-                where c.claimant=$1 order by c.created_at desc`, [userId])).map(toClaim);
+  (await many(`select ${COLUMNS}, i.title as item_title
+                 from claims c
+                 join users u on u.id = c.claimant
+                 join items i on i.id = c.item
+                where c.claimant = $1
+                order by c.created_at desc`, [userId]))
+    .map((r) => ({ ...toClaim(r), itemTitle: r.item_title }));
 
 // LEFT JOIN, not INNER. With an inner join a claim whose claimant row is gone
 // returns null and the caller reports "claim not found" — a different failure

@@ -45,7 +45,15 @@
 
   function card(item) {
     var place = item.location === 'Other' && item.customLocation ? item.customLocation : item.location;
+    var media = item.imageUrl
+      ? '<div class="card__media"><img src="' + esc(item.imageUrl) + '" alt="' + esc(item.title) + '" loading="lazy"></div>'
+      : '<div class="card__media card__media--empty" aria-hidden="true">' +
+        '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6">' +
+        '<rect x="3" y="4" width="18" height="16" rx="2"></rect>' +
+        '<circle cx="8.5" cy="9.5" r="1.5"></circle>' +
+        '<path d="M21 16l-5-5-4 4-2-2-5 5"></path></svg><span>No photo</span></div>';
     return '<article class="card" style="cursor:default">' +
+      media +
       '<div class="card__top">' +
         '<span class="tag tag--' + esc(item.type) + '">' + (item.type === 'lost' ? 'Lost' : 'Found') + '</span>' +
         '<span class="status-pill status-pill--returned">Returned</span>' +

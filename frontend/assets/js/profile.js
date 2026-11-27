@@ -43,8 +43,8 @@
       row("On the leaderboard", u.leaderboardOptOut ? "No, you opted out" : "Yes");
   }).catch(function (e) { fail((e && e.message) || "Could not load your profile"); });
 
-  api("/dashboard/mine", { auth: true }).then(function (d) {
-    var items = (d && d.items) || [];
+  api("/dashboard/me", { auth: true }).then(function (d) {
+    var items = (d && (d.items || d.listings)) || [];
     var box = document.getElementById("profile-listings");
     if (!items.length) { box.innerHTML = '<p class="note">You have not posted anything yet.</p>'; return; }
     box.innerHTML = '<div class="grid">' + items.map(function (it) {
@@ -66,7 +66,7 @@
     if (!claims.length) { box.innerHTML = '<p class="note">You have not claimed anything yet.</p>'; return; }
     box.innerHTML = '<table class="table"><thead><tr><th>Item</th><th>Your message</th><th>Status</th><th>Sent</th></tr></thead><tbody>' +
       claims.map(function (c) {
-        return "<tr><td>" + esc(c.itemTitle || c.item || "") + "</td><td>" + esc(c.message || "") +
+        return "<tr><td>" + esc(c.itemTitle || c.title || c.item || "") + "</td><td>" + esc(c.message || "") +
           "</td><td>" + esc(c.status || "") + "</td><td>" + when(c.createdAt) + "</td></tr>";
       }).join("") + "</tbody></table>";
   }).catch(function () {

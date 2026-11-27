@@ -43,14 +43,30 @@ async function threadFor(itemId, userId, withId) {
   const other = withId || audience.others[0];
   if (!other) return [];
 
+  /* The claim itself is the first thing anyone says about an item, so it is
+     part of the thread. Reading only the messages table made every thread look
+     empty until someone typed a second line. */
   return many(
-    `select m.id, m.item_id, m.sender_id, m.recipient_id, m.body, m.read_at, m.created_at,
-            s.name as sender_name
-       from messages m
-       join users s on s.id = m.sender_id
-      where m.item_id = $1
-        and ((m.sender_id = $2 and m.recipient_id = $3) or (m.sender_id = $3 and m.recipient_id = $2))
-      order by m.created_at asc`,
+    `select * from (
+       select m.id::text as id, m.item_id, m.sender_id, m.recipient_id, m.body,
+              m.read_at, m.created_at, s.name as sender_name
+         from messages m
+         join users s on s.id = m.sender_id
+        where m.item_id = $1
+          and ((m.sender_id = $2 and m.recipient_id = $3)
+            or (m.sender_id = $3 and m.recipient_id = $2))
+       union all
+       select c.id::text as id, c.item as item_id, c.claimant as sender_id,
+              i.reported_by as recipient_id,
+              coalesce(nullif(btrim(c.message), ''), 'Claimed this item') as body,
+              null::timestamptz as read_at, c.created_at, u.name as sender_name
+         from claims c
+         join items i on i.id = c.item
+         join users u on u.id = c.claimant
+        where c.item = $1
+          and c.claimant in ($2, $3)
+     ) t
+     order by t.created_at asc`,
     [itemId, userId, other]
   );
 }
@@ -138,14 +154,13 @@ async function myConversations(userId) {
        union all
        select c.item as item_id,
               case when c.claimant = $1 then i.reported_by else c.claimant end as other_id,
-              c.message as body,
+              coalesce(nullif(btrim(c.message), ''), 'Claimed this item') as body,
               c.created_at,
               null::timestamptz as read_at,
               c.claimant as sender_id
          from claims c
          join items i on i.id = c.item
         where (c.claimant = $1 or i.reported_by = $1)
-          and c.message is not null
      )
      select p.item_id,
             i.title as item_title,
