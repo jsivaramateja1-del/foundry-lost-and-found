@@ -1,19 +1,3 @@
-/**
- * Brevo transactional email.
- *
- * Uses Brevo's HTTP API (v3) rather than SMTP: one fetch, no extra dependency,
- * and the response tells us immediately whether the send was accepted.
- *
- * Configuration (names only — values live in the environment):
- *   BREVO_API_KEY   required to send
- *   BREVO_SENDER    the verified sender address, e.g. someone@example.com
- *   BREVO_SENDER_NAME  display name, defaults to "Foundry"
- *   APP_URL         used to build every link in these emails
- *
- * If BREVO_API_KEY is unset the module logs and returns { skipped: true }
- * instead of throwing: a missing mail key must not break registration.
- */
-
 const API_URL = 'https://api.brevo.com/v3/smtp/email';
 
 const escapeHtml = (value) => String(value == null ? '' : value)
@@ -22,10 +6,6 @@ const escapeHtml = (value) => String(value == null ? '' : value)
 
 const appUrl = () => (process.env.APP_URL || 'http://localhost:5000').replace(/\/+$/, '');
 
-/**
- * Shared shell. Inline styles only: email clients strip <style> blocks often
- * enough that a stylesheet-based design breaks in Outlook and Gmail apps.
- */
 const shell = (heading, bodyHtml, footer) => `
 <div style="margin:0;padding:32px 16px;background:#0a0a0b;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
   <div style="max-width:560px;margin:0 auto;background:#121214;border:1px solid rgba(242,240,234,.12);border-radius:16px;overflow:hidden;">
@@ -68,6 +48,7 @@ const templates = {
       `<p style="margin:0 0 6px;">Your email is verified and your account is active.</p>
        <p style="margin:0 0 6px;">Report something you lost, post something you found, and search the board before you buy a replacement.</p>
        ${button(`${appUrl()}/index.html`, 'Open the board')}`,
+
       'You received this because you created a Foundry account.'
     )
   }),
@@ -83,6 +64,7 @@ const templates = {
        </table>
        <p style="margin:0;">If this was you, nothing to do. If it was not, reset your password immediately.</p>
        ${button(`${appUrl()}/forgot-password.html`, 'Reset my password')}`,
+
       'You received this because someone signed in to your account.'
     )
   }),
@@ -98,7 +80,6 @@ const templates = {
     )
   }),
 
-  // The three found-item notifications agreed with the project owner.
   itemVerified: ({ name, title, link }) => ({
     subject: `Your found listing was verified: ${title}`,
     html: shell(
@@ -133,7 +114,6 @@ const templates = {
   })
 };
 
-/** Sends one templated email. Never throws; returns a result object. */
 const send = async (type, to, data) => {
   const build = templates[type];
   if (!build) throw new Error(`Unknown email template: ${type}`);
@@ -168,7 +148,7 @@ const send = async (type, to, data) => {
     }
     return { ok: true };
   } catch (err) {
-    // A mail failure must never take down a request that already succeeded.
+
     console.error(`[email] ${type} threw: ${err.message}`);
     return { ok: false, error: err.message };
   }

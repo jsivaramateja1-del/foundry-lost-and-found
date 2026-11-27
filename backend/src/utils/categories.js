@@ -1,13 +1,3 @@
-/**
- * The category tree.
- *
- * The keys are the main categories stored on a listing; the values are the
- * subcategories the form offers once that category is chosen. A listing stores
- * both, so search and filters can work at either level.
- *
- * "Other" is deliberately absent: a listing in "Other" carries a free-text
- * customCategory instead, which is why it has no fixed subcategories.
- */
 const CATEGORY_TREE = {
   Electronics: [
     'Mobile Phones', 'Earphones', 'Headphones', 'Chargers',
@@ -42,13 +32,8 @@ const LOCATIONS = [
   'Outside Campus'
 ];
 
-/** The subcategories offered for one category (empty array when there are none). */
 const subcategoriesFor = (category) => CATEGORY_TREE[category] || [];
 
-/**
- * A subcategory is optional, but when it is given it has to belong to the
- * chosen category — otherwise the stored pair would be nonsense.
- */
 const isValidSubcategory = (category, subcategory) => {
   if (subcategory === undefined || subcategory === null || subcategory === '') return true;
   return subcategoriesFor(category).includes(String(subcategory));

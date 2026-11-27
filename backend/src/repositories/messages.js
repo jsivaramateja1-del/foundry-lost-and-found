@@ -1,18 +1,5 @@
-/**
- * Conversations about one item.
- *
- * Anyone signed in may open a conversation with the reporter of a listing; the
- * reporter may reply to anyone who has written to them about it. A thread is
- * therefore a pair - (item, the other person) - and each party only ever sees
- * their own exchange with the reporter.
- */
-
 const { many, one } = require('../config/pg');
 
-/**
- * Resolve the conversation between `userId` and the item's reporter.
- * Returns null when the item does not exist or the reader is neither party.
- */
 async function audienceFor(itemId, userId) {
   const item = await one('select reported_by from items where id = $1', [itemId]);
   if (!item) return null;
@@ -21,7 +8,7 @@ async function audienceFor(itemId, userId) {
   const isReporter = reporterId === userId;
 
   if (isReporter) {
-    // Everyone who has written to the reporter about this item.
+
     const rows = await many(
       'select distinct sender_id as id from messages where item_id = $1 and recipient_id = $2',
       [itemId, reporterId]
@@ -32,10 +19,6 @@ async function audienceFor(itemId, userId) {
   return { isReporter: false, reporterId, others: [reporterId] };
 }
 
-/**
- * The messages of one conversation, oldest first.
- * The reporter sees their exchange with `withId`; anyone else sees their own.
- */
 async function threadFor(itemId, userId, withId) {
   const audience = await audienceFor(itemId, userId);
   if (!audience) return null;
@@ -43,9 +26,6 @@ async function threadFor(itemId, userId, withId) {
   const other = withId || audience.others[0];
   if (!other) return [];
 
-  /* The claim itself is the first thing anyone says about an item, so it is
-     part of the thread. Reading only the messages table made every thread look
-     empty until someone typed a second line. */
   return many(
     `select * from (
        select m.id::text as id, m.item_id, m.sender_id, m.recipient_id, m.body,
@@ -72,7 +52,6 @@ async function threadFor(itemId, userId, withId) {
   );
 }
 
-/** Every conversation on an item, for the reporter's inbox. */
 async function conversationsFor(itemId, userId) {
   const audience = await audienceFor(itemId, userId);
   if (!audience) return null;
@@ -98,8 +77,6 @@ async function send(itemId, senderId, recipientId, body, image) {
   const audience = await audienceFor(itemId, senderId);
   if (!audience) return { ok: false, status: 403, error: 'That listing does not exist' };
 
-  // A non-reporter may only address the reporter; the reporter may address
-  // anyone who has written to them.
   if (!audience.isReporter && recipientId !== audience.reporterId) {
     return { ok: false, status: 400, error: 'You can only message the person who posted this item' };
   }
@@ -111,8 +88,6 @@ async function send(itemId, senderId, recipientId, body, image) {
   const text = String(body == null ? '' : body).trim();
   const photo = image == null ? '' : String(image);
 
-  /* A photo on its own is a complete message; text on its own is a complete
-     message; neither is not. */
   if (!text && !photo) return { ok: false, status: 400, error: 'Write a message or attach a photo' };
   if (text.length > 1000) return { ok: false, status: 400, error: 'That message is too long (max 1000 characters)' };
   if (photo) {
@@ -148,14 +123,6 @@ async function unreadCount(userId) {
 
 module.exports = { audienceFor, threadFor, conversationsFor, send, markRead, unreadCount };
 
-/**
- * Every conversation this user is part of, newest first.
- *
- * This includes CLAIMS, not just chat messages. A claim carries a message the
- * claimant wrote, and that is often the only thing a person has said about an
- * item - so a conversations page that ignored claims looked empty even when the
- * user had clearly written something.
- */
 async function myConversations(userId) {
   return many(
     `with pairs as (
@@ -197,7 +164,6 @@ async function myConversations(userId) {
 
 module.exports.myConversations = myConversations;
 
-/** Record that this user is typing on this item. Throttled by the caller. */
 async function markTyping(itemId, userId) {
   await one(
     `insert into typing (item_id, user_id, updated_at) values ($1,$2,now())
@@ -206,7 +172,6 @@ async function markTyping(itemId, userId) {
   );
 }
 
-/** Is anyone other than `userId` typing on this item in the last 5 seconds? */
 async function typingOn(itemId, userId) {
   const row = await one(
     `select count(*)::int as n from typing
@@ -219,12 +184,10 @@ async function typingOn(itemId, userId) {
 module.exports.markTyping = markTyping;
 module.exports.typingOn = typingOn;
 
-/** Record that this user is around right now. */
 async function touchPresence(userId) {
   await one('update users set last_seen_at = now() where id = $1', [userId]);
 }
 
-/** When was this user last seen? Null if they have never been. */
 async function presenceOf(userId) {
   const row = await one('select last_seen_at from users where id = $1', [userId]);
   return row ? row.last_seen_at : null;
@@ -233,14 +196,6 @@ async function presenceOf(userId) {
 module.exports.touchPresence = touchPresence;
 module.exports.presenceOf = presenceOf;
 
-/**
- * Remove one of your own messages.
- *
- * Scoped to the sender: the WHERE clause carries sender_id, so nobody can
- * delete another person's message even by guessing its id. Returns false when
- * nothing matched, which the route turns into a 404 rather than leaking whether
- * the id exists.
- */
 async function removeOwn(messageId, userId) {
   const row = await one(
     'delete from messages where id = $1 and sender_id = $2 returning id',

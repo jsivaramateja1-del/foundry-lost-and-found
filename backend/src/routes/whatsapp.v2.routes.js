@@ -1,11 +1,3 @@
-/**
- * WhatsApp notification opt-in.
- *
- * Every route here is authenticated and acts only on the caller's own row —
- * there is no user id in any path or body, so one student can never read or
- * change another's number.
- */
-
 const express = require('express');
 const { protect } = require('../middleware/auth.v2');
 const subs = require('../repositories/whatsapp');
@@ -14,7 +6,6 @@ const { whatsappIpLimit, whatsappAccountLimit } = require('../middleware/rateLim
 
 const router = express.Router();
 
-/** Report whether this deployment can send at all, plus the caller's state. */
 router.get('/', protect, async (req, res, next) => {
   try {
     const row = await subs.findForUser(req.user.id);

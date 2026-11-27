@@ -1,10 +1,3 @@
-/**
- * Claim persistence, including the approval and handover transactions.
- *
- * The Mongo version needed a replica set for this; Postgres does it natively.
- * Approving a claim touches three tables — the claim, its siblings, and the
- * item — and all three either land together or not at all.
- */
 const { one, many, transaction } = require('../config/pg');
 const points = require('./points');
 
@@ -30,7 +23,7 @@ const create = async ({ item, claimant, message }) => {
       `insert into claims (item, claimant, message) values ($1,$2,$3) returning *`,
       [item, claimant, message]));
   } catch (err) {
-    if (err.code === '23505') return null; // already claimed by this user
+    if (err.code === '23505') return null;
     throw err;
   }
 };
@@ -48,33 +41,20 @@ const findByClaimant = async (userId) =>
                 order by c.created_at desc`, [userId]))
     .map((r) => ({ ...toClaim(r), itemTitle: r.item_title }));
 
-// LEFT JOIN, not INNER. With an inner join a claim whose claimant row is gone
-// returns null and the caller reports "claim not found" — a different failure
-// with the same message. The flag lets the route say which one it is.
 const findById = async (id) =>
   toClaim(await one(`select ${COLUMNS}, (u.id is null) as claimant_missing
                        from claims c left join users u on u.id = c.claimant
                       where c.id = $1`, [id]));
 
-/**
- * Approves one claim: marks it approved, rejects every other pending claim on
- * the same item with a note, and moves the item to 'claimed'. Atomic.
- */
 const approve = (claimId, reviewerId, note = '') => transaction(async (client) => {
   const { rows } = await client.query('select * from claims where id=$1 for update', [claimId]);
   const claim = rows[0];
   if (!claim) return { error: 'not-found' };
   if (claim.status !== 'pending') return { error: 'not-pending' };
 
-  // Lock the ITEM too, and require it to still be open. Without this two
-  // different claims on one listing can both be approved, the item is marked
-  // claimed twice, and a stale pending claim can drag a returned or
-  // moderator-hidden listing back onto the board.
   const itemRow = (await client.query(
     'select status from items where id=$1 for update', [claim.item])).rows[0];
-  // A distinct error: the claim exists but the listing it points at does not.
-  // Reporting this as 'not-found' made a missing item look like a missing claim
-  // and sent me hunting through the wrong table.
+
   if (!itemRow) return { error: 'item-missing' };
   if (itemRow.status !== 'open') return { error: 'item-not-open' };
 
@@ -102,10 +82,6 @@ const reject = (claimId, reviewerId, note = '') => transaction(async (client) =>
   return { rejected: claimId };
 });
 
-/**
- * Completes a handover. The owner enters the six-digit code; the claim becomes
- * completed, the item returned, and both parties are credited — once each.
- */
 const complete = (claimId, confirmerId, codeMatches) => transaction(async (client) => {
   const { rows } = await client.query('select * from claims where id=$1 for update', [claimId]);
   const claim = rows[0];
@@ -113,10 +89,6 @@ const complete = (claimId, confirmerId, codeMatches) => transaction(async (clien
   if (claim.status !== 'approved') return { error: 'not-approved' };
   if (!codeMatches) return { error: 'bad-code' };
 
-  // Check the item BEFORE writing anything. Returning early after the claim
-  // update below would COMMIT a completed claim against an item that never
-  // moved to returned, and complete() requires status='approved', so the
-  // handover could never be re-run.
   const itemLock = await client.query(
     "select status from items where id=$1 for update", [claim.item]);
   if (!itemLock.rows[0] || itemLock.rows[0].status !== 'claimed') {
@@ -131,8 +103,7 @@ const complete = (claimId, confirmerId, codeMatches) => transaction(async (clien
   if (done.rowCount === 0) return { error: 'item-not-claimed' };
 
   const itemRow = (await client.query('select * from items where id=$1', [claim.item])).rows[0];
-  // Keys are ITEM-scoped, not claim-scoped. Two claims on one item must not be
-  // able to pay the same person twice; this was the Mongo guarantee.
+
   await points.award(client, {
     userId: itemRow.reported_by, type: 'return',
     eventKey: `return:${claim.item}:${itemRow.reported_by}`, itemId: claim.item, claimId: claim.id

@@ -1,19 +1,7 @@
-/**
- * The points ledger.
- *
- * Awarding is a single INSERT ... ON CONFLICT DO NOTHING followed by an UPDATE
- * of the user's totals, inside one transaction. The unique index on
- * (user_id, event_key) is what makes an award idempotent — the old design kept
- * an ever-growing creditedEvents array on the user for the same purpose.
- */
 const { one, many, transaction } = require('../config/pg');
 
 const POINTS = { return: 10, found_item: 2 };
 
-/**
- * Credits an event exactly once. Returns { credited: boolean }.
- * A second call with the same key does nothing at all.
- */
 const award = async (client, { userId, type, eventKey, itemId = null, claimId = null }) => {
   const points = POINTS[type];
   if (!points) throw new Error(`Unknown point event type: ${type}`);
@@ -37,16 +25,13 @@ const award = async (client, { userId, type, eventKey, itemId = null, claimId = 
   return { credited: true, points };
 };
 
-/** Convenience wrapper that opens its own transaction. */
 const awardOnce = (payload) => transaction((client) => award(client, payload));
 
-/** A user's own ledger, newest first. */
 const forUser = async (userId, limit = 50) =>
   many(`select id, type, points, event_key, status, created_at
           from point_events where user_id = $1
          order by created_at desc limit $2`, [userId, limit]);
 
-/** Read-only consistency check: does the ledger sum match the stored total? */
 const auditUser = async (userId) => {
   const row = await one(`
     select u.points as stored_points,
@@ -64,7 +49,6 @@ const auditUser = async (userId) => {
   };
 };
 
-/** Leaderboard for a period, students only, opt-outs excluded. */
 const leaderboard = async (period = 'all', limit = 25) => {
   const window = {
     week: "and pe.created_at >= now() - interval '7 days'",

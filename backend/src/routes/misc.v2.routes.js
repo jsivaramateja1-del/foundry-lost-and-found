@@ -1,14 +1,10 @@
-/**
- * The remaining PostgreSQL routers: notifications, dashboard, leaderboard,
- * campus locations, reports and the admin surface.
- */
 const express = require('express');
 const { one, many } = require('../config/pg');
 const items = require('../repositories/items');
 const points = require('../repositories/points');
 const users = require('../repositories/users');
 const { protect, requireRole } = require('../middleware/auth.v2');
-// Defined and exported but never mounted, so reporting a listing was unthrottled.
+
 const { reportIpLimit, reportAccountLimit } = require('../middleware/rateLimit');
 const mailer = require('../lib/brevo');
 const notify = require('../repositories/notify');
@@ -17,7 +13,6 @@ const claims = require('../repositories/claims');
 
 const appUrl = () => (process.env.APP_URL || 'http://localhost:5000').replace(/\/+$/, '');
 
-// ---------- notifications ----------
 const notifications = express.Router();
 
 notifications.get('/', protect, async (req, res, next) => {
@@ -32,7 +27,6 @@ notifications.get('/', protect, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Must be declared BEFORE /:id/read or 'read-all' is captured as an id.
 notifications.patch('/read-all', protect, async (req, res, next) => {
   try {
     const { db } = require('../config/pg');
@@ -53,7 +47,6 @@ notifications.patch('/:id/read', protect, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ---------- dashboard ----------
 const dashboard = express.Router();
 
 dashboard.get('/me', protect, async (req, res, next) => {
@@ -73,9 +66,7 @@ dashboard.get('/me', protect, async (req, res, next) => {
         where i.reported_by = $1 order by c.created_at desc limit 50`, [req.user.id]);
 
     const count = (st) => mine.items.filter((i) => i.status === st).length;
-    // `stats`, `impact`, `badges`, `items` and `claims` are the names the
-    // dashboard reads. Badges are not implemented yet, so the array is empty
-    // rather than missing — a missing key throws in the page.
+
     res.status(200).json({
       user: users.toSafeObject(req.user),
       stats: {
@@ -106,7 +97,6 @@ dashboard.get('/me', protect, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ---------- leaderboard ----------
 const leaderboard = express.Router();
 
 leaderboard.get('/', async (req, res, next) => {
@@ -116,8 +106,7 @@ leaderboard.get('/', async (req, res, next) => {
       return res.status(400).json({ message: 'period must be one of: week, month, all' });
     }
     const rows = await points.leaderboard(period);
-    // The frontend reads `leaderboard` and `rank`; keep those names and expose
-    // `position` too so either spelling works.
+
     res.status(200).json({
       period,
       count: rows.length,
@@ -126,7 +115,6 @@ leaderboard.get('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ---------- campus ----------
 const campus = express.Router();
 
 campus.get('/locations', async (req, res, next) => {
@@ -175,14 +163,13 @@ campus.post('/locations', protect, requireRole('admin','superadmin'), async (req
   } catch (err) { next(err); }
 });
 
-// ---------- reports ----------
 const reports = express.Router();
 
 reports.post('/', reportIpLimit, protect, reportAccountLimit, async (req, res, next) => {
   try {
     const itemId = typeof req.body.item === 'string' ? req.body.item : '';
     const reason = typeof req.body.reason === 'string' ? req.body.reason : '';
-    // Must cover every option the report form offers, or two of them 400.
+
     if (!['spam','inappropriate','suspicious','incorrect','fake','other'].includes(reason)) {
       return res.status(400).json({ message: 'Unknown report reason' });
     }
@@ -205,14 +192,12 @@ reports.get('/', protect, requireRole('moderator','admin','superadmin'), async (
   } catch (err) { next(err); }
 });
 
-// ---------- admin ----------
 const admin = express.Router();
 
 const STAFF = ['moderator', 'admin', 'superadmin'];
 const pageOf = (q) => Math.max(1, parseInt(q.page, 10) || 1);
 const limitOf = (q, d = 12) => Math.min(100, Math.max(1, parseInt(q.limit, 10) || d));
 
-/** GET /api/admin/stats — totals, by category, and the last 7 days. */
 admin.get('/stats', protect, requireRole(...STAFF), async (req, res, next) => {
   try {
     const totals = await one(`
@@ -247,13 +232,12 @@ admin.get('/stats', protect, requireRole(...STAFF), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-/** GET /api/admin/items — every listing, hidden included. */
 admin.get('/items', protect, requireRole(...STAFF), async (req, res, next) => {
   try {
     const page = pageOf(req.query), limit = limitOf(req.query);
     const params = [];
     const clauses = [];
-    // Moderators work the verification queue, so they see found items only.
+
     if (req.user.role === 'moderator') clauses.push("i.type = 'found'");
     const where = clauses.length ? `where ${clauses.join(' and ')}` : '';
 
@@ -272,7 +256,7 @@ admin.get('/items', protect, requireRole(...STAFF), async (req, res, next) => {
       count: rows.length, total, page, pages: Math.ceil(total / limit) || 1,
       items: rows.map((r) => ({
         ...items.toItem(r),
-        // The admin table renders nested names, not bare uuids.
+
         reportedBy: { id: r.reported_by, name: r.reporter_name },
         verifiedBy: r.verified_by ? { id: r.verified_by, name: r.verifier_name } : null
       }))
@@ -280,9 +264,6 @@ admin.get('/items', protect, requireRole(...STAFF), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-/** GET /api/admin/claims */
-// Admin-only: a moderator has no reason to read every claim and claimant name
-// on the platform, and the pre-migration rule restricted it the same way.
 admin.get('/claims', protect, requireRole('admin', 'superadmin'), async (req, res, next) => {
   try {
     const page = pageOf(req.query), limit = limitOf(req.query);
@@ -304,7 +285,6 @@ admin.get('/claims', protect, requireRole('admin', 'superadmin'), async (req, re
   } catch (err) { next(err); }
 });
 
-/** GET /api/admin/reports */
 admin.get('/reports', protect, requireRole(...STAFF), async (req, res, next) => {
   try {
     const rows = await many(
@@ -318,7 +298,7 @@ admin.get('/reports', protect, requireRole(...STAFF), async (req, res, next) => 
       count: rows.length,
       reports: rows.map((r) => ({
         id: r.id, reason: r.reason, details: r.details,
-        // The page tests for 'open'; the schema calls it 'pending'.
+
         status: r.status === 'pending' ? 'open' : r.status,
         createdAt: r.created_at,
         item: { id: r.item, title: r.item_title },
@@ -328,7 +308,6 @@ admin.get('/reports', protect, requireRole(...STAFF), async (req, res, next) => 
   } catch (err) { next(err); }
 });
 
-/** GET /api/admin/audit */
 admin.get('/audit', protect, requireRole(...STAFF), async (req, res, next) => {
   try {
     const rows = await notify.trail(50);
@@ -341,7 +320,6 @@ admin.get('/audit', protect, requireRole(...STAFF), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-/** PATCH /api/admin/items/:id/verify — verifying a found listing earns points. */
 admin.patch('/items/:id/verify', protect, requireRole(...STAFF), async (req, res, next) => {
   try {
     const item = await items.findByIdRaw(req.params.id);
@@ -355,17 +333,11 @@ admin.patch('/items/:id/verify', protect, requireRole(...STAFF), async (req, res
     if (item.status === 'hidden') {
       return res.status(409).json({ message: 'Restore the listing before verifying it' });
     }
-    // Nobody verifies their own listing. The restriction used to name only the
-    // moderator role, so an admin or superadmin could verify their own found
-    // item and award themselves points — the same self-dealing the moderator
-    // rule exists to prevent, just with a different role name.
+
     if (item.reportedBy === req.user.id) {
       return res.status(403).json({ message: 'You cannot verify your own listing' });
     }
 
-    // One transaction: the listing becomes verified and the reporter is
-    // credited together, or neither happens. award() is idempotent via the
-    // unique (user_id, event_key) index, so a retry cannot double-credit.
     const { transaction } = require('../config/pg');
     const verified = await transaction(async (client) => {
       const v = await items.verify(item.id, req.user.id, client);
@@ -391,7 +363,6 @@ admin.patch('/items/:id/verify', protect, requireRole(...STAFF), async (req, res
       action: 'item.verify', targetType: 'item', targetId: item.id, note: item.title
     });
 
-    // Award any badge the reporter now qualifies for, and say so.
     const earned = await badges.evaluate(null, item.reportedBy);
     if (earned.length) {
       const names = badges.BADGES.filter((b) => earned.includes(b.id)).map((b) => b.label);
@@ -412,7 +383,6 @@ admin.patch('/items/:id/verify', protect, requireRole(...STAFF), async (req, res
   } catch (err) { next(err); }
 });
 
-/** PATCH /api/admin/items/:id/status — staff may set any lifecycle state. */
 admin.patch('/items/:id/status', protect, requireRole('admin', 'superadmin'), async (req, res, next) => {
   try {
     const requested = typeof req.body.status === 'string' ? req.body.status.trim() : '';
@@ -436,7 +406,6 @@ admin.patch('/items/:id/status', protect, requireRole('admin', 'superadmin'), as
   } catch (err) { next(err); }
 });
 
-/** DELETE /api/admin/items/:id */
 admin.delete('/items/:id', protect, requireRole('admin', 'superadmin'), async (req, res, next) => {
   try {
     const existing = await items.findByIdRaw(req.params.id);
@@ -450,7 +419,6 @@ admin.delete('/items/:id', protect, requireRole('admin', 'superadmin'), async (r
   } catch (err) { next(err); }
 });
 
-/** PATCH /api/admin/users/:id/suspend — suspend and reinstate. */
 admin.patch('/users/:id/suspend', protect, requireRole('admin', 'superadmin'), async (req, res, next) => {
   try {
     const suspended = req.body.suspended !== false;
@@ -478,7 +446,6 @@ admin.patch('/users/:id/suspend', protect, requireRole('admin', 'superadmin'), a
   } catch (err) { next(err); }
 });
 
-/** PATCH /api/admin/users/:id/role */
 admin.patch('/users/:id/role', protect, requireRole('superadmin'), async (req, res, next) => {
   try {
     const role = typeof req.body.role === 'string' ? req.body.role.trim() : '';
@@ -502,11 +469,10 @@ admin.patch('/users/:id/role', protect, requireRole('superadmin'), async (req, r
   } catch (err) { next(err); }
 });
 
-/** PATCH /api/admin/reports/:id — resolve or dismiss. */
 admin.patch('/reports/:id', protect, requireRole(...STAFF), async (req, res, next) => {
   try {
     const requested = typeof req.body.status === 'string' ? req.body.status.trim() : '';
-    // The page sends 'resolved'; the schema stores 'reviewed'.
+
     const status = requested === 'resolved' ? 'reviewed' : requested;
     if (!['reviewed', 'dismissed', 'actioned'].includes(status)) {
       return res.status(400).json({ message: 'status must be resolved, dismissed or actioned' });
@@ -523,14 +489,6 @@ admin.patch('/reports/:id', protect, requireRole(...STAFF), async (req, res, nex
   } catch (err) { next(err); }
 });
 
-/**
- * PATCH /api/admin/claims/:id/review — a staff override.
- *
- * The owner-only route in claims.v2.routes.js means a claim the owner never
- * answers is stuck forever and the item never returns to circulation. Staff may
- * settle it instead. Because this overrides somebody else's decision about their
- * own property, it is audited, a reason is required, and BOTH parties are told.
- */
 admin.patch('/claims/:id/review', protect, requireRole('admin', 'superadmin'), async (req, res, next) => {
   try {
     const decision = req.body.decision;
@@ -538,7 +496,6 @@ admin.patch('/claims/:id/review', protect, requireRole('admin', 'superadmin'), a
       return res.status(400).json({ message: 'decision must be approve or reject' });
     }
 
-    // A staff override without a recorded reason is not acceptable.
     const note = typeof req.body.note === 'string' ? req.body.note.trim().slice(0, 300) : '';
     if (note.length < 10) {
       return res.status(400).json({ message: 'Give a reason of at least 10 characters for overriding the owner' });
@@ -550,8 +507,6 @@ admin.patch('/claims/:id/review', protect, requireRole('admin', 'superadmin'), a
     const item = await items.findByIdRaw(claim.item);
     if (!item) return res.status(404).json({ message: 'Listing not found' });
 
-    // Staff cannot use the override to settle their own claim or one on their
-    // own listing — that would be reviewing yourself.
     if (item.reportedBy === req.user.id || claim.claimant === req.user.id) {
       return res.status(403).json({ message: 'You cannot review a claim you are party to' });
     }
@@ -565,10 +520,7 @@ admin.patch('/claims/:id/review', protect, requireRole('admin', 'superadmin'), a
     if (result.error === 'item-not-open') {
       return res.status(409).json({ message: 'That listing is no longer open for claims' });
     }
-    // approve() can also report that the listing vanished between this route's own
-    // lookup and the transaction's row lock. Without this branch the handler fell
-    // through, wrote an audit row and two notifications, and answered 200 "Claim
-    // approved" — telling both parties a claim had been approved when nothing had.
+
     if (result.error === 'item-missing') {
       return res.status(409).json({ message: 'The listing this claim belongs to no longer exists.' });
     }
@@ -601,17 +553,13 @@ admin.patch('/claims/:id/review', protect, requireRole('admin', 'superadmin'), a
   } catch (err) { next(err); }
 });
 
-/** GET /api/admin/users — the account list the admin page builds from. */
 admin.get('/users', protect, requireRole('admin', 'superadmin'), async (req, res, next) => {
   try {
-    // Paginated like /admin/items and /admin/claims. A hard LIMIT 200 meant
-    // every account past the newest 200 was invisible and unmanageable, while
-    // the count reported the cap as if it were the population.
+
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 25));
     const totalRow = await one('select count(*)::int as n from users');
     const pages = Math.max(1, Math.ceil(totalRow.n / limit));
-    // Clamp: an out-of-range page used to render an empty table that read as
-    // "there are no accounts".
+
     const page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
     const offset = (page - 1) * limit;
     const rows = await many(
@@ -634,7 +582,6 @@ admin.get('/users', protect, requireRole('admin', 'superadmin'), async (req, res
   } catch (err) { next(err); }
 });
 
-/** PATCH /api/admin/users/:id/approve — approve or reject an application. */
 admin.patch('/users/:id/approve', protect, requireRole('admin', 'superadmin'), async (req, res, next) => {
   try {
     const target = await users.findById(req.params.id);

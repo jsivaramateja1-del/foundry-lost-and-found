@@ -1,47 +1,7 @@
-/**
- * PostgreSQL connection (Supabase).
- *
- * Uses node-postgres directly rather than the supabase-js client: the claim,
- * handover and points-ledger paths need real transactions with row locks, and
- * PostgREST cannot express a multi-statement transaction.
- *
- * DATABASE_URL MUST be Supabase's shared pooler string for anything running on
- * Render:
- *
- *   postgresql://postgres.<PROJECT_REF>:<PASSWORD>@aws-<N>-<REGION>.pooler.supabase.com:6543/postgres
- *
- * Why this matters: Supabase's direct connection (db.<ref>.supabase.co, port
- * 5432) resolves to an IPv6 address on the free plan, and Render does not
- * support outbound IPv6. Using the direct string from Render fails with
- * ENETUNREACH — which looks like bad credentials but is a routing problem.
- * The shared pooler is IPv4-only on every plan, so it works.
- *
- *   Web service / cron  -> pooler, transaction mode, port 6543
- *   Long-lived worker   -> pooler, session mode, port 5432
- *   Migrations / pg_dump -> direct connection, from a machine with IPv6
- *
- * Never commit any of these strings.
- */
 const { Pool } = require('pg');
 
 let pool = null;
 
-/**
- * TLS settings for the database connection.
- *
- * Supabase's pooler presents a chain signed by Supabase's own CA, which Node's
- * bundled trust store does not contain — connecting with the default settings
- * fails with "self-signed certificate in certificate chain".
- *
- * Three modes, in order of preference:
- *
- *   1. PG_CA_CERT_PATH — path to Supabase's prod-ca-2021.crt (Settings ->
- *      Database -> SSL Configuration). Full verification, nothing weakened.
- *   2. PG_SSL_NO_VERIFY=true — accept the chain without verifying it. Works
- *      immediately, but a machine in the middle could impersonate the database.
- *      Use it to unblock, not as the permanent answer.
- *   3. Default — verify. Correct, and fails loudly until 1 or 2 is configured.
- */
 const sslConfig = () => {
   if (process.env.PG_NO_SSL === 'true') return false;
 
@@ -69,21 +29,12 @@ const sslConfig = () => {
   return { rejectUnauthorized: true };
 };
 
-/**
- * Opens the pool and proves the connection works. Mirrors connectDB(): it
- * throws rather than returning a dead handle, so startup fails loudly.
- */
 const connectDB = async (connectionString = process.env.DATABASE_URL) => {
   if (!connectionString) {
     throw new Error('DATABASE_URL is not set. Copy .env.example to .env and fill it in.');
   }
   if (pool) return pool;
 
-  // pg-connection-string lets an `sslmode` parameter in the URL override the
-  // explicit `ssl` option we pass to the Pool. That silently defeats the TLS
-  // settings above: ?sslmode=disable gives plaintext, ?sslmode=no-verify drops
-  // verification, and ?sslmode=require discards the CA from PG_CA_CERT_PATH.
-  // Strip it so sslConfig() is authoritative.
   let connectTarget = connectionString;
   try {
     const parsed = new URL(connectionString);
@@ -95,7 +46,7 @@ const connectDB = async (connectionString = process.env.DATABASE_URL) => {
       parsed.searchParams.delete('sslmode');
       connectTarget = parsed.toString();
     }
-  } catch { /* an unparseable URL will fail at connect anyway */ }
+  } catch {  }
 
   pool = new Pool({
     connectionString: connectTarget,
@@ -105,13 +56,10 @@ const connectDB = async (connectionString = process.env.DATABASE_URL) => {
     ssl: sslConfig()
   });
 
-  // A pool error must never crash the process silently.
   pool.on('error', (err) => {
     console.error('Unexpected PostgreSQL pool error:', err.message);
   });
 
-
-  // Catch the IPv6 trap before it produces an unexplained failure.
   try {
     const parsed = new URL(connectionString);
     if (/\.supabase\.co$/i.test(parsed.hostname) && parsed.port === '5432') {
@@ -122,30 +70,22 @@ const connectDB = async (connectionString = process.env.DATABASE_URL) => {
         '(aws-<n>-<region>.pooler.supabase.com:6543) instead.'
       );
     }
-  } catch { /* an unparseable URL will fail at connect anyway */ }
+  } catch {  }
 
   const { rows } = await pool.query('select current_database() as db, inet_server_addr() as host');
   console.log(`PostgreSQL Connected: host=${rows[0].host || 'pooler'} database=${rows[0].db}`);
   return pool;
 };
 
-/** The pool, or a clear error if connectDB() was never called. */
 const db = () => {
   if (!pool) throw new Error('Database not connected. Call connectDB() first.');
   return pool;
 };
 
-/** Single-row helper: returns the row, or undefined. */
 const one = async (text, params) => (await db().query(text, params)).rows[0];
 
-/** Multi-row helper. */
 const many = async (text, params) => (await db().query(text, params)).rows;
 
-/**
- * Runs `fn` inside a transaction with a dedicated client, rolling back on any
- * throw. This is the replacement for Mongoose sessions and is what the claim
- * approval and handover paths will use.
- */
 const transaction = async (fn) => {
   const client = await db().connect();
   try {
@@ -170,15 +110,6 @@ const closeDB = async () => {
 
 module.exports = { connectDB, db, one, many, transaction, closeDB };
 
-/**
- * Pure resolver for the connection string and TLS options.
- *
- * Split out of connectDB so the decisions that once broke a real deploy can be
- * unit-tested without a TLS server: whether an sslmode parameter is stripped,
- * which TLS mode wins, and whether the direct-host warning fires.
- *
- * Returns { connectTarget, ssl, warnings }.
- */
 const resolveConnection = (connectionString, env = process.env) => {
   const warnings = [];
   let connectTarget = connectionString;
@@ -193,7 +124,7 @@ const resolveConnection = (connectionString, env = process.env) => {
     if (/\.supabase\.co$/i.test(parsed.hostname) && parsed.port === '5432') {
       warnings.push('direct-host');
     }
-  } catch { /* an unparseable URL will fail at connect anyway */ }
+  } catch {  }
 
   let ssl;
   if (env.PG_NO_SSL === 'true') {

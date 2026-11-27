@@ -1,15 +1,3 @@
-/**
- * Badges.
- *
- * Five badges, each earned once and never revoked. Evaluation is a pure
- * function of the user's own history, so it is safe to re-run after every
- * relevant event: the primary key on (user_id, badge_id) makes the insert
- * idempotent.
- *
- * A badge is never awarded for an action that has not been verified. A found
- * listing counts only once a moderator has verified it; a return counts only
- * once a handover has been completed. Posting a listing earns nothing.
- */
 const { one, many } = require('../config/pg');
 
 const BADGES = [
@@ -50,7 +38,6 @@ const BADGES = [
   }
 ];
 
-/** The counts a badge is measured against. */
 const metricsFor = async (userId) => {
   const row = await one(`
     select
@@ -61,11 +48,6 @@ const metricsFor = async (userId) => {
   return { foundVerified: row.found_verified, returns: row.returns };
 };
 
-/**
- * Awards every badge the user now qualifies for. Returns the ids newly earned.
- * Accepts an optional client so it can join the transaction that caused the
- * event.
- */
 const evaluate = async (client, userId) => {
   const metrics = await metricsFor(userId);
   const earned = [];
@@ -84,7 +66,6 @@ const evaluate = async (client, userId) => {
   return earned;
 };
 
-/** Every badge, with whether this user has it and when. */
 const forUser = async (userId) => {
   const rows = await many(
     'select badge_id, earned_at from user_badges where user_id = $1', [userId]);

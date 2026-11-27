@@ -1,16 +1,5 @@
-/**
- * In-app notifications and the audit trail.
- *
- * Both tables existed in the schema and were read by the API, but nothing ever
- * wrote to them — so the bell was permanently empty and the admin audit panel
- * had no source data. These are the writers.
- *
- * Both accept an optional `client` so they can join a surrounding transaction:
- * a notification must never describe a change that then rolled back.
- */
 const { one, many } = require('../config/pg');
 
-/** Creates one notification. Safe to call inside a transaction via `client`. */
 const create = async (client, { userId, type, message, link = '', relatedType = null, relatedId = null }) => {
   const run = client ? client.query.bind(client) : null;
   const sql = `insert into notifications (user_id, type, message, link, related_type, related_id)
@@ -20,7 +9,6 @@ const create = async (client, { userId, type, message, link = '', relatedType = 
   return one(sql, params);
 };
 
-/** Records a privileged action. Never throws into the caller's path. */
 const audit = async ({ actor, actorEmail, action, targetType, targetId, note = '' }) => {
   try {
     await one(
@@ -28,7 +16,7 @@ const audit = async ({ actor, actorEmail, action, targetType, targetId, note = '
        values ($1,$2,$3,$4,$5,$6)`,
       [actor || null, actorEmail || '', action, targetType || '', targetId || null, note]);
   } catch (err) {
-    // An audit write must not fail the action it is recording.
+
     console.error(`[audit] failed to record ${action}: ${err.message}`);
   }
 };

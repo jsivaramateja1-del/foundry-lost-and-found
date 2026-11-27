@@ -1,17 +1,9 @@
-/**
- * Conversations about one item.
- *
- * Mounted under /api/items/:id/messages. Authorisation lives in the repository,
- * which knows the difference between the reporter and everyone else.
- */
-
 const express = require('express');
 const { protect } = require('../middleware/auth.v2');
 const messages = require('../repositories/messages');
 
 const router = express.Router({ mergeParams: true });
 
-/** The thread, optionally narrowed to one counterparty with ?with=<userId>. */
 router.get('/', protect, async (req, res, next) => {
   try {
     const withId = typeof req.query.with === 'string' ? req.query.with : null;
@@ -23,9 +15,7 @@ router.get('/', protect, async (req, res, next) => {
 
     const conversations = await messages.conversationsFor(req.params.id, req.user.id);
     await messages.markRead(req.params.id, req.user.id);
-    /* Opening the thread counts as being online, and the other party's last
-       seen comes back with the thread so the header can say Online or how long
-       ago they were around. */
+
     await messages.touchPresence(req.user.id);
 
     res.json({
@@ -48,7 +38,6 @@ router.post('/', protect, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-/** Pinged while the user types, so the other side can show "typing…". */
 router.post('/typing', protect, async (req, res, next) => {
   try {
     await messages.markTyping(req.params.id, req.user.id);
@@ -56,7 +45,6 @@ router.post('/typing', protect, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-/** Delete one of your own messages. */
 router.delete('/:messageId', protect, async (req, res, next) => {
   try {
     const gone = await messages.removeOwn(req.params.messageId, req.user.id);

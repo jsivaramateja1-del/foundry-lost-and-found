@@ -10,19 +10,6 @@ const { claimIpLimit, claimAccountLimit } = require('../middleware/rateLimit');
 
 const router = express.Router();
 
-/**
- * Six-digit handover code, derived from the claim id and a server secret.
- *
- * There used to be a `|| 'dev'` fallback. A deployment missing JWT_SECRET would
- * still issue codes, derived from a literal anyone who has read this file knows.
- * It is gone.
- *
- * HANDOVER_SECRET when set, otherwise JWT_SECRET. Falling back to JWT_SECRET
- * rather than throwing is deliberate: codes for already-approved claims were
- * derived from it, and switching the key would invalidate every handover in
- * flight. If neither exists we throw — a missing secret is a configuration
- * error, not a reason to invent a key.
- */
 let warnedAboutHandoverKey = false;
 const handoverKey = () => {
   const dedicated = process.env.HANDOVER_SECRET;
@@ -66,8 +53,6 @@ router.post('/', claimIpLimit, protect, claimAccountLimit, async (req, res, next
     const claim = await claims.create({ item: item.id, claimant: req.user.id, message });
     if (!claim) return res.status(409).json({ message: 'You have already claimed this item' });
 
-    // Tell the finder someone has claimed their item. Fire-and-forget: a mail
-    // outage must not undo a claim that is already stored.
     notify.create(null, {
       userId: item.reportedBy, type: 'claim_received',
       message: `Someone claimed your listing "${item.title}"`,
@@ -84,7 +69,6 @@ router.post('/', claimIpLimit, protect, claimAccountLimit, async (req, res, next
   } catch (err) { next(err); }
 });
 
-/** The claimant's own claims. The handover code is only ever returned here. */
 router.get('/mine', protect, async (req, res, next) => {
   try {
     const rows = await claims.findByClaimant(req.user.id);
@@ -97,7 +81,6 @@ router.get('/mine', protect, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-/** Claims received on the signed-in user's own listings. */
 router.get('/received', protect, async (req, res, next) => {
   try {
     const own = await items.list({ reportedBy: req.user.id, includeHidden: true }, { limit: 50 });
@@ -110,15 +93,12 @@ router.get('/received', protect, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-/** Owner approves or rejects. Approving auto-rejects siblings in one transaction. */
 router.patch('/:id/review', claimIpLimit, protect, claimAccountLimit, async (req, res, next) => {
   try {
     const claim = await claims.findById(req.params.id);
-    // Name the id in the message. "Claim not found" alone gave no way to tell a
-    // wrong id from a claim that had been deleted underneath us.
+
     if (!claim) return res.status(404).json({ message: `No claim with id ${req.params.id}` });
-    // The claim exists but its claimant account is gone. Previously the INNER
-    // JOIN dropped the row and this reported "claim not found" instead.
+
     if (claim.claimantMissing) {
       return res.status(409).json({
         message: `Claim ${req.params.id} exists but its claimant account is gone`
@@ -151,8 +131,6 @@ router.patch('/:id/review', claimIpLimit, protect, claimAccountLimit, async (req
       return res.status(409).json({ message: 'That listing is no longer open for claims' });
     }
 
-    // Tell the claimant the outcome. Only an approval needs the handover code
-    // explained, so only an approval sends mail.
     if (decision === 'approve' && result.approved) {
       users.findById(claim.claimant)
         .then((claimant) => claimant && mailer.send('claimApproved', claimant.email, {
@@ -175,7 +153,6 @@ router.patch('/:id/review', claimIpLimit, protect, claimAccountLimit, async (req
   } catch (err) { next(err); }
 });
 
-/** Owner enters the six-digit code to complete the handover. */
 router.post('/:id/complete', claimIpLimit, protect, claimAccountLimit, async (req, res, next) => {
   try {
     const claim = await claims.findById(req.params.id);
@@ -188,7 +165,7 @@ router.post('/:id/complete', claimIpLimit, protect, claimAccountLimit, async (re
 
     const supplied = String(req.body.code || '').trim();
     const expected = handoverCode(claim.id);
-    // Constant-time compare so the code cannot be discovered by timing.
+
     const a = Buffer.from(supplied.padEnd(6));
     const b = Buffer.from(expected.padEnd(6));
     const matches = a.length === b.length && crypto.timingSafeEqual(a, b);
@@ -212,7 +189,6 @@ router.post('/:id/complete', claimIpLimit, protect, claimAccountLimit, async (re
       link: 'dashboard.html', relatedType: 'claim', relatedId: claim.id
     }).catch(() => {});
 
-    // Both parties can earn a return badge from this handover.
     const badges = require('../repositories/badges');
     for (const uid of [claim.claimant, item.reportedBy]) {
       const earned = await badges.evaluate(null, uid).catch(() => []);

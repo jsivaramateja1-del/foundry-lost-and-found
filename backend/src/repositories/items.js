@@ -1,11 +1,3 @@
-/**
- * Item persistence on PostgreSQL.
- *
- * The Mongo version had to coerce and validate every filter by hand because
- * Express can turn ?category[$ne]=x into an operator. Here every value is a
- * bound parameter, so an object arriving from the query string can only ever be
- * compared as text — the injection class is structurally absent.
- */
 const { one, many, db } = require('../config/pg');
 
 const toItem = (row) => (row ? {
@@ -29,28 +21,12 @@ const toItem = (row) => (row ? {
   updatedAt: row.updated_at
 } : null);
 
-/**
- * Public shape of a listing.
- *
- * `reportedBy` is the reporter's internal user UUID. Publishing it on a public,
- * unauthenticated endpoint lets anyone correlate every listing by one person —
- * "show me everything this student posted" — which is not information the board
- * needs to function. `reporterName` stays, because the detail dialog shows who
- * posted it and that is deliberate product behaviour.
- *
- * The owner still needs to know which listings are theirs, so the id is added
- * back only on the detail route, and only when the caller is authenticated as
- * that user (see GET /api/items/:id).
- */
 const toPublicItem = (item) => {
   if (!item) return null;
   const { reportedBy, ...rest } = item;
   return rest;
 };
 
-// Every sort ends in i.id so LIMIT/OFFSET is deterministic. The seed inserts all
-// rows in one transaction and now() is transaction-scoped, so equal created_at
-// values are normal — without a tie-breaker a row can appear on two pages or none.
 const SORTS = {
   newest: 'i.created_at desc, i.id desc',
   oldest: 'i.created_at asc, i.id asc',
@@ -60,19 +36,13 @@ const SORTS = {
 
 const COLUMNS = `i.*, u.name as reporter_name`;
 
-/**
- * Builds the WHERE clause from a validated filter object.
- * Returns { where, params } — never string-interpolates a value.
- */
 const buildFilter = (f = {}) => {
   const clauses = [];
   const params = [];
   const add = (sql, value) => { params.push(value); clauses.push(sql.replace('$?', `$${params.length}`)); };
 
-  // Hidden listings are never part of the public board unless asked for.
   if (!f.includeHidden) clauses.push("i.status <> 'hidden'");
-  /* Returned items have their own page. Unless a status is asked for
-     explicitly, the board shows only what can still be acted on. */
+
   if (!f.status) clauses.push("i.status <> 'returned'");
   if (f.type) add('i.type = $?', f.type);
   if (f.category) add('i.category = $?', f.category);
@@ -82,10 +52,7 @@ const buildFilter = (f = {}) => {
   if (f.reportedBy) add('i.reported_by = $?', f.reportedBy);
   if (f.from) add('i.date >= $?', f.from);
   if (f.to) add('i.date <= $?', f.to);
-  /* Full-text search alone only matches whole words, so typing "Blu" found
-     nothing until "Blue" was complete. The ILIKE arms make it a prefix and
-     substring match as well, which is what a search box is expected to do.
-     Three placeholders because add() only substitutes the first $?. */
+
   if (f.q) {
     params.push(f.q, f.q, f.q);
     const n = params.length;
@@ -147,13 +114,6 @@ const update = async (id, data) =>
 const setStatus = async (id, status) =>
   toItem(await one('update items set status=$2 where id=$1 returning *', [id, status]));
 
-/**
- * Mark a listing verified.
- *
- * Takes an optional transaction client so "verified" and "points credited" can
- * be one atomic step; otherwise a failure between them leaves a verified
- * listing whose reporter was never credited.
- */
 const verify = async (id, adminId, client) => {
   const run = client
     ? (text, params) => client.query(text, params).then((r) => r.rows[0])
@@ -167,7 +127,6 @@ const verify = async (id, adminId, client) => {
 const remove = async (id) =>
   one('delete from items where id = $1 returning id', [id]);
 
-/** Counts for the public tiles, all under the same visibility rule. */
 const stats = async () => {
   const row = await one(`
     select
@@ -181,13 +140,6 @@ const stats = async () => {
   return row;
 };
 
-/**
- * Listings that look like this one.
- *
- * Matching on category alone is too loose: every lost Electronics item matched
- * every found Electronics item, so a headset was offered a calculator as a
- * "possible match". Require a shared meaningful word as well.
- */
 const similar = async (item, limit = 5) => {
   const stop = new Set(['the', 'a', 'an', 'my', 'and', 'with', 'of', 'in', 'on',
     'for', 'black', 'blue', 'new', 'size', 'old', 'white', 'red']);
@@ -196,7 +148,6 @@ const similar = async (item, limit = 5) => {
     .split(/[^a-z0-9]+/)
     .filter((w) => w.length > 2 && !stop.has(w));
 
-  // Nothing distinctive in the title: better to show no matches than bad ones
   if (!words.length) return [];
 
   const patterns = words.map((w) => `%${w}%`);

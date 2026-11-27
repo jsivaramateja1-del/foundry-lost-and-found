@@ -3,20 +3,11 @@ const jwt = require('jsonwebtoken');
 const users = require('../repositories/users');
 const items = require('../repositories/items');
 const { protect, requireRole } = require('../middleware/auth.v2');
-// These were defined and exported but never mounted, so listing creation was
-// unthrottled while the README documented a limit that did not exist.
+
 const { itemIpLimit, itemAccountLimit } = require('../middleware/rateLimit');
 const { optionalAuth } = require('../middleware/auth.v2');
 const { many } = require('../config/pg');
 
-/**
- * Validate an uploaded photo by its bytes, not its label.
- *
- * The previous check accepted anything shaped like `data:image/png;base64,...`
- * — the declared type was never compared to the content, so arbitrary bytes
- * labelled as an image were stored and served back. The first bytes of a real
- * image are fixed per format, so check those.
- */
 const IMAGE_LIMIT_BYTES = 5 * 1024 * 1024;
 
 const MAGIC = [
@@ -52,15 +43,11 @@ function imageProblem(raw) {
 
 const router = express.Router();
 
-// Imported, not duplicated. This file used to carry its own copy of the
-// category and location lists, so editing utils/categories.js changed nothing
-// here — and this copy is what validates every submission.
 const { CATEGORIES, LOCATIONS, isValidSubcategory } = require('../utils/categories');
 
 const TYPES = ['lost','found'];
 const STATUSES = ['open','claimed','returned','hidden'];
 
-/** Rejects an array or object arriving where a single value is expected. */
 const oneValue = (v) => (typeof v === 'string' ? v.trim() : '');
 
 router.get('/', optionalAuth, async (req, res, next) => {
@@ -98,8 +85,6 @@ router.get('/', optionalAuth, async (req, res, next) => {
     const q = oneValue(req.query.q);
     if (q) filter.q = q.slice(0, 80);
 
-    // The date-range filter the board sends. It was silently ignored, so the
-    // UI showed unfiltered results while claiming a range was applied.
     for (const k of ['from', 'to']) {
       const v = oneValue(req.query[k]);
       if (!v) continue;
@@ -115,10 +100,6 @@ router.get('/', optionalAuth, async (req, res, next) => {
 
     const { total, items: rows } = await items.list(filter, { page, limit, sort });
 
-    /* A signed-in reader is told which listings they may message about, so the
-       card can offer the button only where it will work. The server still
-       decides who may talk; this only stops the UI advertising something that
-       would answer 403. */
     let publicRows = rows.map(items.toPublicItem);
     if (req.user) {
       const mine = await many('select id from items where reported_by = $1', [req.user.id]);
@@ -143,19 +124,11 @@ router.get('/meta', (req, res) => {
   const { CATEGORY_TREE } = require('../utils/categories');
   res.status(200).json({
     categories: CATEGORIES, locations: LOCATIONS, types: TYPES, statuses: STATUSES,
-    // The form populates its subcategory selects from this map; without it the
-    // dropdowns only ever contained the placeholder.
+
     subcategories: CATEGORY_TREE
   });
 });
 
-/**
- * Resolve the caller from the bearer token, or null.
- *
- * Unlike `protect` this never rejects: a missing, expired or malformed token
- * just means "anonymous". Used where a response is public but slightly richer
- * for its owner.
- */
 async function optionalViewer(req) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
@@ -179,10 +152,6 @@ router.get('/:id', async (req, res, next) => {
     const item = await items.findById(req.params.id);
     if (!item) return res.status(404).json({ message: 'Listing not found' });
 
-    // The owner needs to know this listing is theirs, so the board can show
-    // owner-only controls. Everyone else gets the public shape. Ownership is
-    // decided from the bearer token when one is present; an anonymous request
-    // simply never sees it.
     const viewer = await optionalViewer(req);
     const out = items.toPublicItem(item);
     if (viewer && viewer.id === item.reportedBy) out.reportedBy = item.reportedBy;
@@ -202,13 +171,6 @@ router.get('/:id/similar', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-/**
- * Fire-and-forget WhatsApp fanout for a new listing.
- *
- * Wrapped so nothing here can reach the caller: if the subscriber query fails,
- * if Meta is down, or if the module is unconfigured, the listing still stands
- * and the reporter still gets their 201.
- */
 function announceToSubscribers(item) {
   (async () => {
     try {
@@ -233,21 +195,13 @@ router.post('/', itemIpLimit, protect, itemAccountLimit, async (req, res, next) 
     const type = oneValue(b.type);
     const date = oneValue(b.date);
 
-    // The client shrinks photos to fit, but a client-side limit is not a limit.
-    // Without this, a curl call stores megabytes in a text column, and any URL
-    // shape at all — including javascript: — is accepted into image_url.
     const imgProblem = imageProblem(oneValue(b.imageUrl));
     if (imgProblem) return res.status(400).json({ message: imgProblem });
-
 
     if (title.length < 2) return res.status(400).json({ message: 'A title is required' });
     if (title.length > 120) return res.status(400).json({ message: 'Title is too long (max 120 characters)' });
     if (!CATEGORIES.includes(category)) return res.status(400).json({ message: 'Unknown category' });
-    /* 'Other' is allowed here, and only here, so a student can file something
-       lost somewhere the fifteen campus places do not cover. It must come with
-       a typed place, otherwise the listing is unfindable. LOCATIONS itself is
-       untouched, so the campus plan keeps its fifteen blocks and the filter
-       list is unchanged. */
+
     if (location === 'Other') {
       if (!oneValue(b.customLocation).trim()) {
         return res.status(400).json({ message: 'Type where it was, since you chose Other' });
@@ -258,12 +212,11 @@ router.post('/', itemIpLimit, protect, itemAccountLimit, async (req, res, next) 
     if (!TYPES.includes(type)) return res.status(400).json({ message: 'type must be lost or found' });
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ message: 'date must be YYYY-MM-DD' });
 
-    // A real calendar date, not just the right shape: 2026-02-30 must be refused
     const parsed = new Date(`${date}T00:00:00Z`);
     if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
       return res.status(400).json({ message: 'That date does not exist' });
     }
-    // One day of slack so a late-evening report from another timezone still passes
+
     if (parsed.getTime() > Date.now() + 24 * 60 * 60 * 1000) {
       return res.status(400).json({ message: 'The date cannot be in the future' });
     }
@@ -274,26 +227,21 @@ router.post('/', itemIpLimit, protect, itemAccountLimit, async (req, res, next) 
     if (oneValue(b.subcategory).length > 60) {
       return res.status(400).json({ message: 'Subcategory is too long (max 60 characters)' });
     }
-    // customCategory and customLocation are free text and previously had no cap
-    // at all — the only ceiling was the 2 MB JSON body limit. 60 characters is
-    // the same budget the fixed category and location lists use.
+
     if (oneValue(b.customCategory).trim().length > 60) {
       return res.status(400).json({ message: 'Custom category is too long (max 60 characters)' });
     }
     if (oneValue(b.customLocation).trim().length > 60) {
       return res.status(400).json({ message: 'Custom location is too long (max 60 characters)' });
     }
-    // isValidSubcategory was written for this rule and never called, so any
-    // client could store category 'Bottles' with subcategory 'Laptops'.
+
     if (!isValidSubcategory(category, oneValue(b.subcategory))) {
       return res.status(400).json({ message: 'That subcategory does not belong to that category' });
     }
-    // "Other" with no explanation stores a listing nobody can search for
+
     if (category === 'Other' && !oneValue(b.customCategory).trim()) {
       return res.status(400).json({ message: 'Please describe the category when you choose Other' });
     }
-    // 'Other' is not in LOCATIONS and is rejected above, so this branch can never
-    // run. Removed rather than left as a trap for the next reader.
 
     const created = await items.create({
       title, description: oneValue(b.description), category,
@@ -301,9 +249,7 @@ router.post('/', itemIpLimit, protect, itemAccountLimit, async (req, res, next) 
       location, customLocation: oneValue(b.customLocation), date, type,
       imageUrl: oneValue(b.imageUrl), reportedBy: req.user.id
     });
-    /* Announce the listing to students who opted in to WhatsApp alerts.
-       Deliberately not awaited: a messaging failure must never delay or fail
-       the response the reporter is waiting for, and the row is already saved. */
+
     announceToSubscribers(created);
 
     res.status(201).json({ item: created });
@@ -321,17 +267,12 @@ router.put('/:id', protect, async (req, res, next) => {
     }
     const b = req.body || {};
 
-    // PUT used to skip every rule POST enforces: an edit could store a
-    // javascript: URL, a date that does not exist, or a subcategory that
-    // contradicts its category. Validate the resolved values, not the raw body.
     const nextTitle = oneValue(b.title) || existing.title;
     const nextDesc = b.description !== undefined ? oneValue(b.description) : existing.description;
     const nextCategory = CATEGORIES.includes(oneValue(b.category)) ? oneValue(b.category) : existing.category;
     const nextSub = b.subcategory !== undefined ? oneValue(b.subcategory) : existing.subcategory;
     const nextLocation = LOCATIONS.includes(oneValue(b.location)) ? oneValue(b.location) : existing.location;
-    // existing.date comes back from pg as a Date object, not a 'YYYY-MM-DD'
-    // string, so feeding it to the calendar check made every edit that did not
-    // resend the date fail with "That date does not exist".
+
     const existingDate = existing.date instanceof Date
       ? existing.date.toISOString().slice(0, 10)
       : String(existing.date || '').slice(0, 10);
@@ -352,8 +293,7 @@ router.put('/:id', protect, async (req, res, next) => {
     if (String(b.customLocation !== undefined ? oneValue(b.customLocation) : existing.customLocation || '').trim().length > 60) {
       return res.status(400).json({ message: 'Custom location is too long (max 60 characters)' });
     }
-    // POST rejects these; PUT silently fell back to the existing value, so an edit
-    // could leave a listing in a state create exists to prevent.
+
     if (b.category !== undefined && !CATEGORIES.includes(oneValue(b.category))) {
       return res.status(400).json({ message: 'Unknown category' });
     }
@@ -417,18 +357,14 @@ router.delete('/:id', protect, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-/** Moderation: hide or restore. Moderators may restore others' listings to open. */
 router.patch('/:id/status', protect, async (req, res, next) => {
   try {
     const requested = oneValue(req.body.status);
-    // The dashboard still offers 'closed'; the schema has no such state, and a
-    // closed listing is a hidden one.
+
     const next_ = requested === 'closed' ? 'hidden' : requested;
 
     const STAFF = ['moderator', 'admin', 'superadmin'];
-    // An owner may only reopen or close their own listing. 'claimed' and
-    // 'returned' are outcomes of the claim workflow: setting them by hand left
-    // claims.complete() refusing forever and nobody credited.
+
     const OWNER_STATUSES = ['open'];
     const STAFF_STATUSES = ['open', 'hidden'];
 
@@ -437,9 +373,7 @@ router.patch('/:id/status', protect, async (req, res, next) => {
 
     const isOwner = existing.reportedBy === req.user.id;
     const isStaff = STAFF.includes(req.user.role);
-    // Reopening a claimed listing is worse than it looks: complete() requires the
-    // item to still be 'claimed', so an approved claim could never be completed
-    // and nobody would be credited.
+
     if (!isStaff && existing.status === 'claimed' && next_ === 'open') {
       return res.status(409).json({
         message: 'This listing has an approved claim. Complete the handover, or ask a moderator.'
@@ -450,26 +384,16 @@ router.patch('/:id/status', protect, async (req, res, next) => {
       return res.status(403).json({ message: 'You can only change your own listing' });
     }
 
-    // An owner moves their listing through its lifecycle; only staff may hide.
     if (next_ === 'hidden' && !isStaff) {
       return res.status(403).json({ message: 'Only a moderator can hide a listing' });
     }
-    // An owner must not be able to undo a moderation decision: a listing that
-    // staff hid stays hidden until staff restore it.
+
     if (!isStaff && existing.status === 'hidden') {
       return res.status(403).json({
         message: 'This listing was hidden by a moderator and cannot be reopened by its owner'
       });
     }
-    // A returned listing is settled: reopening it would erase the completed
-    // handover and the points already credited to both parties.
-    // A returned listing is settled. Reopening it to 'open' makes it claimable
-    // again, and a second claimant completing a second handover earns a fresh
-    // return credit because the points key includes the claimant id. That is a
-    // duplicate reward for one item, so 'open' is refused for every role.
-    //
-    // Staff keep a correction path: they may still hide a settled listing,
-    // which removes a bad listing without resurrecting the handover.
+
     if (existing.status === 'returned' && next_ === 'open') {
       return res.status(403).json({
         message: 'This listing was returned and cannot be reopened. Hide it instead if it should be removed.'
