@@ -4,11 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Profile — Foundry</title>
-  <script src="assets/js/theme-init.js?v=20261127i"></script>
+  <script src="assets/js/theme-init.js?v=20261127j"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/foundit.css?v=20261127i" />
+  <link rel="stylesheet" href="assets/css/foundit.css?v=20261127j" />
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to content</a>
@@ -70,8 +70,12 @@
           <!-- The input is visible, not hidden and triggered from script. A
                hidden input opened via click() can be blocked by the browser;
                a real one the visitor can see and press never is. -->
-          <input id="avatar-file" type="file" class="file-input"
-                 accept=".png,.jpg,.jpeg,.webp,image/*">
+          <!-- No accept attribute on purpose. Any accept value makes Windows
+               build a filtered file-type list, and with some filters the Open
+               button stays greyed out even with a valid image selected. Without
+               it the dialog offers All Files and Open always works. The script
+               checks the file is an image after it is chosen. -->
+          <input id="avatar-file" type="file" class="file-input">
 
           <button type="button" class="btn" id="avatar-clear">Remove</button>
           <p class="note" id="avatar-note" style="margin:6px 0 0">PNG, JPEG or WebP. It is shrunk before upload.</p>
@@ -99,9 +103,9 @@
   </div></div>
 </footer>
 
-<script src="assets/js/api.js?v=20261127i"></script>
-<script src="assets/js/nav.js?v=20261127i"></script>
-<script src="assets/js/theme.js?v=20261127i"></script>
-<script src="assets/js/profile.js?v=20261127i"></script>
+<script src="assets/js/api.js?v=20261127j"></script>
+<script src="assets/js/nav.js?v=20261127j"></script>
+<script src="assets/js/theme.js?v=20261127j"></script>
+<script src="assets/js/profile.js?v=20261127j"></script>
 </body>
 </html>
