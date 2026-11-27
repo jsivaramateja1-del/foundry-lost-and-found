@@ -2240,3 +2240,14 @@ html.theme-changing .btn {
 
 /* the avatar circle is also a drop target */
 .avatar--over { outline:3px dashed var(--primary); outline-offset:3px; }
+
+/* A native file input, styled but not hidden: it must be pressable directly. */
+.file-input { font:inherit; font-size:var(--t-sm); color:var(--ink-2); max-width:260px; }
+.file-input::file-selector-button {
+  font:inherit; font-size:var(--t-sm); font-weight:700; cursor:pointer;
+  min-height:44px; padding:0 16px; margin-right:10px;
+  color:var(--ink); background:var(--surface);
+  border:2px solid var(--line); border-radius:var(--radius);
+  box-shadow:var(--shadow);
+}
+.file-input::file-selector-button:hover { background:var(--sunken); }

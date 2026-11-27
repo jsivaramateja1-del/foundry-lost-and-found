@@ -50,7 +50,7 @@
 
   /* Shrink before upload, the same way item photos are shrunk. */
   var fileInput = document.getElementById("avatar-file");
-  var pickBtn = document.getElementById("avatar-pick");
+  var pickBtn = null;
   var preview = document.getElementById("avatar-preview");
 
   function upload(f) {
