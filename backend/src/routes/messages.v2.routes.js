@@ -23,13 +23,18 @@ router.get('/', protect, async (req, res, next) => {
 
     const conversations = await messages.conversationsFor(req.params.id, req.user.id);
     await messages.markRead(req.params.id, req.user.id);
+    /* Opening the thread counts as being online, and the other party's last
+       seen comes back with the thread so the header can say Online or how long
+       ago they were around. */
+    await messages.touchPresence(req.user.id);
 
     res.json({
       messages: thread,
       isReporter: audience.isReporter,
       reporterId: audience.reporterId,
       conversations: conversations || [],
-      otherTyping: await messages.typingOn(req.params.id, req.user.id)
+      otherTyping: await messages.typingOn(req.params.id, req.user.id),
+      otherLastSeen: withId ? await messages.presenceOf(withId) : null
     });
   } catch (err) { next(err); }
 });

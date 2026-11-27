@@ -218,3 +218,17 @@ async function typingOn(itemId, userId) {
 
 module.exports.markTyping = markTyping;
 module.exports.typingOn = typingOn;
+
+/** Record that this user is around right now. */
+async function touchPresence(userId) {
+  await one('update users set last_seen_at = now() where id = $1', [userId]);
+}
+
+/** When was this user last seen? Null if they have never been. */
+async function presenceOf(userId) {
+  const row = await one('select last_seen_at from users where id = $1', [userId]);
+  return row ? row.last_seen_at : null;
+}
+
+module.exports.touchPresence = touchPresence;
+module.exports.presenceOf = presenceOf;

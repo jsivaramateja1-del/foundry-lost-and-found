@@ -2261,3 +2261,6 @@ html.theme-changing .btn {
 
 /* read receipt on your own messages */
 .bubble__seen { color:var(--teal); font-weight:700; }
+
+/* online state under the conversation header */
+.cv__online { color:var(--teal); font-weight:700; }

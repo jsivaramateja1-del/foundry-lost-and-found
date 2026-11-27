@@ -299,3 +299,7 @@ ALTER TABLE messages ADD COLUMN IF NOT EXISTS image_url text;
 ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_body_check;
 ALTER TABLE messages ADD CONSTRAINT messages_body_check
   CHECK ((char_length(btrim(body)) BETWEEN 1 AND 1000) OR (image_url IS NOT NULL));
+
+-- Presence: updated whenever someone opens or polls a conversation, so the other
+-- person can be shown as Online, or as "last seen" a while ago.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at timestamptz;

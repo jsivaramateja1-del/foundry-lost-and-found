@@ -38,6 +38,20 @@
   if (!Auth.isLoggedIn) { Auth.requireLogin("conversations.html"); return; }
   state.me = Auth.user && Auth.user.id;
 
+  /** Online if seen in the last two minutes, otherwise how long ago. */
+  function presenceText(iso) {
+    if (!iso) return "";
+    var seen = new Date(iso).getTime();
+    if (!seen) return "";
+    var mins = Math.floor((Date.now() - seen) / 60000);
+    if (mins < 2) return "Online";
+    if (mins < 60) return "Last seen " + mins + "m ago";
+    var hrs = Math.floor(mins / 60);
+    if (hrs < 24) return "Last seen " + hrs + "h ago";
+    var days = Math.floor(hrs / 24);
+    return "Last seen " + (days === 1 ? "yesterday" : days + "d ago");
+  }
+
   function bubble(m) {
     var mine = m.sender_id === state.me;
     var photo = m.image_url
@@ -109,8 +123,14 @@
         peer = (data.conversations && data.conversations[0] && data.conversations[0].otherName) || null;
         title.textContent = peer || 'The person who posted this item';
       }
-      sub.textContent = data.otherTyping ? 'typing…' : 'Only the two of you can see this.';
-      sub.className = data.otherTyping ? 'note cv__typing' : 'note';
+      if (data.otherTyping) {
+        sub.textContent = 'typing…';
+        sub.className = 'note cv__typing';
+      } else {
+        var presence = presenceText(data.otherLastSeen);
+        sub.textContent = presence || 'Only the two of you can see this.';
+        sub.className = presence === 'Online' ? 'note cv__online' : 'note';
+      }
 
       people.innerHTML = data.isReporter && data.conversations.length
         ? data.conversations.map(function (c) {
