@@ -142,7 +142,7 @@
   var lastPing = 0;
   body.addEventListener('input', function () {
     var now = Date.now();
-    if (now - lastPing < 2000 || !itemId) return;
+    if (now - lastPing < 1500 || !itemId) return;
     lastPing = now;
     api('/items/' + encodeURIComponent(itemId) + '/messages/typing', { method: 'POST', auth: true })
       .catch(function () { /* a missed ping is harmless */ });
@@ -230,7 +230,7 @@
 
   if (itemId) {
     loadThread();
-    state.timer = setInterval(function () { if (!document.hidden) loadThread(); }, 3000);
+    state.timer = setInterval(function () { if (!document.hidden) loadThread(); }, 1500);
   } else {
     showList();
   }
