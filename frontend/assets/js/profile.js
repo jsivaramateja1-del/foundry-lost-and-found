@@ -60,13 +60,25 @@
        successfully in this browser: FileReader -> data URL -> canvas.
        A blob: URL was tried first and failed with net::ERR_FAILED and a 0 KB
        transfer, even with blob: allowed in img-src. data: URLs work. */
-    if (!/^image\/(png|jpeg|webp)$/.test(f.type || "")) {
-      note.textContent = "Choose a PNG, JPEG or WebP image. This file is " +
-        (f.type || "an unknown type") + ".";
+    /* Be permissive about the MIME type. Some systems report .jpeg as
+       image/jpg, and some report nothing at all; a strict list rejects files
+       the browser can actually decode. What matters is whether the image
+       decodes, and that is checked at img.onerror with the real type shown. */
+    var type = (f.type || "").toLowerCase();
+    var nameOk = /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name || "");
+    var describe = f.name + " (" + (type || "no type reported") + ", " +
+      Math.round((f.size || 0) / 1024) + " KB)";
+
+    if (!f.size) {
+      note.textContent = "That file is empty, 0 bytes: " + describe;
       return;
     }
-    if (!f.size) {
-      note.textContent = "That file is empty (0 bytes).";
+    if (type && type.indexOf("image/") !== 0) {
+      note.textContent = "That is not an image file: " + describe;
+      return;
+    }
+    if (!type && !nameOk) {
+      note.textContent = "That file does not look like an image: " + describe;
       return;
     }
 
@@ -81,7 +93,9 @@
       var img = new Image();
 
       img.onerror = function () {
-        note.textContent = "That image could not be decoded by this browser.";
+        note.textContent = "This browser cannot decode that image. File was " +
+          describe + ". If it is a HEIC or HEIF photo from a phone, save it as " +
+          "JPEG first.";
       };
 
       img.onload = function () {
