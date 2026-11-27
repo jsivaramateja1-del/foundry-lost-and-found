@@ -50,12 +50,16 @@
 
   /* Shrink before upload, the same way item photos are shrunk. */
   var fileInput = document.getElementById("avatar-file");
+  var pickBtn = document.getElementById("avatar-pick");
+  if (pickBtn && fileInput) {
+    pickBtn.addEventListener("click", function () { fileInput.click(); });
+  }
   if (fileInput) {
     fileInput.addEventListener("change", function () {
       var f = fileInput.files && fileInput.files[0];
       if (!f) return;
       var note = document.getElementById("avatar-note");
-      note.textContent = "Uploading…";
+      note.textContent = "Reading the file…";
       var reader = new FileReader();
       reader.onload = function () {
         var img = new Image();
@@ -66,6 +70,7 @@
           c.height = Math.round(img.height * scale);
           c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
           var data = c.toDataURL("image/jpeg", 0.85);
+          note.textContent = "Uploading… (" + Math.round(data.length / 1024) + " KB)";
           api("/auth/me/avatar", { method: "PATCH", auth: true, body: { avatar: data } })
             .then(function (r) {
               var av = document.getElementById("avatar-preview");
@@ -75,8 +80,10 @@
             })
             .catch(function (e) { note.textContent = (e && e.message) || "That photo could not be saved."; });
         };
+        img.onerror = function () { note.textContent = "That file could not be read as an image."; };
         img.src = reader.result;
       };
+      reader.onerror = function () { note.textContent = "That file could not be read."; };
       reader.readAsDataURL(f);
     });
 
