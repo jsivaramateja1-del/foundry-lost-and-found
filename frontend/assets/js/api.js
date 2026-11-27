@@ -1,30 +1,12 @@
-/* ============================================================
-   api.js — one place for every call to the backend.
-   Shared by index.html, auth.html, dashboard.html and admin.html.
-   ============================================================ */
-
-/**
- * Work out where the API lives.
- * When Express serves this frontend the API is on the same origin.
- * If you open index.html with VS Code Live Server instead, fall back
- * to the local backend port.
- */
 const API_BASE = (() => {
   const { protocol } = window.location;
 
-  // Opened straight off disk: there is no origin, so fall back to the dev port.
   if (protocol === 'file:') return 'http://localhost:5000/api';
 
-  // An explicit override wins (useful for a static preview against a separate
-  // backend): set window.FOUNDRY_API_BASE before this script loads.
   if (typeof window.FOUNDRY_API_BASE === 'string' && window.FOUNDRY_API_BASE) {
     return window.FOUNDRY_API_BASE.replace(/\/+$/, '');
   }
 
-  // Otherwise the API is on the same origin that served this page. Hardcoding
-  // port 5000 for every other port meant the app silently called nothing
-  // whenever it ran on any other port — which is how it behaved under the
-  // browser tests, and would have on any deployment not using the default port.
   return `${window.location.origin}/api`;
 })();
 
@@ -45,9 +27,7 @@ const Auth = {
   get isLoggedIn() {
     return Boolean(this.token);
   },
-  // Anyone who may open the admin page: moderators see the moderation panels,
-  // administrators see everything. What they can actually DO is decided by the
-  // server, not by this flag.
+
   get isAdmin() {
     return ['moderator', 'admin', 'superadmin'].includes(this.user?.role);
   },
@@ -62,17 +42,12 @@ const Auth = {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
   },
-  /** Send the visitor to the login page, remembering where they came from. */
+
   requireLogin(redirect = window.location.pathname) {
     window.location.href = `auth.html?next=${encodeURIComponent(redirect)}`;
   }
 };
 
-/**
- * Core request helper.
- * Throws an Error with a readable message on any non-2xx response,
- * so callers can just try/catch and show err.message.
- */
 async function api(path, { method = 'GET', body, auth = false, signal } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (auth && Auth.token) headers.Authorization = `Bearer ${Auth.token}`;
@@ -108,9 +83,8 @@ async function api(path, { method = 'GET', body, auth = false, signal } = {}) {
   return data;
 }
 
-/** Small helpers used across pages */
 const ui = {
-  /** Show a toast message for a couple of seconds. */
+
   toast(message) {
     let el = document.querySelector('.toast');
     if (!el) {
@@ -128,7 +102,6 @@ const ui = {
     }, 3200);
   },
 
-  /** Format a date as 12 Oct 2026 */
   date(value) {
     if (!value) return '—';
     const d = /^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? new Date(value + 'T00:00:00') : new Date(value);
@@ -136,7 +109,6 @@ const ui = {
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   },
 
-  /** Escape user text before putting it in HTML. */
   esc(value) {
     return String(value ?? '').replace(/[&<>"']/g, (c) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -144,11 +116,6 @@ const ui = {
   }
 };
 
-/**
- * Log out. Clears the session and navigates IMMEDIATELY, then tells the
- * server as a fire-and-forget request. Never await anything before
- * redirecting — a slow or failing request must not block the user.
- */
 function logoutAndGo(target = 'index.html') {
   const token = Auth.token;
   Auth.clear();
@@ -160,19 +127,13 @@ function logoutAndGo(target = 'index.html') {
         headers: { Authorization: `Bearer ${token}` }
       }).catch(() => {});
     } catch {
-      /* the token is stateless — the session is already gone locally */
+
     }
   }
 }
 
-/* ---------------- colour theme ---------------- */
-
 const THEME_KEY = 'foundry.theme';
 
-/**
- * Dark is the default. The choice is stored locally and applied to <html>
- * before paint on every page, so there is no flash of the wrong theme.
- */
 function applyTheme(theme) {
   const value = theme === 'light' ? 'light' : 'dark';
   document.documentElement.dataset.theme = value;
@@ -185,14 +146,7 @@ function applyTheme(theme) {
 }
 
 function initTheme() {
-  // theme-init.js already resolved stored -> OS preference -> Paper before
-  // first paint. Trust that decision instead of re-deriving it with a
-  // different rule, which caused a flash of the wrong theme and ignored the
-  // operating system setting entirely.
-  // Bind the toggle. Nothing did this before, so the button was inert on every
-  // page and the choice was never stored.
-  /* The toggle is bound in theme.js, which animates the change. Binding it here
-     as well made one click toggle twice and appear to do nothing. */
+
   var decided = document.documentElement.getAttribute('data-theme');
   if (decided === 'light' || decided === 'dark') {
     applyTheme(decided);
@@ -202,7 +156,6 @@ function initTheme() {
   }
 }
 
-/** Reveal elements as they scroll into view. */
 function initScrollReveal() {
   const targets = document.querySelectorAll('[data-reveal]');
   if (!targets.length) return;
@@ -222,7 +175,6 @@ function initScrollReveal() {
   targets.forEach((el) => observer.observe(el));
 }
 
-/** Wire the mobile menu button. */
 function initMobileNav() {
   const toggle = document.querySelector('.menu-toggle');
   const nav = document.querySelector('.nav');
@@ -234,16 +186,8 @@ function initMobileNav() {
   });
 }
 
-/**
- * In-app notifications.
- * Any page with a [data-notifications] block gets the same bell. The list is
- * real: the server writes a notification when a claim arrives, when a claim is
- * reviewed, and when an item is marked returned. This only reads them.
- */
-// Only in-app pages, and only the dashboard sections that exist
 const SAFE_NOTIFICATION_TARGET = /^(index|dashboard|admin)\.html(#(listings|claims-received|claims-made))?$/;
 
-/** Return the link only if it is a known in-app destination, else ''. */
 function safeNotificationTarget(link) {
   const value = String(link || '');
   return SAFE_NOTIFICATION_TARGET.test(value) ? value : '';
@@ -269,8 +213,7 @@ async function initNotifications() {
 
     if (count) count.textContent = unread ? `${unread} unread` : 'All read';
     if (readAll) {
-      // Nothing to do when nothing is unread: the button says so rather than
-      // looking broken
+
       readAll.disabled = unread === 0;
       readAll.setAttribute('aria-disabled', String(unread === 0));
     }
@@ -278,14 +221,11 @@ async function initNotifications() {
     list.innerHTML = data.notifications.length
       ? data.notifications.map((n) => {
           const target = safeNotificationTarget(n.link);
-          // Read state must reach a screen reader, not only the eye. A real
-          // span works for both the button and the plain-div variant, whereas
-          // aria-label on a div is ignored by assistive technology.
+
           const prefix = n.read ? '' : '<span class="visually-hidden">Unread: </span>';
           const body = `<p>${prefix}${ui.esc(n.message)}</p><time>${ui.date(n.createdAt)}</time>`;
           const classes = `notifications__item${n.read ? '' : ' is-unread'}`;
-          // A notification with nowhere to go is rendered as plain text, so it
-          // never looks clickable while doing nothing
+
           return target
             ? `<li><button type="button" class="${classes} notifications__item--link"
                  data-notif-id="${n.id}" data-notif-target="${ui.esc(target)}">${body}</button></li>`
@@ -298,8 +238,7 @@ async function initNotifications() {
     try {
       paint(await api('/notifications', { auth: true }));
     } catch {
-      // A failed fetch must not break the page, but it must not look like
-      // "you have no notifications" either
+
       badge.hidden = true;
       if (count) count.textContent = '';
       if (readAll) readAll.disabled = true;
@@ -332,15 +271,12 @@ async function initNotifications() {
     });
   }
 
-  // Clicking a notification marks it read and, when it points somewhere,
-  // takes the reader to that section of the dashboard
   list.addEventListener('click', async (event) => {
     const item = event.target.closest('[data-notif-id]');
     if (!item) return;
     const target = item.dataset.notifTarget || '';
     const wasUnread = item.classList.contains('is-unread');
 
-    // An already-read row needs no request; it simply navigates
     if (wasUnread) {
       try {
         await api(`/notifications/${item.dataset.notifId}/read`, { method: 'PATCH', auth: true });
@@ -373,13 +309,6 @@ async function initNotifications() {
   await load();
 }
 
-/* ---------------------------------------------------------------------------
-   Mobile disclosure menu.
-   Below 640px the header collapses to brand + theme toggle + Menu. This wires
-   the button: aria-expanded, a data attribute the CSS keys on, Escape to close,
-   and a click outside to dismiss. Kept here because api.js loads on every page
-   that has a header, so there is one implementation rather than seven.
-   --------------------------------------------------------------------------- */
 (function () {
   function init() {
     var toggle = document.querySelector('.menu-toggle');
@@ -409,7 +338,6 @@ async function initNotifications() {
       setOpen(false);
     });
 
-    // a resize past the breakpoint must not leave the panel stuck open
     if (window.matchMedia) {
       var mq = window.matchMedia('(min-width: 641px)');
       var onChange = function () { if (mq.matches) setOpen(false); };

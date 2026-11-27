@@ -1,14 +1,11 @@
-/* admin.html page logic.
-   This used to live in an inline <script> block, which the Content-Security-Policy
-   (script-src 'self') blocked in the browser, so the page never ran its own code. */
-    if (!Auth.isLoggedIn) {
+if (!Auth.isLoggedIn) {
       Auth.requireLogin('admin.html');
     }
 
     document.getElementById('who').textContent = Auth.user ? Auth.user.name : '';
 
     document.getElementById('logout').addEventListener('click', () => {
-      try { Auth.clear(); } catch { /* the link still navigates */ }
+      try { Auth.clear(); } catch {  }
     });
 
     function row(cells) {
@@ -21,17 +18,17 @@
         ? rows.map((r) => `
             <div class="chart__row">
               <span>${ui.esc(r[labelKey])}</span>
+
               <span class="chart__bar"><span class="chart__fill" style="width:${(r[valueKey] / max) * 100}%"></span></span>
               <span class="chart__val">${r[valueKey]}</span>
+
             </div>`).join('')
+
         : '<p class="form-note">No data yet.</p>';
     }
 
-    /* Which page of each long table is showing. 25 rows is a comfortable
-       screenful and keeps the admin response small. */
     const paging = { items: 1, claims: 1, limit: 25 , users: 1 };
 
-    /** Draw a "Page x of y" control. Renders nothing when there is one page. */
     function renderPager(id, data, key) {
       const node = document.getElementById(id);
       if (!node) return;
@@ -47,12 +44,6 @@
           ${data.page >= data.pages ? 'disabled' : ''}>Next</button>`;
     }
 
-    /**
-     * Explain why the admin area is not available, naming the signed-in account
-     * and its role. A bare "this page is for admins" leaves the reader guessing
-     * whether they are signed out, signed in as the wrong account, or missing a
-     * role — which is exactly the confusion this page used to cause.
-     */
     function showGuard(reason) {
       const guard = document.getElementById('guard');
       if (!Auth.isLoggedIn) {
@@ -81,8 +72,7 @@
       if (isModerator) {
         document.querySelector('.cards-row').hidden = true;
         const listingPanel = document.getElementById('admin-items').closest('section.panel');
-        /* The API grants moderators reports and audit. Hide only the panels
-           they genuinely cannot use, or they can never triage abuse. */
+
         document.querySelectorAll('#admin-content section.panel').forEach((panel) => {
           if (panel === listingPanel) return;
           const head = (panel.querySelector('h2') || {}).textContent || '';
@@ -119,9 +109,7 @@
 
         const items = await api(`/admin/items?page=${paging.items}&limit=${paging.limit}`, { auth: true });
         paging.items = items.page;
-        // A moderator's found-only table was already rendered above; writing the
-        // full admin table over it showed them every listing plus status and
-        // delete controls the server answers with 403.
+
         if (!isModerator) document.getElementById('items-count').textContent =
           `${items.total} listing${items.total === 1 ? '' : 's'}`;
         renderPager('items-pager', items, 'items');
@@ -134,18 +122,21 @@
               ui.date(i.date),
               `<select class="select" data-admin-status="${i.id}" aria-label="Status for ${ui.esc(i.title)}">
                  ${['open', 'claimed', 'returned', 'hidden'].filter((s) => s !== 'returned' || s === i.status).map((s) => `<option value="${s}"${s === i.status ? ' selected' : ''}>${s}</option>`).join('')}
+
                </select>`,
+
               `<span style="display:flex;gap:6px;flex-wrap:wrap;">
                  ${i.type === 'found' && !i.verifiedAt && i.status !== 'hidden'
                    ? `<button class="btn btn--primary" data-verify-found="${i.id}" aria-label="Verify found item ${ui.esc(i.title)}">Verify</button>`
+
                    : ''}
                  <button class="btn btn--ghost" data-admin-delete="${i.id}" aria-label="Delete listing ${ui.esc(i.title)}">Delete</button>
+
                </span>`
+
             ])).join('')
           : '<tr><td colspan="7" style="color:var(--muted)">No listings.</td></tr>';
 
-        // A moderator is not allowed to see the account list. That is a
-        // server decision, so the page has to cope with the 403.
         let users = { count: 0, users: [] };
         let usersUnavailable = false;
         try {
@@ -157,8 +148,7 @@
           users = { count: 0, users: [] };
           usersUnavailable = true;
         }
-        // Only write a count when the request actually succeeded. Overwriting the
-        // refusal message with "0 accounts" told a moderator the platform was empty.
+
         if (!usersUnavailable) {
           const _ut = users.total != null ? users.total : users.count;
           document.getElementById('users-count').textContent =
@@ -190,11 +180,13 @@
                   : `<button class="btn btn--ghost" data-user="${u.id}" data-role="admin">Make admin</button>
                      ${u.role === 'faculty'
                         ? `<button class="btn btn--ghost" data-user="${u.id}" data-role="student">Make student</button>`
+
                         : `<button class="btn btn--ghost" data-user="${u.id}" data-role="faculty">Make faculty</button>`}`,
                 u.role === 'admin'
                   ? ''
                   : u.suspended
                     ? `<button class="btn btn--ghost" data-unsuspend="${u.id}">Reinstate</button>`
+
                     : `<button class="btn btn--ghost" data-suspend="${u.id}">Suspend</button>`
               ].join(' ')
             ])).join('')
@@ -257,7 +249,7 @@
             ])).join('')
           : '<tr><td colspan="6" style="color:var(--muted)">No claims.</td></tr>';
       } catch (err) {
-        // If the user just logged out, don't flash the guard message
+
         if (!Auth.isLoggedIn) return;
         if (err.status === 401 || err.status === 403) {
           document.getElementById('admin-content').hidden = true;
@@ -268,12 +260,8 @@
       }
     }
 
-    /* ---------------- admin actions ---------------- */
-
-    // Pager buttons for the two long tables
     document.addEventListener('click', async (event) => {
-    // Staff override of a claim. The owner-only route leaves an ignored claim
-    // stuck forever; this settles it, and the server requires a reason.
+
     const overrideBtn = event.target.closest('[data-override-claim]');
     if (overrideBtn) {
       const decision = overrideBtn.dataset.decision;
@@ -310,7 +298,6 @@
       await loadAdmin();
     });
 
-    // Changing the status dropdown on a listing saves immediately
     document.addEventListener('change', async (event) => {
       const select = event.target.closest('[data-admin-status]');
       if (!select) return;
@@ -330,7 +317,6 @@
       }
     });
 
-    // Delete a listing, promote / demote an account, resolve a report, suspend
     document.addEventListener('click', async (event) => {
       const remove = event.target.closest('[data-admin-delete]');
       const role = event.target.closest('[data-role]');
@@ -433,4 +419,3 @@
     loadAdmin();
     initNotifications();
     initTheme();
-  

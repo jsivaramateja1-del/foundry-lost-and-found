@@ -6,20 +6,18 @@
   <title>Foundry — Campus Lost &amp; Found | Sai University</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <meta name="description" content="A shared space for Sai University students to report lost belongings, browse found items and coordinate safe returns." />
-  <script src="assets/js/theme-init.js?v=20261127A"></script>
+  <script src="assets/js/theme-init.js?v=20261127B"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400;1,9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/foundit.css?v=20261127A" />
+  <link rel="stylesheet" href="assets/css/foundit.css?v=20261127B" />
   <meta name="theme-color" content="#F4EDE0" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#121110" media="(prefers-color-scheme: dark)">
 </head>
 <body>
-  
 
   <a class="skip-link" href="#main">Skip to content</a>
 
-  <!-- ============ HEADER ============ -->
   <header class="site-header">
     <div class="wrap site-header__inner">
       <a href="index.html" class="logo">foundry <span>Sai Campus / Lost + Found</span></a>
@@ -32,7 +30,7 @@
       </nav>
 
       <div class="header-actions">
-        
+
         <a href="dashboard.html" class="btn btn--ghost" data-auth-only hidden>Dashboard</a>
         <a href="profile.html" class="btn btn--ghost" data-auth-only hidden>Profile</a>
         <a href="admin.html" class="btn btn--ghost" data-admin-only hidden>Admin</a>
@@ -60,7 +58,7 @@
   </header>
 
   <main id="main">
-    <!-- ============ HERO ============ -->
+
     <section class="hero rv">
       <div class="wrap hero__grid">
         <div>
@@ -99,7 +97,6 @@
       </div>
     </section>
 
-    <!-- ============ MARQUEE ============ -->
     <div class="marquee" aria-hidden="true">
       <div class="marquee__track">
         <span>Report a lost item</span><span>Browse found items</span><span>Claim what's yours</span><span>Return it safely</span>
@@ -107,7 +104,6 @@
       </div>
     </div>
 
-    <!-- ============ STATS ============ -->
     <section class="wrap">
       <div class="stats rv" data-reveal>
         <div class="stat">
@@ -130,10 +126,6 @@
       <p class="form-note" style="padding: 1rem 0 0;">Every figure above is counted by the database and refreshed each time this page loads.</p>
     </section>
 
-    <!-- ============ THE CAMPUS PLAN ============
-         Direction C: place is the navigation. The same fifteen locations and the
-         same SVG geometry as explorer.html. Lost and found are switchable layers
-         over one plan, and selecting a place shows both together. -->
     <section class="section cplan" id="cplan">
       <div class="wrap">
         <div class="rv section-head" data-reveal id="cplan-head">
@@ -195,7 +187,6 @@
       </div>
     </section>
 
-    <!-- ============ BROWSE ============ -->
     <section class="section" id="browse">
       <div class="wrap">
         <div class="rv section-head" data-reveal>
@@ -209,7 +200,6 @@
         </div>
       </div>
 
-      <!-- Filters -->
       <div class="filters">
         <div class="wrap filters__row">
           <div class="field">
@@ -270,8 +260,6 @@
           <button class="btn btn--ghost" id="reset-filters">Reset filters</button>
         </div>
 
-        <!-- Which filters are currently doing something. The bar above says how
-             many results; this says why. Hidden entirely when nothing is on. -->
         <div class="active-filters" id="active-filters" aria-label="Active filters" hidden></div>
 
         <div class="grid card-stage" id="item-grid"></div>
@@ -293,7 +281,6 @@
       </div>
     </section>
 
-    <!-- ============ HOW IT WORKS ============ -->
     <section class="section" id="how">
       <div class="wrap">
         <div class="rv section-head" data-reveal>
@@ -322,7 +309,6 @@
       </div>
     </section>
 
-    <!-- ============ COMMUNITY ============ -->
     <section class="section" id="community">
       <div class="wrap community">
         <div data-reveal>
@@ -352,7 +338,6 @@
     </section>
   </main>
 
-  <!-- ============ FOOTER ============ -->
   <footer class="site-footer">
     <div class="wrap">
       <div class="footer__grid">
@@ -385,9 +370,6 @@
     </div>
   </footer>
 
-  <!-- ============ ITEM DETAIL MODAL ============ -->
-  <!-- Conversation about one listing. Only the reporter and a claimant can
-       open it; the server enforces that, this is only the surface. -->
   <div class="modal" id="modal-thread" role="dialog" aria-modal="true" aria-labelledby="thread-title">
     <div class="modal__panel">
       <div class="modal__head">
@@ -420,8 +402,7 @@
       <dl class="detail-list" id="modal-item-body"></dl>
       <div class="modal__actions">
         <button class="btn btn--solid" id="btn-claim">Claim this item</button>
-        <!-- A real link, not a button: it can be copied, opened in a new tab and
-             works with WhatsApp Web as well as the phone app. -->
+
         <a class="btn" id="btn-share-wa" href="#" target="_blank" rel="noopener noreferrer">
           Share on WhatsApp
         </a>
@@ -460,7 +441,6 @@
     </div>
   </div>
 
-  <!-- ============ REPORT FORM MODAL ============ -->
   <div class="modal" id="modal-report" role="dialog" aria-modal="true" aria-labelledby="modal-report-title">
     <div class="modal__panel">
       <div class="modal__head">
@@ -567,7 +547,6 @@
     </div>
   </div>
 
-  <!-- ============ CLAIM MODAL ============ -->
   <div class="modal" id="modal-claim" role="dialog" aria-modal="true" aria-labelledby="modal-claim-title">
     <div class="modal__panel">
       <div class="modal__head">
@@ -592,9 +571,9 @@
     </div>
   </div>
 
-  <script src="assets/js/api.js?v=20261127A"></script>
-<script src="assets/js/theme.js?v=20261127A"></script>
-  <script src="assets/js/app.js?v=20261127A"></script>
-  <script src="assets/js/plan.js?v=20261127A"></script>
+  <script src="assets/js/api.js?v=20261127B"></script>
+<script src="assets/js/theme.js?v=20261127B"></script>
+  <script src="assets/js/app.js?v=20261127B"></script>
+  <script src="assets/js/plan.js?v=20261127B"></script>
 </body>
 </html>

@@ -1,19 +1,11 @@
-/* Campus Explorer — a schematic plan, not a geographic map.
- *
- * No coordinates are used or invented. Each block maps to one of the item
- * location values the board already understands, so the counts shown on the
- * plan are real counts from /api/items.
- */
 (function () {
   'use strict';
 
-  // The header carries a theme button. api.js binds it inside initTheme(), and
-  // nothing on this page called it, so the toggle was inert here alone.
   if (typeof window.initTheme === 'function') window.initTheme();
 
   var detail = document.getElementById('plan-detail');
   var blocks = [].slice.call(document.querySelectorAll('.blk[data-place]'));
-  var byLoc = {};      // item location -> { lost, found, items[] }
+  var byLoc = {};
   var selected = null;
 
   function tally(items) {
@@ -27,7 +19,6 @@
     });
   }
 
-  /* Paint the count onto every block that maps to a location with listings. */
   function paintSummary() {
     var host = document.getElementById('plan-summary');
     if (!host) return;
@@ -49,8 +40,7 @@
       var bucket = byLoc[loc];
       var n = bucket ? bucket.lost + bucket.found : 0;
       var label = g.querySelector('[data-count]');
-      // Empty blocks stay silent. Fifteen "nothing yet" labels read as a broken
-      // page; a count where there is something reads as a working map.
+
       if (label) label.textContent = n ? n + (n === 1 ? ' listing' : ' listings') : '';
       g.classList.toggle('has-items', n > 0);
       g.classList.toggle('has-lost', !!(bucket && bucket.lost));
@@ -85,15 +75,11 @@
         + '<span class="pd-title"></span></li>';
     }).join('') + '</ul>';
 
-    // fill titles as text, never as markup
     var titles = itemsEl.querySelectorAll('.pd-title');
     bucket.items.slice(0, 6).forEach(function (it, i) {
       if (titles[i]) titles[i].textContent = it.title || 'Untitled';
     });
 
-    /* Carry the place through. This used to be a bare href="index.html", so
-       clicking a campus block then "see these on the board" showed the whole
-       unfiltered board — a link that looks like a filter and is not. */
     var boardLink = document.createElement('a');
     boardLink.className = 'btn btn--sm';
     boardLink.href = 'index.html?location=' + encodeURIComponent(loc);
@@ -117,11 +103,6 @@
     });
   });
 
-  /* Load the listings once and paint the plan. A failure leaves the plan
-     visible with no counts rather than an empty page. */
-  /* A failure must never be presented as an empty campus. The old code turned
-     any non-OK response into { items: [] }, so an outage printed "Nothing has
-     been reported yet." Now the two states are distinct and retryable. */
   var loaded = false;
   var summaryEl = document.getElementById('plan-summary');
 

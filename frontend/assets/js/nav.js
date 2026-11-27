@@ -1,11 +1,3 @@
-/**
- * Header behaviour for the pages that do not load app.js.
- *
- * `Auth` is declared with `const` at the top level of api.js, so it is a global
- * binding but NOT a property of window. Reading window.Auth therefore always
- * returned undefined and every page showed "Log in" even when signed in. The
- * checks below use the bare identifier, guarded with typeof.
- */
 (function () {
   "use strict";
 
@@ -27,8 +19,6 @@
     if (who) who.textContent = (inAuth && user) ? user.name : '';
   }
 
-  /* Tell the server we are around, once a minute, so we can show as Online on
-     pages other than a conversation. One UPDATE of one column per minute. */
   function startHeartbeat() {
     var A = auth();
     if (!A || !A.isLoggedIn) return;

@@ -1,14 +1,6 @@
-/* Runs before paint so the page never flashes the wrong theme.
-   Separate file because the CSP forbids inline scripts.
-
-   Order of precedence:
-     1. an explicit choice the visitor made (stored)
-     2. the operating system preference
-     3. Paper
-*/
 (function () {
   var stored = null;
-  try { stored = localStorage.getItem('foundry.theme'); } catch (e) { /* private mode */ }
+  try { stored = localStorage.getItem('foundry.theme'); } catch (e) {  }
 
   var theme = stored;
   if (theme !== 'light' && theme !== 'dark') {

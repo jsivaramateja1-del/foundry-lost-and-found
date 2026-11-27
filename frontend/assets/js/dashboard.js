@@ -1,26 +1,15 @@
-/* dashboard.html page logic.
-   This used to live in an inline <script> block, which the Content-Security-Policy
-   (script-src 'self') blocked in the browser, so the page never ran its own code. */
-    if (!Auth.isLoggedIn) Auth.requireLogin('dashboard.html');
+if (!Auth.isLoggedIn) Auth.requireLogin('dashboard.html');
 
     document.getElementById('who').textContent = Auth.user ? Auth.user.name : '';
     document.querySelectorAll('[data-admin-only]').forEach((n) => { n.hidden = !Auth.isAdmin; });
 
     document.getElementById('logout').addEventListener('click', () => {
-      try { Auth.clear(); } catch { /* the link still navigates */ }
+      try { Auth.clear(); } catch {  }
     });
 
     const row = (cells) => `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`;
     const statusTag = (s) => `<span class="status status--${s}">${ui.esc(s)}</span>`;
 
-    /** Load everything and paint the three tables. */
-    /**
-     * Reload everything the dashboard shows.
-     *
-     * Returns { ok: true } or { ok: false, message } so a caller that has just
-     * changed something can report both outcomes in one message. Pass
-     * { silent: true } when the caller will do the reporting itself.
-     */
     async function refresh({ silent = false } = {}) {
       let data;
       try {
@@ -30,7 +19,7 @@
     if (_ie) _ie.textContent = 'Could not load your impact.';
     var _bl = document.getElementById('badges-list');
     if (_bl) _bl.innerHTML = '<li class="form-note">Could not load your badges.</li>';
-        // If the user just logged out, stay quiet instead of bouncing them back
+
         if (!Auth.isLoggedIn) return { ok: false, message: 'You have been signed out.' };
         if (err.status === 401) {
           Auth.requireLogin('dashboard.html');
@@ -45,8 +34,6 @@
         if (node) node.textContent = value;
       });
 
-      // Personal impact and badges come from the same response, so they can
-      // never disagree with the counters above
       const summary = document.getElementById('impact-summary');
       if (summary && data.impact) {
         const c = data.impact.contributions;
@@ -67,7 +54,6 @@
           </li>`).join('');
       }
 
-      // --- your listings ---
       document.getElementById('listings-body').innerHTML = data.items.length
         ? data.items.map((i) => row([
             ui.esc(i.title),
@@ -85,15 +71,12 @@
           ])).join('')
         : '<tr><td colspan="5" style="color:var(--muted)">You have not posted anything yet.</td></tr>';
 
-      // --- claims you made ---
-      // The six-digit handover code is returned only by /claims/mine. Without
-      // this the claimant never sees it and the owner's prompt cannot be met.
       try {
         const mine = await api('/claims/mine', { auth: true });
         const codes = {};
         (mine.claims || []).forEach((c) => { if (c.handoverCode) codes[c.id] = c.handoverCode; });
         data.claims.forEach((c) => { if (codes[c.id]) c.handoverCode = codes[c.id]; });
-      } catch (err) { /* the table still renders, just without codes */ }
+      } catch (err) {  }
 
       document.getElementById('claims-body').innerHTML = data.claims.length
         ? data.claims.map((c) => row([
@@ -107,9 +90,6 @@
           ])).join('')
         : '<tr><td colspan="5" class="table__empty">No claims yet.</td></tr>';
 
-      // --- claims received on your listings ---
-      // One request for all of them. The old version asked per listing and
-      // swallowed every error, so a failure looked identical to "no claims".
       let received = [];
   let receivedFailed = false;
       try {
@@ -142,7 +122,6 @@
       return { ok: true };
     }
 
-    /* ---------------- community leaderboard ---------------- */
     let leaderboardPeriod = 'all';
 
     async function loadLeaderboard(period = leaderboardPeriod) {
@@ -169,7 +148,7 @@
       if (preferenceLabel) preferenceLabel.hidden = true;
     }
     if (leaderboardVisible && Auth.user?.role === 'student') {
-      // The API stores an opt-out; the checkbox reads as "show me"
+
       leaderboardVisible.checked = !(Auth.user && Auth.user.leaderboardOptOut);
       leaderboardVisible.addEventListener('change', async () => {
         const wanted = leaderboardVisible.checked;
@@ -184,7 +163,7 @@
           ui.toast(res.message);
           await loadLeaderboard();
         } catch (err) {
-          leaderboardVisible.checked = !wanted;   // put the switch back
+          leaderboardVisible.checked = !wanted;
           ui.toast(err.message);
         } finally {
           leaderboardVisible.disabled = false;
@@ -203,15 +182,11 @@
 
     loadLeaderboard();
 
-    /* ---------------- edit and delete ---------------- */
     const editModal = document.getElementById('modal-edit');
     const meta = { categories: [], locations: [] };
     let editingId = null;
-    let editingStatus = '';   // the status the listing had when the modal opened
+    let editingStatus = '';
 
-    /* Focus management. app.js has this but the dashboard does not load it, so
-       the dialog opened with focus still on the page behind it and Tab walked
-       straight out. */
     const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), '
       + 'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
     let _lastFocused = null;
@@ -257,15 +232,13 @@
       if (selected && values.includes(selected)) node.value = selected;
     }
 
-    // Dropdown values come from the API so the form can never offer a value
-    // the server would reject
     (async () => {
       try {
         const data = await api('/items/meta');
         meta.categories = data.categories;
         meta.locations = data.locations;
       } catch {
-        /* the edit form simply stays empty if this fails */
+
       }
     })();
 
@@ -279,11 +252,9 @@
         document.getElementById('ef-date').value = (() => { const d = new Date(item.date); return [d.getFullYear(),
       String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-'); })();
         editingStatus = item.status;
-        // A moderated listing's status is not one of the editable options.
-        // Show it, disabled, so the select cannot silently misrepresent it.
+
         const statusSelect = document.getElementById('ef-status');
-        // Remove any placeholder left over from a listing opened earlier, so
-        // options never accumulate and a stale one can never be shown
+
         statusSelect.querySelectorAll('option[data-temporary-status]').forEach((o) => o.remove());
         const known = [...statusSelect.options].some((o) => o.value === item.status);
         if (!known) {
@@ -294,8 +265,7 @@
           extra.dataset.temporaryStatus = 'true';
           statusSelect.appendChild(extra);
         }
-        // Set after the options are settled, so the select shows this listing's
-        // real status rather than whatever the previous listing left behind
+
         statusSelect.value = item.status;
         fillSelect(document.getElementById('ef-category'), meta.categories, item.category);
         fillSelect(document.getElementById('ef-location'), meta.locations, item.location);
@@ -359,16 +329,11 @@
         try {
           await api(`/items/${editingId}`, { method: 'PUT', body: payload, auth: true });
         } catch (err) {
-          // Nothing was saved, so the modal stays open for the user to correct it
+
           showError(err.message);
           return;
         }
 
-        // From here the details ARE saved. A status failure below is a partial
-        // success and must never be reported as "nothing was saved".
-        // Status is managed by its own endpoint, so its guards (terminal states,
-        // takedowns, one-off points and notifications) always apply. Only call
-        // it when the value actually changed, or it would 400 on "already open".
         const wantedStatus = document.getElementById('ef-status').value;
         const statusChanged = Boolean(wantedStatus) && wantedStatus !== editingStatus;
         let statusError = null;
@@ -381,16 +346,10 @@
           }
         }
 
-        // Close and reload either way: the table must show what the server
-        // holds, not what the user hoped for. The reload reports its own
-        // failure instead of toasting it, so one message can cover both.
         closeModalEl(editModal);
         const reload = await refresh({ silent: true });
         const reloadFailed = !reload.ok;
 
-        // Exactly one toast, because the toast element is reused and a second
-        // message would overwrite the first. Every combination is covered, so
-        // a failed reload can never hide a failed status change.
         if (statusError && reloadFailed) {
           ui.toast(`Listing details saved, but the status could not be changed to "${wantedStatus}" (${statusError.message}), and the dashboard could not be refreshed (${reload.message}). Reload the page to see the latest state.`);
         } else if (statusError) {
@@ -406,7 +365,6 @@
       }
     });
 
-    // Approve / reject / handover / edit / delete — one delegated listener
     document.addEventListener('click', async (event) => {
       const approve = event.target.closest('[data-approve]');
       const reject = event.target.closest('[data-reject]');
@@ -433,9 +391,7 @@
           await api(`/claims/${reject.dataset.reject}/review`, { method: 'PATCH', body: { decision: 'reject' }, auth: true });
           ui.toast('Claim rejected');
         } else if (handover) {
-          // The claimant reads their six-digit code from their own dashboard
-          // and tells the owner in person; the owner enters it here to prove
-          // the item actually changed hands.
+
           const code = window.prompt('Enter the six-digit handover code from the claimant:');
           if (!code) { button.disabled = false; return; }
           await api(`/claims/${handover.dataset.handover}/complete`, { method: 'POST', body: { code: code.trim() }, auth: true });
@@ -455,11 +411,9 @@
     initNotifications();
     initTheme();
 
-/* The error row offers a Retry; without this it did nothing. */
 document.addEventListener('click', (event) => {
   if (event.target.closest('[data-retry-received]')) {
     event.preventDefault();
     if (typeof refresh === 'function') refresh();
   }
 });
-

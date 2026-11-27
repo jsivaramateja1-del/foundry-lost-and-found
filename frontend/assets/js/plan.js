@@ -1,12 +1,3 @@
-/* ===========================================================================
-   FOUND — the campus plan
-   ---------------------------------------------------------------------------
-   The plan is the board's primary navigation: place first, then the listings
-   reported there. It reads the same public API the grid does and opens the same
-   detail dialog, so there is one source of data and one detail experience.
-
-   External file because the production CSP is script-src 'self'.
-   =========================================================================== */
 (function () {
   'use strict';
 
@@ -16,7 +7,7 @@
   if (!root) return;
 
   var blocks = [].slice.call(root.querySelectorAll('.blk'));
-  var rows = [];                 // mobile list rows, built below
+  var rows = [];
   var layerBtns = [].slice.call(root.querySelectorAll('[data-layer]'));
   var panelName = document.getElementById('cp-name');
   var panelMeta = document.getElementById('cp-meta');
@@ -24,14 +15,13 @@
   var summary = document.getElementById('cp-summary');
   var listBox = document.getElementById('cp-list');
 
-  var byPlace = {};              // place -> { lost: [], found: [], returned: [] }
+  var byPlace = {};
   var all = [];
   var loaded = false;
   var failed = false;
-  var layer = 'all';             // 'all' | 'lost' | 'found'
+  var layer = 'all';
   var selected = null;
 
-  /* ---------------- helpers ---------------- */
   function el(tag, cls, text) {
     var n = document.createElement(tag);
     if (cls) n.className = cls;
@@ -56,7 +46,6 @@
     return it.customLocation || it.location || 'Unknown';
   }
 
-  /* ---------------- tally ---------------- */
   function tally(items) {
     all = items;
     byPlace = {};
@@ -72,7 +61,6 @@
     return { lost: b.lost.length, found: b.found.length, returned: b.returned.length };
   }
 
-  /* What a block or row should say for the current layer. */
   function labelFor(place) {
     var c = countsFor(place);
     var n = layer === 'lost' ? c.lost
@@ -92,7 +80,6 @@
     return c.lost ? 'lost' : 'found';
   }
 
-  /* ---------------- paint ---------------- */
   function paint() {
     blocks.forEach(function (b) {
       var place = b.getAttribute('data-place');
@@ -139,7 +126,6 @@
     return parts.length ? parts.join(', ') : 'nothing reported';
   }
 
-  /* ---------------- the place panel ---------------- */
   function listingRow(it) {
     var a = el('a', 'cp-item');
     a.href = '#';
@@ -167,7 +153,7 @@
 
     a.addEventListener('click', function (ev) {
       ev.preventDefault();
-      // open the existing detail dialog, not a second one
+
       if (typeof window.FoundryOpenItem === 'function') window.FoundryOpenItem(it.id);
     });
     return a;
@@ -210,8 +196,6 @@
       return;
     }
 
-    /* Lost and found are shown together — that is the point of place-first
-       browsing. The layer switch narrows the panel, it does not replace it. */
     var groups = [];
     if (layer !== 'found') groups.push(['lost', 'Lost here', b.lost]);
     if (layer !== 'lost') groups.push(['found', 'Found here', b.found]);
@@ -256,7 +240,6 @@
     renderPanel(place);
   }
 
-  /* ---------------- mobile list, built from the same blocks ---------------- */
   if (listBox) {
     blocks.forEach(function (b, i) {
       var place = b.getAttribute('data-place');
@@ -274,7 +257,6 @@
     });
   }
 
-  /* ---------------- events ---------------- */
   blocks.forEach(function (b) {
     b.setAttribute('aria-pressed', 'false');
     b.addEventListener('click', function () { select(b.getAttribute('data-place')); });
@@ -299,10 +281,6 @@
     });
   });
 
-  /* ---------------- the missing slot (hero) ----------------
-     Five real listings and one empty cell. It is the product concept in one
-     composition: something is missing, and this is where it turns up. It uses
-     the same fetch as the plan, so it costs no extra request. */
   function paintSlot() {
     var grid = document.getElementById('slot');
     var count = document.getElementById('slot-count');
@@ -340,20 +318,7 @@
     if (count) count.textContent = all.length + ' on the board';
   }
 
-  /* ---------------- load ---------------- */
-  /* The server caps `limit` at 50, so one request only ever sees the newest 50
-     listings. With more than that on the board every count on the plan was
-     silently understated — a place holding 60 lost items showed 50, and the
-     total read 50 instead of 120.
-
-     Fix: follow the existing pagination contract. Page 1 gives `total` and
-     `pages`; if there are more pages they are fetched in parallel and tallied
-     together. No new endpoint, no changed API, just the `page` parameter that
-     already exists.
-
-     Bounded on purpose: at most MAX_PAGES are read. Past that the summary says
-     so rather than pretending the numbers are complete. */
-  var MAX_PAGES = 6;              // 300 listings
+  var MAX_PAGES = 6;
   var truncated = false;
 
   function fetchPage(page) {
@@ -393,14 +358,11 @@
         tally(items);
         paintSlot();
         paint();
-        // A deep link wins: if the board was opened as index.html?location=Lords
-        // the plan must open on the same place, or the two disagree about where
-        // the visitor is. Otherwise open the busiest place so the panel is never
-        // empty on arrival.
+
         var wantedPlace = null;
         try {
           wantedPlace = new URLSearchParams(window.location.search).get('location');
-        } catch (e) { /* a malformed query string must not break the plan */ }
+        } catch (e) {  }
 
         var linked = null;
         if (wantedPlace) {
@@ -433,8 +395,5 @@
 
   load();
 
-  /* the plan honours reduced motion by simply not animating; nothing to disable */
   if (reduced) root.classList.add('no-motion');
 })();
-
-

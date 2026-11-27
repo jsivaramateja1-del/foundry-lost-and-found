@@ -1,11 +1,6 @@
-/* Self-contained on purpose: this page must never fail silently. It talks to
-   the API with fetch directly rather than through the shared helper, so a
-   problem in that helper cannot leave the page blank with no explanation. */
 (function () {
   "use strict";
 
-  /* Anything that goes wrong in this file must be visible on the page. A blank
-     panel tells nobody anything, and this page has been blank twice. */
   function fatal(e) {
     var box = document.getElementById('ret-error');
     if (box) {
@@ -111,7 +106,6 @@
       });
   }
 
-  // Fill the lists from the server so they cannot drift from what it accepts.
   (function meta() {
     var base = (typeof window.FOUNDRY_API_BASE === 'string' && window.FOUNDRY_API_BASE)
       ? window.FOUNDRY_API_BASE.replace(/\/+$/, '')
@@ -126,7 +120,7 @@
           var o = document.createElement('option'); o.value = l; o.textContent = l; loc.appendChild(o);
         });
       })
-      .catch(function () { /* filters still work without the lists */ });
+      .catch(function () {  });
   })();
 
   var timer = null;

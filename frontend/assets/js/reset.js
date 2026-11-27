@@ -1,5 +1,3 @@
-/* Reset-password page. The token arrives in the URL fragment, with query-string fallback; it is sent once
-   and never stored anywhere in the browser. */
 const form = document.getElementById('reset-form');
 const errorBox = document.getElementById('reset-error');
 const successBox = document.getElementById('reset-success');
@@ -26,7 +24,7 @@ if (!token) {
 }
 
 form.addEventListener('submit', async (event) => {
-  
+
     if (!token) { showError('This link is missing its reset token. Request a new link from the forgot-password page.'); return; }
 event.preventDefault();
   showError('');
@@ -53,14 +51,10 @@ event.preventDefault();
   }
 });
 
-/* Wire the theme toggle. Without this the button on this page does nothing,
-   because initTheme() is only called from the pages that load a page script. */
 document.addEventListener('DOMContentLoaded', function () {
   if (typeof initTheme === 'function') initTheme();
 });
 
-/* The sign-in page binds these; this page never did, so the password you typed
-   could not be revealed. Same markup, same behaviour. */
 document.querySelectorAll('[data-toggle-password]').forEach(function (button) {
   button.addEventListener('click', function () {
     var input = document.getElementById(button.dataset.togglePassword);

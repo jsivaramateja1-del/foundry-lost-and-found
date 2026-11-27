@@ -1,8 +1,3 @@
-/* ============================================================
-   app.js — homepage behaviour
-   Search, filters, listing grid, item modal, report form, claims.
-   ============================================================ */
-
 const state = {
   q: '',
   type: 'all',
@@ -15,11 +10,9 @@ const state = {
   sort: 'newest',
   items: [],
   activeItemId: null,
-  pendingImage: '', // data URL of the photo chosen in the report form
+  pendingImage: '',
   meta: { categories: [], subcategories: {}, locations: [] },
-  // Every list request gets a number; only the newest one may paint. Without
-  // this, a slow reply from an earlier search can overwrite a newer one and
-  // the count and the grid disagree.
+
   requestId: 0
 };
 
@@ -48,20 +41,15 @@ const el = {
   statActive: document.getElementById('stat-active')
 };
 
-// Everything focusable inside a modal, for the focus trap
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 let lastFocused = null;
 
-// Matches IMAGE_LIMIT_BYTES in backend/src/routes/item.routes.js
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
-// How many listings arrive per request. The API paginates, so the board is
-// never silently cut off at a fixed number.
 const PAGE_SIZE = 12;
 state.page = 1;
 state.pages = 1;
 
-/* ---------------- header state ---------------- */
 function paintAuthState() {
   const loggedIn = Auth.isLoggedIn;
   document.querySelectorAll('[data-auth-only]').forEach((n) => { n.hidden = !loggedIn; });
@@ -69,15 +57,13 @@ function paintAuthState() {
   document.querySelectorAll('[data-admin-only]').forEach((n) => { n.hidden = !Auth.isAdmin; });
 }
 
-/* ---------------- dropdowns ---------------- */
 async function loadMeta() {
   try {
     let meta;
     try {
       meta = await api('/items/meta');
     } catch (err) {
-      // Without the lists the form cannot be filled correctly. Say so and stop,
-      // rather than leaving two empty required selects the user cannot answer.
+
       var btn = document.getElementById('rf-submit');
       if (btn) btn.disabled = true;
       var cat = document.getElementById('rf-category');
@@ -107,16 +93,6 @@ async function loadMeta() {
   }
 }
 
-/* ---------------- photos ---------------- */
-
-/**
- * Shrink a chosen photo in the browser before it is sent.
- *
- * The longest side is capped at 1600px and quality starts at 0.92, stepping
- * down only as far as needed to fit the server's 700 KB limit. The previous
- * 900px / 0.4 floor made item photos visibly soft, which matters when the
- * whole point of the photo is recognising an object.
- */
 function shrinkImage(file) {
   return new Promise((resolve, reject) => {
     if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
@@ -154,13 +130,11 @@ function shrinkImage(file) {
   });
 }
 
-/* ---------------- listings ---------------- */
 function cardMarkup(item) {
   const place = item.location === 'Other' && item.customLocation ? item.customLocation : item.location;
   const category = item.category === 'Other' && item.customCategory ? item.customCategory : item.category;
   const subcategory = item.subcategory || '';
-  // A listing without a photo gets a small, deliberate placeholder rather than
-  // a large empty grey block
+
   const photo = item.imageUrl
     ? `<div class="card__media"><img src="${ui.esc(item.imageUrl)}" alt="" loading="lazy" /></div>`
     : `<div class="card__media card__media--empty" aria-hidden="true">
@@ -180,21 +154,20 @@ function cardMarkup(item) {
       </div>
       <h3 class="card__title">${ui.esc(item.title)}</h3>
       ${subcategory ? `<p class="card__sub">${ui.esc(category)} · ${ui.esc(subcategory)}</p>` : ''}
+
       <p class="card__desc">${ui.esc(item.description)}</p>
+
       <div class="card__meta">
         <span>${ui.esc(place)}</span>
+
         <span>${ui.date(item.date)}</span>
+
       </div>
+
     </div>`;
+
 }
 
-/**
- * Paint the active-filter chips.
- *
- * Built from the same `state` object the request is assembled from, so the
- * chips cannot drift from what was actually sent. Each chip carries its own
- * remove action; the row disappears entirely when nothing is applied.
- */
 const FILTER_LABELS = {
   type: { lost: 'Lost', found: 'Found' },
   status: { open: 'Open', claimed: 'Claimed', returned: 'Returned', hidden: 'Hidden' }
@@ -240,8 +213,7 @@ function hasActiveFilters() {
 
 async function loadItems({ page = 1, append = false } = {}) {
   const requestId = ++state.requestId;
-  // Repaint the chips from state before every request, so what the user sees
-  // always matches what is about to be sent.
+
   renderActiveFilters();
   el.count.textContent = 'Loading listings…';
   const params = new URLSearchParams();
@@ -259,7 +231,7 @@ async function loadItems({ page = 1, append = false } = {}) {
 
   try {
     const data = await api(`/items?${params.toString()}`, { auth: Auth.isLoggedIn });
-    // A newer request has already been sent: this reply is stale, drop it
+
     if (requestId !== state.requestId) return;
     state.items = append ? state.items.concat(data.items) : data.items;
     state.page = data.page;
@@ -269,23 +241,18 @@ async function loadItems({ page = 1, append = false } = {}) {
     if (requestId !== state.requestId) return;
     el.count.textContent = 'Could not load listings';
     el.grid.innerHTML = '';
-    // Otherwise the pager survives from the last good render and the error screen
-    // offers "Load more" for a page that cannot load.
+
     if (el.loadMore) el.loadMore.hidden = true;
     if (el.pageStatus) el.pageStatus.textContent = '';
     showEmpty('The server is not responding', err.message, { firstRun: false });
   }
 }
 
-/**
- * Paint the empty state. Two different situations share one element:
- * a brand-new board with nothing on it, and filters that match nothing.
- */
 function showEmpty(title, message, { firstRun }) {
   el.empty.hidden = false;
   el.emptyTitle.textContent = title;
   el.emptyText.textContent = message;
-  // "Clear filters" is pointless on an empty board
+
   el.clearFromEmpty.hidden = firstRun;
 }
 
@@ -322,11 +289,6 @@ function renderGrid(data, { append = false } = {}) {
   paintPagination(data);
 }
 
-/**
- * Show "Load more" and the page line from the response that was just painted,
- * never from leftover state — that mismatch is what once showed
- * "No listings match" next to "Showing 1 listing".
- */
 function paintPagination(data) {
   if (!el.loadMore) return;
   el.loadMore.hidden = !(data.page < data.pages);
@@ -341,7 +303,6 @@ function applyFilters() {
   loadItems();
 }
 
-/** Fill a subcategory select for one category, keeping a valid selection. */
 function fillSubcategories(select, category, selected = '') {
   if (!select) return;
   const list = (state.meta.subcategories && state.meta.subcategories[category]) || [];
@@ -375,10 +336,9 @@ function resetFilters() {
   loadItems();
 }
 
-/* ---------------- stats ---------------- */
 async function loadStats() {
   try {
-    // Counted by the database, so the tiles stay correct past the page limit
+
     const stats = await api('/items/stats');
     el.statLost.textContent = stats.lost;
     el.statFound.textContent = stats.found;
@@ -392,20 +352,8 @@ async function loadStats() {
   }
 }
 
-/* ---------------- modals ---------------- */
-
-/**
- * Keep Tab inside an open dialog.
- * Without this, Tab walks out of the modal and into the page behind it, which
- * is disorienting for keyboard and screen-reader users.
- */
 function trapFocus(modal) {
-  /* The focusable set is recomputed on every Tab, not cached when the modal
-     opens. Capturing it once was a real keyboard bug: the item modal reveals its
-     "report this listing" form after opening, so those fields were missing from
-     the cached list and Tab wrapped past them to the close button. The reason
-     select, the details box and the submit button were unreachable by keyboard
-     (WCAG 2.1.1). */
+
   const visible = () =>
     [...modal.querySelectorAll(FOCUSABLE)].filter((n) => n.offsetParent !== null);
 
@@ -452,7 +400,7 @@ function closeModal(modal) {
     modal.removeEventListener('keydown', modal._trapHandler);
     modal._trapHandler = null;
   }
-  // Send focus back where it came from
+
   if (lastFocused && lastFocused.isConnected) lastFocused.focus({ preventScroll: true });
 }
 
@@ -460,11 +408,6 @@ function closeAllModals() {
   document.querySelectorAll('.modal[data-open="true"]').forEach(closeModal);
 }
 
-/* ---------------- item detail ---------------- */
-/* ---------------- conversations ---------------- */
-
-/* Which item's thread is open, and the recipient the server says we may
-   address. Both come from the API, never from the DOM. */
 const threadState = { itemId: null, recipientId: null, timer: null };
 
 function renderThread(list, messages, meId) {
@@ -510,8 +453,7 @@ async function openThread(itemId) {
   showFormMessage('thread-error', '');
   openModal('modal-thread');
   await loadThread();
-  /* Polling, not websockets: this stack has no socket infrastructure, and
-     pretending otherwise would be worse than a simple refresh. */
+
   clearInterval(threadState.timer);
   threadState.timer = setInterval(loadThread, 5000);
 }
@@ -546,9 +488,7 @@ async function sendThreadMessage(event) {
 }
 
 async function openItem(id) {
-  /* The campus plan needs to open the same detail dialog from outside this
-     closure. Exposing the one function keeps a single detail implementation —
-     a second one would drift from the claim and report logic that lives here. */
+
   try {
     const { item } = await api(`/items/${id}`);
     state.activeItemId = item.id;
@@ -565,10 +505,6 @@ async function openItem(id) {
       ? `<div class="detail-media"><img src="${ui.esc(item.imageUrl)}" alt="Photo of ${ui.esc(item.title)}" /></div>`
       : '';
 
-    // Status is a badge rather than a word in a definition list: it is the one
-    // field that decides what the reader can do next, so it should not be the
-    // same weight as "Date reported". Colour is paired with the word itself, so
-    // it survives greyscale.
     const statusTone = { open: 'open', claimed: 'claimed', returned: 'returned', hidden: 'hidden' }[item.status] || 'open';
     document.getElementById('modal-item-body').innerHTML = `
       ${photo}
@@ -582,12 +518,6 @@ async function openItem(id) {
       <div><dt>Date reported</dt><dd>${ui.date(item.date)}</dd></div>
       <div><dt>Posted by</dt><dd>${ui.esc(item.reporterName || 'A student')}</dd></div>`;
 
-    /* ---- Share to WhatsApp ----------------------------------------------
-       Builds a wa.me link carrying the listing, so a student can drop it into
-       their class group. Nothing is sent by the server: the link only opens
-       WhatsApp with the text pre-filled, and the student presses send.
-       Every field is URL-encoded, because a title containing '&' or '#' would
-       otherwise truncate the message. */
     const shareLink = document.getElementById('btn-share-wa');
     if (shareLink) {
       const base = window.location.origin + window.location.pathname;
@@ -612,8 +542,7 @@ async function openItem(id) {
       claimBtn.disabled = true;
       claimBtn.textContent = 'This is your listing';
     } else if (item.type !== 'found') {
-      // Only found items can be claimed; the server rejects the rest, so do not
-      // offer the button and let the user write a message for nothing.
+
       claimBtn.disabled = true;
       claimBtn.textContent = 'Only found items can be claimed';
     } else if (item.status !== 'open') {
@@ -624,7 +553,6 @@ async function openItem(id) {
       claimBtn.textContent = 'Claim this item';
     }
 
-    // The report form belongs to one listing only, so reset it every time
     const reportFormEl = document.getElementById('report-item-form');
     reportFormEl.hidden = true;
     document.getElementById('btn-report-item').setAttribute('aria-expanded', 'false');
@@ -633,7 +561,6 @@ async function openItem(id) {
 
     openModal('modal-item');
 
-    // Duplicate-item alert: show similar listings if any exist
     showSimilar(item.id);
   } catch (err) {
     ui.toast(err.message);
@@ -647,8 +574,7 @@ async function showSimilar(id) {
   const body = document.getElementById('modal-item-body');
   try {
     const data = await api(`/items/${id}/similar`);
-    // Bail if the dialog moved on while this request was in flight, so one
-    // item's matches are never appended into another item's panel.
+
     if (state.similarSeq !== _seq || state.activeItemId !== _reqId) return;
     if (!data.count) return;
     const names = data.items.map((i) => `<li>${ui.esc(i.title)} — ${ui.esc(i.location)}</li>`).join('');
@@ -658,19 +584,14 @@ async function showSimilar(id) {
         <ul style="display:grid;gap:.3rem;font-size:.85rem;color:var(--muted);">${names}</ul>
       </dd></div>`);
   } catch {
-    /* the alert is a bonus — stay quiet if it fails */
+
   }
 }
 
-/* ---------------- report form ---------------- */
 function prepareReportForm(meta) {
   const category = document.getElementById('rf-category');
   const location = document.getElementById('rf-location');
 
-  /* loadMeta() already wrote an explanation into both selects and disabled the
-     submit button when the request failed. Rebuilding the selects from the empty
-     arrays it returns wiped that explanation, leaving two blank required fields
-     and a dead button with no message anywhere. */
   if (!Array.isArray(meta.categories) || !meta.categories.length ||
       !Array.isArray(meta.locations) || !meta.locations.length) {
     state.metaFailed = true;
@@ -685,7 +606,6 @@ function prepareReportForm(meta) {
   const customLocationField = document.getElementById('rf-custom-location-field');
   const subcategoryField = document.getElementById('rf-subcategory');
 
-  // Choosing a category immediately offers that category's subcategories
   const syncSubcategories = () => fillSubcategories(subcategoryField, category.value);
   syncSubcategories();
 
@@ -693,7 +613,7 @@ function prepareReportForm(meta) {
     const isOther = category.value === 'Other';
     customCategoryField.hidden = !isOther;
     if (!isOther) document.getElementById('rf-custom-category').value = '';
-    // Reset the subcategory: the old one belongs to the old category
+
     syncSubcategories();
   });
   location.addEventListener('change', () => {
@@ -705,14 +625,9 @@ function prepareReportForm(meta) {
   document.getElementById('rf-date').value = (() => { const d = new Date(); return [d.getFullYear(),
       String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-'); })();
 
-  // Photo picker: shrink the image as soon as it is chosen, so the submit
-  // handler only has to send a ready-made data URL.
   const fileInput = document.getElementById('rf-image');
   const preview = document.getElementById('rf-image-preview');
 
-  // The filename and a remove control live beside the preview. Without them the
-  // only way to change a chosen photo was to re-open the file picker, and there
-  // was no way at all to say "actually, no photo".
   const fileNameEl = document.getElementById('rf-image-name');
   const removeBtn = document.getElementById('rf-image-remove');
 
@@ -746,8 +661,7 @@ function prepareReportForm(meta) {
       preview.innerHTML = `<img src="${ui.esc(state.pendingImage)}" alt="Photo preview" />`;
       preview.hidden = false;
       if (fileNameEl) {
-        // The shrunk size is what will actually be sent, so say so rather than
-        // showing the original size the user picked.
+
         const kb = Math.max(1, Math.round(state.pendingImage.length * 0.75 / 1024));
         fileNameEl.textContent = `${file.name} — ${kb} KB after shrinking`;
         fileNameEl.hidden = false;
@@ -830,7 +744,6 @@ async function submitReport(event) {
   }
 }
 
-/* ---------------- claim ---------------- */
 function openClaim() {
   if (!Auth.isLoggedIn) {
     ui.toast('Please log in to claim an item');
@@ -876,9 +789,8 @@ async function submitClaim(event) {
   }
 }
 
-/* ---------------- boot ---------------- */
 document.addEventListener('DOMContentLoaded', async () => {
-  // Arriving from a "Log out" link — make sure the session is really gone.
+
   if (window.location.search.includes('loggedout=1')) {
     Auth.clear();
     window.history.replaceState({}, '', window.location.pathname);
@@ -889,7 +801,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   initNotifications();
   initTheme();
 
-  // Log out from the header
   const headerLogout = document.getElementById('header-logout');
   if (headerLogout) {
     headerLogout.addEventListener('click', () => logoutAndGo('index.html'));
@@ -898,14 +809,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const meta = await loadMeta();
   prepareReportForm(meta);
 
-  // Deep links. The Campus Explorer links here as index.html?location=Lords,
-  // and the homepage sends ?q=, ?type= and ?category= from its search box and
-  // category tiles. All of it must run AFTER prepareReportForm, because the
-  // selects have no options until then — reading them earlier found nothing and
-  // silently did nothing.
-  //
-  // Every value is matched against the options that actually exist, so a
-  // hand-typed query string cannot put the board into a state the API rejects.
   try {
     const qs = new URLSearchParams(window.location.search);
 
@@ -921,9 +824,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const appliedLocation = pick(el.location, qs.get('location'));
     if (appliedLocation) state.location = appliedLocation;
 
-    /* ?status=returned comes from the Returned link in the nav. It reuses the
-       board's own status filter, which is the mechanism that already works,
-       rather than a separate page. */
     const appliedStatus = pick(el.status, qs.get('status'));
     if (appliedStatus) state.status = appliedStatus;
 
@@ -933,34 +833,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     const appliedCategory = pick(el.category, qs.get('category'));
     if (appliedCategory) state.category = appliedCategory;
 
-    // A free-text query is not validated against options: it goes to the API
-    // as-is and the server caps it at 80 characters.
     const q = (qs.get('q') || '').trim();
     if (q) {
       el.search.value = q;
       state.q = q;
     }
 
-    // ?report=1 (or #report) opens the report modal, so "Report an item" from
-    // the homepage lands on the form instead of the top of the board.
     if (qs.get('report') === '1' || window.location.hash === '#report') {
       if (typeof openModal === 'function') openModal('modal-report');
     }
 
-    // ?item=<id> opens that listing's detail dialog. This is the link the
-    // WhatsApp share button produces, so without it a shared link landed on the
-    // bare board and the recipient had to hunt for the item. An unknown id is
-    // swallowed: a stale link should leave the reader on the board, not on an
-    // error.
     const deepItem = (qs.get('item') || '').trim();
     if (deepItem) {
-      openItem(deepItem).catch(() => { /* unknown or deleted item */ });
+      openItem(deepItem).catch(() => {  });
     }
-  } catch (e) { /* a malformed query string must not break the board */ }
+  } catch (e) {  }
 
   await Promise.all([loadItems(), loadStats()]);
 
-  // filter events
   let searchTimer;
   el.search.addEventListener('input', () => {
     clearTimeout(searchTimer);
@@ -975,7 +865,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   el.category.addEventListener('change', () => {
     state.category = el.category.value;
-    // A subcategory from the previous category is meaningless now
+
     state.subcategory = 'all';
     fillSubcategories(el.subcategory, state.category);
     applyFilters();
@@ -1002,9 +892,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     b.addEventListener('click', stopThreadPolling);
   });
 
-  // grid clicks
   el.grid.addEventListener('click', (event) => {
-    // The message button sits inside the card, so it must be checked first.
+
     const msg = event.target.closest('[data-message-item]');
     if (msg) {
       event.stopPropagation();
@@ -1015,8 +904,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (card) openItem(card.dataset.itemId);
   });
 
-  /* The card is a div with role="button", so it must answer the keyboard the
-     way a real button does. */
   el.grid.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     const card = event.target.closest('[data-item-id]');
@@ -1025,7 +912,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     openItem(card.dataset.itemId);
   });
 
-  // open report modal from anywhere; the button decides lost or found
   document.querySelectorAll('[data-open-report]').forEach((btn) => {
     btn.addEventListener('click', () => {
       if (!Auth.isLoggedIn) {
@@ -1034,9 +920,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
       }
       showFormMessage('report-success', '');
-      // Do not clear #report-error when the category/location lists never
-      // loaded: that message is the only thing telling the user why the form is
-      // unusable, and opening the dialog must not erase it.
+
       if (!state.metaFailed) showFormMessage('report-error', '');
       const wanted = btn.dataset.openReport;
       if (wanted === 'lost' || wanted === 'found') {
@@ -1050,7 +934,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('claim-form').addEventListener('submit', submitClaim);
   document.getElementById('btn-claim').addEventListener('click', openClaim);
 
-  /* ---------------- report a listing ---------------- */
   const reportToggle = document.getElementById('btn-report-item');
   const reportForm = document.getElementById('report-item-form');
 
@@ -1093,7 +976,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // close buttons, backdrop click, Escape
   document.querySelectorAll('[data-close-modal]').forEach((btn) => {
     btn.addEventListener('click', () => closeModal(btn.closest('.modal')));
   });
@@ -1112,11 +994,4 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 });
 
-/* Exposed for assets/js/plan.js — see the note on openItem above. */
 window.FoundryOpenItem = openItem;
-
-// Campus Explorer location names are not in the server's fixed location list,
-// so appending them to the report form's select made every such listing fail
-// validation with 'Unknown location'. The Explorer page is the place to browse
-// campus locations; the form keeps the fixed list the API accepts.
-

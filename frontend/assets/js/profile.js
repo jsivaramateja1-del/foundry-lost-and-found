@@ -1,7 +1,3 @@
-/**
- * Profile page: who you are, your points, your listings and your claims.
- * Every value comes from the API; nothing is trusted from the DOM.
- */
 (function () {
   "use strict";
 
@@ -20,8 +16,6 @@
     box.dataset.show = msg ? "true" : "false";
   }
 
-  /* Split on purpose: if Auth itself is missing, calling requireLogin on it
-     would throw a ReferenceError instead of sending the visitor to log in. */
   if (typeof Auth === "undefined") { window.location.replace("auth.html"); return; }
   if (!Auth.isLoggedIn) { Auth.requireLogin("profile.html"); return; }
 
@@ -48,7 +42,6 @@
       row("On the leaderboard", u.leaderboardOptOut ? "No, you opted out" : "Yes");
   }).catch(function (e) { fail((e && e.message) || "Could not load your profile"); });
 
-  /* Shrink before upload, the same way item photos are shrunk. */
   var fileInput = document.getElementById("avatar-file");
   var preview = document.getElementById("avatar-preview");
 
@@ -56,14 +49,6 @@
     if (!f) return;
     var note = document.getElementById("avatar-note");
 
-    /* Same path as shrinkImage in app.js, which already uploads item photos
-       successfully in this browser: FileReader -> data URL -> canvas.
-       A blob: URL was tried first and failed with net::ERR_FAILED and a 0 KB
-       transfer, even with blob: allowed in img-src. data: URLs work. */
-    /* Be permissive about the MIME type. Some systems report .jpeg as
-       image/jpg, and some report nothing at all; a strict list rejects files
-       the browser can actually decode. What matters is whether the image
-       decodes, and that is checked at img.onerror with the real type shown. */
     var type = (f.type || "").toLowerCase();
     var nameOk = /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name || "");
     var describe = f.name + " (" + (type || "no type reported") + ", " +
@@ -142,10 +127,6 @@
     });
   }
 
-  /* Two more ways in, so a picker that will not open cannot block this:
-     drop the file on the circle, or click the circle itself. */
-  /* The whole photo panel accepts a drop, not just the circle - a small target
-     is easy to miss, and the file dialog is out of our hands. */
   var dropZone = document.getElementById("avatar-drop") || preview;
   if (dropZone) {
     ["dragenter", "dragover"].forEach(function (t) {

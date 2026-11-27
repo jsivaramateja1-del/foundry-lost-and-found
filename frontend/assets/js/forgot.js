@@ -1,5 +1,3 @@
-/* Forgot-password page. The API deliberately answers the same way whether or
-   not the address exists, so this page must not imply that it checked. */
 const form = document.getElementById('forgot-form');
 const errorBox = document.getElementById('forgot-error');
 const successBox = document.getElementById('forgot-success');
@@ -32,8 +30,6 @@ form.addEventListener('submit', async (event) => {
   }
 });
 
-/* Wire the theme toggle. Without this the button on this page does nothing,
-   because initTheme() is only called from the pages that load a page script. */
 document.addEventListener('DOMContentLoaded', function () {
   if (typeof initTheme === 'function') initTheme();
 });

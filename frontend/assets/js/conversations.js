@@ -1,8 +1,3 @@
-/* Two modes:
-   - no ?item=  -> list every conversation this user is part of
-   - ?item=<id> -> open that listing's thread directly
-   Opening from the nav must work, so the list is the default rather than an
-   error, which is what it used to be. */
 (function () {
   "use strict";
   var qs = new URLSearchParams(window.location.search);
@@ -32,13 +27,10 @@
     errorBox.dataset.show = msg ? 'true' : 'false';
   }
 
-  /* Split on purpose: if Auth itself is missing, calling requireLogin on it
-     would throw a ReferenceError instead of sending the visitor to log in. */
   if (typeof Auth === "undefined") { window.location.replace("auth.html"); return; }
   if (!Auth.isLoggedIn) { Auth.requireLogin("conversations.html"); return; }
   state.me = Auth.user && Auth.user.id;
 
-  /** Online if seen in the last two minutes, otherwise how long ago. */
   function presenceText(iso) {
     if (!iso) return "";
     var seen = new Date(iso).getTime();
@@ -52,8 +44,6 @@
     return "Last seen " + (days === 1 ? "yesterday" : days + "d ago");
   }
 
-  /* WhatsApp-style ticks drawn inline, because the design uses no icon font.
-     One grey tick means sent; two teal ticks mean read. */
   function tick(readAt) {
     var path = '<path d="M1 5.5 L4 8.5 L11 1.5"></path>';
     if (!readAt) {
@@ -84,7 +74,6 @@
     '</div>';
   }
 
-  /* ---------- mode 1: the list ---------- */
   async function showList() {
     shell.hidden = true;
     empty.hidden = true;
@@ -117,7 +106,6 @@
     }
   }
 
-  /* ---------- mode 2: one thread ---------- */
   async function loadThread() {
     try {
       var url = '/items/' + encodeURIComponent(itemId) + '/messages' +
@@ -131,8 +119,7 @@
       empty.hidden = true;
       form.hidden = false;
       listHead.textContent = 'On this listing';
-      /* The header names the person you are talking to, the way a chat app
-         does, rather than describing the page. */
+
       var peer = null;
       if (data.isReporter) {
         var found = (data.conversations || []).filter(function (c) { return c.otherId === state.withId; })[0];
@@ -189,18 +176,15 @@
     }
   }
 
-  /* Tell the other side we are typing, at most once every two seconds. */
   var lastPing = 0;
   body.addEventListener('input', function () {
     var now = Date.now();
     if (now - lastPing < 1500 || !itemId) return;
     lastPing = now;
     api('/items/' + encodeURIComponent(itemId) + '/messages/typing', { method: 'POST', auth: true })
-      .catch(function () { /* a missed ping is harmless */ });
+      .catch(function () {  });
   });
 
-  /* A photo is shrunk here before it is sent, the same way item photos are,
-     so a phone picture does not travel at full size. */
   var pendingPhoto = "";
   var photoInput = document.getElementById("cv-photo");
   var attachBtn = document.getElementById("cv-attach");

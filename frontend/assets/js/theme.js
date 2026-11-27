@@ -1,21 +1,6 @@
-/**
- * Theme toggle with three effects working together:
- *
- *   1. The new palette spreads out of the button as a growing circle.
- *   2. The old page crossfades away over 500ms underneath it.
- *   3. The icon rotates and flips while the colours change.
- *
- * The circle uses the View Transitions API. Where that is unavailable, or where
- * the visitor has asked for reduced motion, it falls back to a plain crossfade
- * and finally to an instant switch - the theme must always change, even when
- * the animation cannot run.
- */
 (function () {
   "use strict";
 
-  /* Tuned down from 500ms. A theme switch is a small state change and half a
-     second reads as lag; 380ms is still clearly animated but feels immediate.
-     The fade-out is shorter still (see the CSS) so the circle leads the eye. */
   var DURATION = 380;
   var root = document.documentElement;
 
@@ -25,7 +10,7 @@
 
   function applyTheme(next) {
     root.setAttribute("data-theme", next);
-    try { localStorage.setItem("foundry.theme", next); } catch (e) { /* private mode */ }
+    try { localStorage.setItem("foundry.theme", next); } catch (e) {  }
     document.querySelectorAll("[data-theme-icon]").forEach(paintIcon);
   }
 
@@ -33,7 +18,6 @@
     el.textContent = root.getAttribute("data-theme") === "dark" ? "☀" : "☾";
   }
 
-  /** Spin and flip the icon, so the change is felt as well as seen. */
   function spinIcon(button) {
     var icon = button.querySelector("[data-theme-icon]");
     if (!icon || prefersReduced() || !icon.animate) return;
@@ -47,7 +31,6 @@
     );
   }
 
-  /** Circle origin and radius that covers the whole viewport from the button. */
   function circleFrom(button) {
     var r = button.getBoundingClientRect();
     var x = r.left + r.width / 2;
@@ -66,8 +49,6 @@
 
     spinIcon(button);
 
-    // No View Transitions, or the visitor asked for less motion: switch at once
-    // and let the CSS transition on colours carry the change.
     if (!document.startViewTransition || prefersReduced()) {
       root.classList.add("theme-changing");
       applyTheme(next);
@@ -75,17 +56,11 @@
       return;
     }
 
-    /* The theme is applied by this callback. If the browser accepts the
-       transition but never runs the callback - which some do - the theme would
-       silently never change. `commit` runs once, from whichever path gets there
-       first, so the change is guaranteed. */
     var applied = false;
     function commit() { if (!applied) { applied = true; applyTheme(next); } }
     var vt = document.startViewTransition(commit);
     setTimeout(commit, 80);
 
-    // The circle is drawn on the incoming snapshot, so the new palette is what
-    // expands. The outgoing snapshot fades underneath it.
     vt.ready.then(function () {
       root.animate(
         {
@@ -100,13 +75,12 @@
           pseudoElement: "::view-transition-new(root)"
         }
       );
-    }).catch(function () { /* the theme already changed */ });
+    }).catch(function () {  });
   }
 
   function init() {
     document.querySelectorAll("[data-theme-toggle]").forEach(function (b) {
-      /* api.js's initTheme may have bound this button already, under its own
-         flag. Two handlers flip the attribute twice and cancel each other out. */
+
       if (b.dataset.themeWired || b.dataset.themeBound) return;
       b.dataset.themeWired = "1";
       b.dataset.themeBound = "1";
@@ -118,6 +92,5 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
 
-  // expose for pages that build their header later
   window.FoundryTheme = { init: init };
 })();

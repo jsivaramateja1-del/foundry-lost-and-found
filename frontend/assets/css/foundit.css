@@ -1,17 +1,3 @@
-/* ===========================================================================
-   FOUNDRY — "Found It." design system
-   Paper (light) and Night (dark), one personality.
-
-   The shape language is what makes it read as hand-made rather than
-   generated: 2px ink borders, uneven corner radii, hard offset shadows with
-   no blur, tilted cards and tape strips on Paper. Night drops the tape and the
-   hard shadow — on a dark ground they read as mud — and keeps the same rust.
-
-   Every class used by the seven pages is covered here. Nothing is left to a
-   browser default.
-   =========================================================================== */
-
-/* ---------- tokens: Paper ---------- */
 :root {
   color-scheme: light;
   --muted: var(--ink-2);
@@ -19,23 +5,19 @@
   --ink:#2B2622; --ink-2:#5A5047; --ink-3:#8A867C;
   --line:#2B2622; --line-soft:rgba(43,38,34,.30);
   --primary:#C23B22; --primary-ink:#FFFCF5; --primary-hover:#A8331D; --primary-soft:#F26C4F;
-  /* text placed ON a coloured fill — never used as a background */
+
   --on-primary:#FFFCF5; --on-teal:#FFFCF5;
   --teal:#1F6F6B; --mustard:#E9B949; --danger:#A33327;
   --tape:rgba(233,185,73,.55);
   --blk:#EFE7D8; --blk-hostel:#E8EDE4; --blk-sport:#F3EDDD; --blk-mark:#F6E6DE;
 
-  /* The four brand faces. --mono was referenced eight times but never defined,
-     so every piece of metadata silently fell back to generic monospace. */
   --serif:"Fraunces",Georgia,"Times New Roman",serif;
   --sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
   --disp:"Space Grotesk","Inter",system-ui,sans-serif;
   --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
-  /* Caveat is not a brand face. Kept as an alias pointing at the serif so the
-     two rules that used a handwriting font keep their expressive intent. */
+
   --hand:"Fraunces",Georgia,serif;
 
-  /* ---- type scale: seven steps, replacing a 21-value half-pixel continuum ---- */
   --t-xs:11px;
   --t-sm:12.5px;
   --t-base:14px;
@@ -52,7 +34,6 @@
   --max:1200px;
 }
 
-/* ---------- tokens: Night ---------- */
 [data-theme="dark"] {
   --ground:#121110; --surface:#1B1917; --sunken:#232120;
   --ink:#F5F2EA; --ink-2:#A39C92; --ink-3:#7E7871;
@@ -66,9 +47,8 @@
   --shadow-lg:none;
 }
 
-/* System preference decides when the visitor has not chosen. */
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme]) { /* inherits the Paper tokens above */ }
+  :root:not([data-theme]) {  }
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
@@ -84,7 +64,6 @@
   }
 }
 
-/* ---------- base ---------- */
 *,*::before,*::after { box-sizing:border-box; }
 html { -webkit-text-size-adjust:100%; }
 body {
@@ -106,14 +85,13 @@ hr { border:0; border-top:2px solid var(--line-soft); margin:24px 0; }
 .wrap, .container {
   max-width:var(--max); margin:0 auto; padding:0 var(--pad);
 }
-/* The header is sticky, so the first block of content needs room beneath it. */
+
 main.wrap, main.container { padding-top:28px; padding-bottom:56px; }
 main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
 .two { display:grid; grid-template-columns:1fr 1fr; gap:26px; }
 .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:22px; }
-/* padding-block, not the shorthand: these elements also carry .wrap, and
-   `padding: 34px 0 0` silently zeroed its horizontal padding. */
+
 .section { padding-block:34px 0; }
 .section-head { display:flex; align-items:flex-end; justify-content:space-between; gap:20px; flex-wrap:wrap; margin-bottom:18px; }
 .page-head { display:flex; align-items:flex-end; justify-content:space-between; gap:24px; flex-wrap:wrap; margin-bottom:24px; padding-block:28px 0; }
@@ -139,7 +117,6 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
   @keyframes marquee { from { transform:translateX(0); } to { transform:translateX(-50%); } }
 }
 
-/* ---------- header ---------- */
 .site-header {
   position:sticky; top:0; z-index:60; background:var(--ground);
   border-bottom:2px solid var(--line);
@@ -163,7 +140,7 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 .nav a { font-size:var(--t-base); font-weight:500; color:var(--ink-2); padding:4px 0; white-space:nowrap; border-bottom:2.5px solid transparent; text-decoration:none; }
 .nav a:hover, .nav a[aria-current="page"] { color:var(--ink); border-bottom-color:var(--primary); text-decoration:none; }
 .header-actions { margin-left:auto; display:flex; align-items:center; gap:8px; flex:0 0 auto; }
-/* the header carries many controls; keep them compact so they never wrap */
+
 .header-actions .btn { min-height:34px; font-size:var(--t-sm); padding:0 11px; white-space:nowrap; box-shadow:none; }
 .header-actions .btn:hover { transform:none; box-shadow:none; }
 .theme-toggle {
@@ -176,7 +153,6 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 .theme-toggle:hover { transform:translate(-1px,-1px); }
 .menu-toggle { display:none; }
 
-/* ---------- buttons ---------- */
 .btn {
   display:inline-flex; align-items:center; justify-content:center; gap:8px;
   font:inherit; font-size:var(--t-base); font-weight:700; min-height:44px; padding:0 20px; cursor:pointer;
@@ -194,8 +170,7 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 .btn--ghost:hover { background:var(--sunken); box-shadow:none; transform:none; }
 .btn--block { width:100%; }
 .btn--sm, .btn.sm { min-height:34px; font-size:var(--t-sm); padding:0 13px; box-shadow:2px 2px 0 var(--line); }
-/* A button is inline-block but still stretches inside a flex column, which made
-   the underline run past the words. It must hug its own text. */
+
 .link-button {
   font:inherit; font-size:var(--t-sm); font-weight:700; background:none; border:0; padding:2px 0;
   color:var(--ink); cursor:pointer;
@@ -205,7 +180,6 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 }
 .link-button:hover { color:var(--primary); text-decoration-color:var(--primary); }
 
-/* ---------- fields ---------- */
 .field { margin-bottom:16px; }
 .field label, .form-section label {
   display:block; font-size:var(--t-xs); font-weight:700; letter-spacing:.09em; text-transform:uppercase;
@@ -246,13 +220,12 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 .form-section--actions, .form-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:18px; }
 .form-grid { display:grid; grid-template-columns:1fr; gap:0 18px; }
 .form-grid > .two { display:grid; grid-template-columns:1fr 1fr; gap:0 18px; }
-/* a form is one column; only .two/.form-grid rows go side by side */
+
 .form-section, .form-error, .form-success, .form-actions, .form-section--actions, .note { grid-column:1 / -1; }
 .form-grid > .field { grid-column:1 / -1; }
 .form-grid > .two { grid-column:1 / -1; }
 .password-field { position:relative; }
-/* The reveal control sits inside the field, so it carries no box of its own:
-   a bordered button there read as a second input. It stays a 44px tap target. */
+
 .password-field__toggle {
   position:absolute; right:0; top:0; height:100%; min-width:44px;
   display:flex; align-items:center; justify-content:center;
@@ -269,7 +242,6 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 .strength__label { font-size:var(--t-xs); color:var(--ink-3); margin-top:4px; }
 .image-preview { border:2px dashed var(--line-soft); border-radius:8px; padding:10px; margin-top:8px; }
 
-/* ---------- panels & cards ---------- */
 .panel, .state-box {
   background:var(--surface); border:2px solid var(--line); border-radius:var(--radius);
   box-shadow:var(--shadow-lg); overflow:hidden;
@@ -290,12 +262,10 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 .empty__actions { margin-top:12px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
 .cards-row {
   display:grid; gap:14px;
-  /* Counters, not photo cards. 280px was sized for listing images, which
-     left ten metrics as 3+3+3+1 with an orphan on its own row. */
+
   grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
 }
 
-/* tilted cards with tape — Paper only */
 .card {
   position:relative; padding:16px; display:flex; flex-direction:column; gap:10px;
   font:inherit; color:var(--ink); text-align:left; cursor:pointer; appearance:none;
@@ -315,7 +285,6 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 [data-theme="dark"] table, [data-theme="dark"] .modal__panel { border-color:var(--line); box-shadow:none; }
 [data-theme="dark"] .card:hover { transform:translateY(-3px); }
 
-/* ---------- tables ---------- */
 .table, table {
   width:100%; border-collapse:collapse; background:var(--surface);
   border:2px solid var(--line); border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow);
@@ -332,7 +301,6 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 .detail-list dt { color:var(--ink-2); font-weight:700; font-size:var(--t-xs); letter-spacing:.08em; text-transform:uppercase; }
 .detail-list dd { margin:0; }
 
-/* ---------- stats & metrics ---------- */
 .stats, .metric, .stat { }
 .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:14px; margin-bottom:26px; }
 .metric, .stat {
@@ -351,7 +319,6 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 }
 .load-more { display:flex; flex-direction:column; align-items:center; gap:6px; margin-top:22px; }
 
-/* ---------- tags, badges, status ---------- */
 .badges { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:9px; }
 .badge {
   display:inline-block; font-size:var(--t-xs); font-weight:700; letter-spacing:.11em; text-transform:uppercase;
@@ -364,7 +331,6 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 .status--rejected { color:var(--danger); font-weight:700; }
 .status--pending { color:var(--ink-2); font-weight:700; }
 
-/* ---------- hero ---------- */
 .hero { padding:38px 0 26px; }
 .hero__grid { display:grid; grid-template-columns:1.15fr .85fr; gap:40px; align-items:center; }
 .hero__lede { font-size:var(--t-md); color:var(--ink-2); max-width:52ch; }
@@ -376,7 +342,6 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 .hero__aside > div:last-child { border-bottom:0; padding-bottom:0; }
 .hero__aside { background:var(--surface); border:2px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow-lg); padding:18px; }
 
-/* ---------- auth ---------- */
 .auth-shell {
   display:grid; grid-template-columns:1fr 1fr; gap:52px; align-items:start;
   max-width:var(--max); margin:0 auto; padding:44px var(--pad);
@@ -398,7 +363,6 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 .auth-visual { color:var(--ink-2); font-size:var(--t-base); }
 .auth-visual h2 { font-family:var(--serif); color:var(--ink); }
 
-/* ---------- steps ---------- */
 .steps { display:grid; gap:12px; }
 .step { display:grid; grid-template-columns:26px 1fr; gap:2px 12px; align-items:start;
   font-size:var(--t-base); color:var(--ink-2); }
@@ -411,7 +375,6 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
   background:var(--mustard); border:2px solid var(--line); border-radius:6px 9px 5px 8px;
 }
 
-/* ---------- explorer ---------- */
 .explorer-layout { display:grid; grid-template-columns:1.35fr 1fr; gap:24px; align-items:start; }
 .blk { cursor:pointer; }
 .blk rect { fill:var(--blk); stroke:var(--line); stroke-width:2; transition:fill .12s; }
@@ -422,7 +385,6 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 .blk.on text { fill:var(--primary-ink); }
 [data-theme="dark"] .blk.on text { fill:var(--on-primary); }
 
-/* ---------- notifications ---------- */
 .notifications__panel {
   background:var(--surface); border:2px solid var(--line); border-radius:var(--radius);
   box-shadow:var(--shadow-lg); overflow:hidden;
@@ -436,7 +398,6 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 }
 .notifications { position:relative; }
 
-/* ---------- modal ---------- */
 .modal { position:fixed; inset:0; z-index:200; display:none; place-items:center; background:rgba(20,18,16,.6); padding:20px; }
 .modal[data-open="true"], .modal.open { display:grid; }
 .modal__panel {
@@ -457,14 +418,12 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 .modal__close { font:inherit; font-size:var(--t-lg); line-height:1; background:none; border:0; cursor:pointer; color:var(--ink-2); padding:2px 6px; }
 .modal__close:hover { color:var(--primary); }
 
-/* ---------- footer ---------- */
 .site-footer { border-top:2px solid var(--line); margin-top:46px; padding:26px 0 40px; }
 .footer__grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:24px; font-size:var(--t-sm); color:var(--ink-2); }
 .footer__bottom { margin-top:22px; padding-top:14px; border-top:1.5px solid var(--line-soft); font-size:var(--t-sm); color:var(--ink-3); display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; }
 .footer__grid h4 { font-family:var(--serif); font-size:var(--t-base); color:var(--ink); margin:0 0 8px; }
 .footer__grid a { color:var(--ink-2); display:block; padding:3px 0; }
 
-/* ---------- reports & misc ---------- */
 .report-form, .report-listing { border:2px solid var(--line); border-radius:var(--radius); padding:16px; background:var(--surface); }
 .filters { margin-bottom:22px; }
 .filters__row { align-items:end; }
@@ -483,9 +442,7 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 .filters__row .input, .filters__row input[type="search"] { flex:1 1 240px; }
 .filters__row .select, .filters__row select {
   width:auto; flex:0 1 auto;
-  /* room for the text plus the chevron, or the arrow sits on the last letter */
-  /* max-content is not allowed inside calc(); it made the whole declaration
-     invalid and the select fell back to width:100%. */
+
   min-width:11ch;
   padding-right:36px;
   text-overflow:ellipsis;
@@ -501,7 +458,6 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
   background:var(--surface); border-color:var(--line); color:var(--ink); margin-bottom:-2px;
 }
 
-/* ---------- responsive ---------- */
 @media (max-width:980px) {
   .hero__grid, .auth-shell, .explorer-layout, .two { grid-template-columns:1fr; gap:26px; }
   .form-grid { grid-template-columns:1fr; }
@@ -518,19 +474,11 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
   .modal__panel { max-height:92vh; }
 }
 
-/* ---------- motion ---------- */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration:.001ms !important; transition-duration:.001ms !important; }
   .card, .card:hover { transform:none !important; }
 }
 
-/* ===========================================================================
-   Behavioural rules the scripts drive.
-   These were dropped in the conversion: every one is a class the JavaScript
-   toggles, so without them the feature silently does nothing.
-   =========================================================================== */
-
-/* toast — the app's only error channel */
 .toast {
   position:fixed; left:20px; bottom:20px; z-index:300;
   max-width:340px; padding:12px 16px; font-size:var(--t-sm); font-weight:500;
@@ -542,17 +490,14 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 .toast[data-show="true"] { opacity:1; transform:translateY(0); pointer-events:auto; }
 [data-theme="dark"] .toast { background:var(--surface); color:var(--ink); border:2px solid var(--line); box-shadow:none; }
 
-/* form errors reveal by data-show, exactly like form-success */
 .form-error { display:none; }
 .form-error[data-show="true"] { display:block; }
 
-/* password reveal: the two eye icons swap, driven by .is-revealed */
 .password-field__toggle .eye { display:block; width:16px; height:16px; }
 .password-field__toggle .eye--closed { display:none; }
 .password-field__toggle.is-revealed .eye--open { display:none; }
 .password-field__toggle.is-revealed .eye--closed { display:block; }
 
-/* notifications rows */
 .notifications__item { padding:10px 14px; border-bottom:1.5px solid var(--line-soft); font-size:var(--t-sm); }
 .notifications__item:last-child { border-bottom:0; }
 .notifications__item--link { display:block; color:inherit; text-decoration:none; }
@@ -560,31 +505,24 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 .notifications__item.is-unread { background:var(--sunken); font-weight:600; }
 .notifications__empty { padding:14px; font-size:var(--t-sm); color:var(--ink-3); }
 
-/* screen-reader-only label the JS injects into notification rows */
 .visually-hidden {
   position:absolute; width:1px; height:1px; padding:0; margin:-1px;
   overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0;
 }
 
-/* scroll reveal */
-/* Content is never hidden by CSS. A scroll animation must not be able to make
-   the page unreadable if a script fails. */
 [data-reveal] { opacity:1; transform:none; }
 
-/* two-column section bodies that had empty rules */
 .community { display:grid; grid-template-columns:1fr 1fr; gap:clamp(2rem,5vw,4rem); align-items:start; }
 .leaderboard { list-style:none; margin:0; padding:0; display:grid; gap:6px; }
 .leaderboard__row { display:flex; align-items:baseline; gap:12px; font-size:var(--t-base); }
 .leaderboard__rank { font-family:var(--serif); font-weight:700; color:var(--ink-3); min-width:24px; }
 @media (max-width:980px) { .community { grid-template-columns:1fr; } }
 
-/* badge modifiers the JS actually emits */
 .badge--earned { background:var(--teal); color:#FFFCF5; border-color:var(--teal); }
 .badge--locked { background:transparent; color:var(--ink-3); border-color:var(--line-soft); }
 .badge__dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:currentColor; margin-right:6px; }
 .badge__body { display:inline; }
 
-/* item cards the JS builds */
 .card__media img { width:100%; height:100%; object-fit:cover; object-position:center; display:block; }
 .card__media { height:120px; border-radius:6px; background:var(--sunken); border:2px solid var(--line-soft); overflow:hidden; }
 .card__media--empty { display:grid; place-items:center; color:var(--ink-3); font-size:var(--t-sm); }
@@ -594,19 +532,16 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 .card__desc { font-size:var(--t-sm); color:var(--ink-2); }
 .card__meta { display:flex; justify-content:space-between; gap:10px; font-size:var(--t-sm); color:var(--ink-3); }
 
-/* admin chart bars */
 .chart__row { display:grid; grid-template-columns:110px 1fr 44px; gap:10px; align-items:center; margin-bottom:7px; font-size:var(--t-sm); }
 .chart__bar { height:12px; background:var(--line-soft); border-radius:3px; overflow:hidden; }
 .chart__fill { display:block; height:100%; background:var(--primary); }
 .chart__val { text-align:right; font-variant-numeric:tabular-nums; color:var(--ink-2); }
 
-/* status / tag base classes */
 .status { font-size:var(--t-xs); letter-spacing:.1em; text-transform:uppercase; font-weight:700; }
 .tag { display:inline-block; font-size:var(--t-xs); font-weight:700; letter-spacing:.11em; text-transform:uppercase; padding:3px 8px; border:1.5px solid var(--line); border-radius:4px 7px 4px 6px; }
 .btn--primary { background:var(--primary); color:var(--primary-ink); border-color:var(--primary); }
 .pager__label { font-size:var(--t-sm); color:var(--ink-3); }
 
-/* ---------- dark-mode corrections the audit found ---------- */
 [data-theme="dark"] {
   color-scheme: dark;
   --blk-hover: #3A3532;
@@ -639,36 +574,25 @@ main > h1:first-child, main > .page-head:first-child { margin-top:0; }
 [data-theme="dark"] .field textarea:focus { box-shadow:none; border-color:var(--primary); }
 [data-theme="dark"] .card::before { border-color:transparent; }
 
-/* a bare search input with no .input class (explorer) */
 input[type="search"] {
   background-color:var(--surface); color:var(--ink);
   border:2px solid var(--line); border-radius:8px 12px 7px 11px;
   font:inherit; font-size:var(--t-base); padding:9px 13px; min-height:46px;
 }
 
-/* ===========================================================================
-   Second review pass — fixes from the forms/a11y agent.
-   =========================================================================== */
-
-/* The UA [hidden] rule loses to any class that sets display. Without this,
-   auth-gated header buttons, "Load more" and the alerts pill all render. */
 [hidden] { display: none !important; }
 
-/* darker muted text: --ink-3 failed 4.5:1 on every background */
 :root { --ink-3: #6E6A62; }
 [data-theme="dark"] { --ink-3: #9A948B; }
 
-/* a visible focus ring that survives outline:none on the fields */
 :focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
 [data-theme="dark"] :focus-visible { outline-color: var(--mustard); }
 
-/* password field must leave room for the toggle */
 .password-field input { padding-right: 44px; }
 .password-field__toggle { width: 34px; height: 34px; display: grid; place-items: center; padding: 0; }
 
-/* strength meter actually fills */
 .strength__bar span { width:0; background:var(--ink-2); transition:width .2s ease, background .2s ease; }
-/* The track is --line-soft, so each step needs to clear it by a real margin. */
+
 [data-strength="1"] .strength__bar span { background:var(--danger); }
 [data-strength="2"] .strength__bar span { background:#8A6A12; }
 [data-strength="3"] .strength__bar span,
@@ -679,7 +603,6 @@ input[type="search"] {
 [data-strength="3"] .strength__bar span { width:75%; }
 [data-strength="4"] .strength__bar span { width:100%; }
 
-/* notifications drop down instead of inflating the header */
 .notifications { position: relative; }
 .notifications__panel {
   position: absolute; top: calc(100% + 8px); right: 0; width: 320px; z-index: 80;
@@ -687,15 +610,12 @@ input[type="search"] {
 }
 [data-theme="dark"] .notifications__panel { box-shadow: 0 14px 34px -14px rgba(0,0,0,.8); }
 
-/* badge states the JS emits */
 [data-theme="dark"] .badge--earned { color: var(--on-teal); }
 .badge--locked { background: transparent; color: var(--ink-3); border-color: var(--line-soft); opacity: .75; }
 .badge__dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; margin-right: 6px; }
 
-/* primary action that was undefined */
 [data-theme="dark"] .btn--primary { color: var(--on-primary); }
 
-/* status--open, emitted by dashboard.js */
 .status--open { color:var(--teal); font-weight:700; }
 .status--claimed { color:#8A5A00; font-weight:700; }
 [data-theme="dark"] .status--claimed { color:var(--mustard); }
@@ -703,24 +623,20 @@ input[type="search"] {
 .status--hidden { color:var(--danger); font-weight:700; }
 .status--completed { color:var(--ink-2); font-weight:700; }
 
-/* --accent no longer exists but pages still reference it */
 :root { --accent: var(--teal); }
 [data-theme="dark"] { --accent: var(--teal); }
 
-/* touch targets: nothing interactive below 44px */
 .header-actions .btn, .btn--sm, .btn.sm, .theme-toggle,
 .pager a, .pager button, .link-button, .auth-tab, .nav a { min-height: 44px; }
 .link-button { padding: 10px 0; }
 .modal__close { min-width: 44px; min-height: 44px; }
 .auth-tab { padding: 12px 16px; }
 
-/* native checkbox and date pickers follow the theme */
 input[type="checkbox"] { accent-color: var(--primary); width: 18px; height: 18px; }
 input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0); }
 [data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); }
 ::placeholder { color: var(--ink-3); opacity: 1; }
 
-/* ---------- mobile: the menu button must be reachable and usable ---------- */
 .menu-toggle {
   display: none; font: inherit; font-size:var(--t-sm); font-weight: 700; cursor: pointer;
   min-height: 44px; padding: 0 14px; background: var(--surface); color: var(--ink);
@@ -733,8 +649,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0); }
     flex-wrap: wrap; justify-content: flex-end; gap: 6px;
   }
   .header-actions .btn { flex: 0 0 auto; }
-  /* The nav is shown, wrapped, rather than hidden behind a menu button that
-     is not reliably reachable at narrow widths. */
+
   .nav {
     display: flex; flex-wrap: wrap; flex-basis: 100%; gap: 4px 16px; order: 3;
     margin: 4px 0 0; padding-top: 10px; border-top: 2px solid var(--line-soft);
@@ -748,11 +663,6 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0); }
   .nav[data-open="true"] a { min-height: 44px; display: flex; align-items: center; }
 }
 
-/* ---------------------------------------------------------------------------
-   explorer.html was never migrated to the header component: it carries a bare
-   .brand and a bare <nav> with no .site-header__inner. These rules give that
-   page the same header, gutter and nav rhythm as the other six.
-   --------------------------------------------------------------------------- */
 header.site-header > .brand,
 header.site-header > nav:not(.nav) {
   max-width: var(--max);
@@ -773,8 +683,6 @@ header.site-header > nav:not(.nav) a {
 }
 header.site-header > nav:not(.nav) a:hover { color: var(--ink); border-bottom-color: var(--primary); }
 
-/* explorer.html's brand is an <a class="brand"> with the text inline, not a
-   .logo element — give it the wordmark treatment and ink colour. */
 header.site-header > .brand {
   color: var(--ink); text-decoration: none;
   font-family: var(--serif); font-size:var(--t-xl); font-weight: 700; letter-spacing: -.02em;
@@ -785,14 +693,12 @@ header.site-header > .brand:hover { text-decoration: none; }
   border-radius:8px; overflow:hidden; }
 .detail-media img { width:100%; max-height:240px; object-fit:cover; display:block; }
 
-/* ---- badges: list reset + readable description ---- */
 .badges { list-style:none; margin:0; padding:0; }
 .badge__body { display:block; margin-top:3px; text-transform:none; letter-spacing:normal; }
 .badge .form-note { display:block; font-size:var(--t-xs); margin:2px 0 0;
   letter-spacing:0; text-transform:none; }
 .badge--locked { opacity:1; color:var(--ink-2); }
 
-/* ---- theme toggle must beat .btn--ghost ---- */
 .header-actions .theme-toggle, .theme-toggle.btn--ghost {
   background:var(--surface); box-shadow:2px 2px 0 var(--line);
 }
@@ -800,60 +706,50 @@ header.site-header > .brand:hover { text-decoration: none; }
   transform:translate(-1px,-1px); background:var(--surface);
 }
 
-/* ---- notification rows are buttons ---- */
 .notifications__item--link {
   width:100%; border:0; background:none; font:inherit; color:var(--ink);
   text-align:left; cursor:pointer; padding:11px 14px;
 }
 .notifications__list li { padding:0; }
 
-/* ---- panel head must wrap on narrow screens ---- */
 .panel__head { flex-wrap:wrap; }
 
-/* ---- notifications panel must fit the viewport ---- */
 .notifications__panel { width:min(320px, calc(100vw - 2 * var(--pad))); }
 @media (max-width:480px) {
   .notifications__panel { position:fixed; left:var(--pad); right:var(--pad);
     top:auto; width:auto; }
 }
 
-/* ---- campus plan selection must win over the block modifiers ---- */
 .blk.on rect, .blk.hostel.on rect, .blk.sport.on rect,
 .blk.mark.on rect, .blk.out.on rect { fill:var(--primary); stroke:var(--primary); }
 [data-theme="dark"] .blk.on text { fill:var(--on-primary); }
 
-/* ---- anchors must clear the sticky header ---- */
 html { scroll-padding-top:84px; }
-/* At <=900px the header wraps to two or three rows and reaches ~200px, so a
-   fixed 84px offset dropped every anchor target behind it. */
+
 @media (max-width:900px) { html { scroll-padding-top:212px; } }
 @media (max-width:420px) { html { scroll-padding-top:224px; } }
 
-/* ---- skip link ---- */
 .skip-link { position:absolute; left:-9999px; top:0; z-index:500; }
 .skip-link:focus {
   left:var(--pad); top:8px; background:var(--surface); color:var(--ink);
   border:2px solid var(--line); padding:8px 14px; border-radius:6px; font-weight:700;
 }
 
-/* ---- tables: no display:block (it split thead/tbody) ---- */
 @media (max-width:760px) {
   .table, table { display:table; min-width:640px; }
   .panel__body { overflow-x:auto; }
 }
 
-/* ---- empty states used an undefined token ---- */
 .table__empty { color:var(--ink-2); padding:22px 14px; text-align:center; }
 .auth-shell--single { grid-template-columns:minmax(0,520px); justify-content:center; }
 @media (max-width:900px) { .auth-shell--single { grid-template-columns:1fr; } }
-/* the map must not paint over the sticky header, and must follow the theme */
+
 #map { position:relative; z-index:0; isolation:isolate; height:460px;
   border:2px solid var(--line); border-radius:var(--radius); }
 [data-theme="dark"] .leaflet-tile { filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.9); }
 [data-theme="dark"] .leaflet-popup-content-wrapper,
 [data-theme="dark"] .leaflet-control { background:var(--surface); color:var(--ink); }
-/* The badge paints its own background, so the nested description must not keep
-   the muted ink colour or it disappears into it. */
+
 .badge--earned .form-note, .badge--earned .badge__body,
 .badge--found .form-note, .badge--lost .form-note {
   color:inherit; opacity:.92;
@@ -861,16 +757,13 @@ html { scroll-padding-top:84px; }
 [data-theme="dark"] .badge--earned .form-note,
 [data-theme="dark"] .badge--earned .badge__body { color:var(--on-teal); }
 
-/* Night must not keep a hard shadow on the header toggle. */
 [data-theme="dark"] .header-actions .theme-toggle,
 [data-theme="dark"] .theme-toggle.btn--ghost { box-shadow:none; }
 
-/* The Night fallback drifted from the dark block; align the tokens that matter. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) { --ink-3:#9A948B; --blk-hover:#3A3532; }
 }
-/* The six-digit code the claimant reads to the owner: monospace, selectable,
-   and in its own column so it cannot be mistaken for part of the message. */
+
 .handover-code {
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
   font-size:var(--t-base); font-weight:700; letter-spacing:.14em;
@@ -879,9 +772,6 @@ html { scroll-padding-top:84px; }
   user-select:all; white-space:nowrap;
 }
 
-/* ===========================================================================
-   Campus Explorer — schematic plan with live counts
-   =========================================================================== */
 .plan-card {
   background:var(--surface); border:2px solid var(--line);
   border-radius:10px 16px 9px 14px; box-shadow:var(--shadow-lg);
@@ -907,7 +797,6 @@ html { scroll-padding-top:84px; }
 
 .plan-svg svg { width:100%; height:auto; display:block; }
 
-/* blocks */
 .blk rect { fill:var(--blk); stroke:var(--line); stroke-width:2; transition:fill .12s, stroke .12s; }
 .blk:hover rect { fill:var(--blk-hover, var(--blk-hover)); }
 .blk.hostel rect { fill:var(--blk-hostel); }
@@ -925,7 +814,6 @@ html { scroll-padding-top:84px; }
 .blk:focus-visible { outline:none; }
 .blk:focus-visible rect { stroke:var(--primary); stroke-width:3.5; }
 
-/* side panel */
 .plan-side { position:sticky; top:96px; }
 @media (max-width:900px) { .plan-side { position:static; } }
 .plan-detail {
@@ -950,9 +838,6 @@ html { scroll-padding-top:84px; }
   margin:16px 0 0; padding-top:14px; border-top:1.5px solid var(--line-soft);
 }
 
-/* ===========================================================================
-   Dense table controls — a 44px button per row makes a 25-row table a mile long
-   =========================================================================== */
 .table .btn {
   min-height:32px; padding:0 10px; font-size:var(--t-sm);
   white-space:nowrap; box-shadow:none;
@@ -965,18 +850,11 @@ html { scroll-padding-top:84px; }
 .table td { vertical-align:middle; }
 .table td > span[style*="display:flex"] { gap:6px; }
 
-/* Below 600px a 640px table cannot fit; let the cells breathe instead. */
 @media (max-width:600px) {
   .panel__body { overflow-x:auto; }
   .table { min-width:520px; }
   .table .btn { min-height:36px; }
 }
-
-/* ===========================================================================
-   THE CAMPUS PLAN  (Direction C)
-   Place is the navigation. Same fifteen locations and same SVG geometry as the
-   Campus Explorer. Lost and found are switchable layers over one plan.
-   =========================================================================== */
 
 .cplan { padding-top: 3rem; }
 
@@ -990,7 +868,6 @@ html { scroll-padding-top:84px; }
   margin: 0;
 }
 
-/* ---- layer switch ---- */
 .cplan__layers {
   display: flex;
   align-items: center;
@@ -1034,7 +911,6 @@ html { scroll-padding-top:84px; }
 .cplan__legend .d-found { background: var(--teal); border-color: var(--teal); }
 .cplan__legend .d-none { background: transparent; }
 
-/* ---- layout ---- */
 .cplan__body {
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
@@ -1053,7 +929,6 @@ html { scroll-padding-top:84px; }
 }
 .cplan__list { display: none; }
 
-/* ---- blocks: tones for the three layers ---- */
 .cplan .blk rect { transition: fill .18s, stroke .18s; }
 .cplan .blk:focus { outline: none; }
 .cplan .blk:focus-visible rect {
@@ -1084,7 +959,6 @@ html { scroll-padding-top:84px; }
 [data-theme="dark"] .cplan .blk.on .bl,
 [data-theme="dark"] .cplan .blk.on .ct { fill: var(--on-primary); }
 
-/* ---- the place panel ---- */
 .cplan__panel {
   border: 2px solid var(--line);
   border-radius: var(--radius);
@@ -1187,9 +1061,6 @@ html { scroll-padding-top:84px; }
 }
 .cp-more:hover { text-decoration: underline; }
 
-/* ---- mobile: the diagram becomes a list ----
-   A 700-unit SVG is unreadable at 390px. Below 820px the same fifteen places
-   are listed as rows, same data, same selection. */
 @media (max-width: 820px) {
   .cplan__body { grid-template-columns: 1fr; }
   .cplan__svg { display: none; }
@@ -1238,9 +1109,6 @@ html { scroll-padding-top:84px; }
   .cplan .blk rect, .cp-item, .cp-row, .cplan__layer { transition: none !important; }
 }
 
-/* ---- THE MISSING SLOT (hero) ----
-   Five real listings and one empty cell. Supporting element, not the headline:
-   it sits beside the hero copy at roughly a third of the width. */
 .hero__aside { display: block; }
 .slot__cap {
   display: flex;
@@ -1296,10 +1164,7 @@ html { scroll-padding-top:84px; }
   line-height: 1.5;
   color: var(--ink-3);
 }
-/* The board used to be capped at 320px here, from when the hero was a single
-   narrow column. Once the aside widened to 560px that cap became dead space to
-   the right of the cells. The cap is the root cause, so it is removed rather
-   than overridden further down the cascade. */
+
 @media (max-width: 820px) {
   .slot { max-width: none; }
   .slot__note { max-width: none; }
@@ -1308,14 +1173,8 @@ html { scroll-padding-top:84px; }
   .slot__cell { transition: none !important; }
 }
 
-/* ---- mobile nav ----
-   At 390px the header wrapped to four rows with the theme toggle alone on the
-   last one. Below 640px the secondary links collapse and the row stays single. */
 @media (max-width: 640px) {
-  /* Disclosure menu. The header is one row — brand on the left, theme toggle and
-     Menu pinned right. Everything else moves into a panel that opens on demand.
-     .header-actions must stay displayed: the two toggles are its children, and a
-     child of display:none cannot be positioned. */
+
   .site-header { position: relative; }
   .site-header__inner {
     display: flex;
@@ -1328,9 +1187,7 @@ html { scroll-padding-top:84px; }
 
   .site-header .header-actions { display: flex; position: static; gap: 0; }
   .site-header .nav { display: none; }
-  /* only the two toggles survive the collapse */
-  /* Hide navigation actions on mobile, but never hide #who: it is the signed-in
-     user's identity, not an action, and it must stay readable. */
+
   .site-header .header-actions > *:not(.theme-toggle):not(.menu-toggle):not(#who) { display: none; }
   .site-header .header-actions #who {
     display: block; order: -1; flex: 1 0 100%; text-align: right;
@@ -1352,7 +1209,6 @@ html { scroll-padding-top:84px; }
   .site-header .menu-toggle { right: var(--pad); }
   .site-header .theme-toggle { right: calc(var(--pad) + 52px); }
 
-  /* ---- open state ---- */
   .site-header__inner[data-nav-open="true"] .nav,
   .site-header__inner[data-nav-open="true"] .header-actions > *:not(.theme-toggle):not(.menu-toggle) {
     display: flex;
@@ -1393,14 +1249,6 @@ html { scroll-padding-top:84px; }
   .site-header .menu-toggle { display: inline-flex; }
 }
 
-/* ===========================================================================
-   TYPOGRAPHY — three voices, one system
-   --disp (Space Grotesk) carries structure: nav, eyebrows, labels, numerals.
-   --sans (Inter) carries reading: body copy, forms, tables.
-   --serif (Fraunces) carries emphasis only: the italic phrase inside a heading.
-   --mono (JetBrains Mono) carries data: dates, counts, codes.
-   =========================================================================== */
-
 .nav a,
 .eyebrow,
 .panel__head,
@@ -1415,7 +1263,6 @@ label {
 }
 .eyebrow { letter-spacing: .14em; }
 
-/* numerals and codes are data, not prose */
 .stat__value,
 .handover-code,
 .cp-item__m,
@@ -1425,7 +1272,6 @@ label {
   font-variant-numeric: tabular-nums;
 }
 
-/* headings: Inter for structure, Fraunces only for the emphasised phrase */
 h1, h2, h3, h4 { font-family: var(--sans); letter-spacing: -.02em; }
 .display { font-family: var(--disp); letter-spacing: -.035em; }
 .display em, h1 em, h2 em, h3 em {
@@ -1433,14 +1279,6 @@ h1, h2, h3, h4 { font-family: var(--sans); letter-spacing: -.02em; }
   font-style: italic;
   letter-spacing: -.01em;
 }
-
-/* ===========================================================================
-   MOTION — purposeful, short, interruptible
-   Every transition here is on transform, opacity, colour or shadow only, so
-   nothing triggers layout. The global reduced-motion block already collapses
-   durations to .001ms; the extra rule at the end removes the transforms that
-   would otherwise still shift position.
-   =========================================================================== */
 
 .btn {
   transition: transform .18s cubic-bezier(.2,.7,.3,1),
@@ -1457,10 +1295,8 @@ h1, h2, h3, h4 { font-family: var(--sans); letter-spacing: -.02em; }
 }
 .btn:disabled { opacity: .55; cursor: not-allowed; transform: none; box-shadow: none; }
 
-/* a loading button must not look pressable */
 .btn[aria-busy="true"] { opacity: .7; cursor: progress; transform: none; }
 
-/* links: the underline grows from the left rather than appearing */
 a.link-underline {
   background-image: linear-gradient(currentColor, currentColor);
   background-size: 0% 1px;
@@ -1471,7 +1307,6 @@ a.link-underline {
 a.link-underline:hover,
 a.link-underline:focus-visible { background-size: 100% 1px; }
 
-/* inputs: a quiet focus treatment that reads in both themes */
 .input, .select, .textarea {
   transition: border-color .16s, box-shadow .16s, background-color .16s;
 }
@@ -1486,15 +1321,12 @@ a.link-underline:focus-visible { background-size: 100% 1px; }
   box-shadow: 0 0 0 3px rgba(232,92,63,.26);
 }
 
-/* the plan: a short lift on hover, and the selected block settles */
 .cplan .blk { transition: transform .18s cubic-bezier(.2,.7,.3,1); }
 .cplan .blk:hover { transform: translateY(-1px); }
 .cplan .blk.on { transform: none; }
 
-/* the panel and the mobile rows cross-fade their content in */
 .cp-item, .cp-row { transition: background-color .16s, color .16s; }
 
-/* the missing slot: a small lift, never a spin */
 .slot__cell[role="button"] { transition: transform .18s cubic-bezier(.2,.7,.3,1), border-color .18s; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1505,82 +1337,48 @@ a.link-underline:focus-visible { background-size: 100% 1px; }
   a.link-underline { background-size: 100% 1px; }
 }
 
-/* ===========================================================================
-   TOUCH TARGETS
-   Measured at 390px, several controls fell well under the 44px minimum: footer
-   links at 17px, form fields at 21px, small buttons and the password reveal at
-   21-27px. Padding and min-height are applied here rather than everywhere, so
-   the desktop density is unchanged.
-   =========================================================================== */
-
 @media (max-width: 820px) {
-  /* text links inside the footer become full-height rows */
+
   .site-footer a,
   .footer__grid a { display: flex; align-items: center; min-height: 44px; padding: .5rem 0; }
 
-  /* form controls: 44px tall including the label-free password fields */
   .input, .select, .textarea { min-height: 44px; }
   .password-field__toggle { width: 44px; height: 44px; min-width: 44px; }
   .password-field input { padding-right: 52px; }
 
-  /* small buttons and tabs */
   .btn, .btn--sm, .link-button, .auth-tab { min-height: 44px; }
   .btn--sm { padding-top: .6rem; padding-bottom: .6rem; }
 
-  /* the brand is a link and must be tappable without changing its look */
   .logo { display: inline-flex; align-items: center; min-height: 44px; }
 
-  /* the skip link only needs height when focused into view */
   .skip-link:focus { min-height: 44px; display: inline-flex; align-items: center; }
 
-  /* table row actions */
   .table .btn, .table .select { min-height: 44px; }
 
-  /* checkbox rows */
   .leaderboard__opt input[type="checkbox"],
   input[type="checkbox"] { width: 22px; height: 22px; }
   label:has(> input[type="checkbox"]) { min-height: 44px; display: inline-flex; align-items: center; gap: .5rem; }
 }
 
-/* ---- touch-target follow-ups measured at 390px ---- */
-/* the skip link is off-screen until focused, so give it the full height always */
 .skip-link { min-height: 44px; display: inline-flex; align-items: center; }
 .cplan__layer { min-height: 44px; }
-/* a checkbox cannot be 44px without looking wrong; WCAG 2.5.8 asks 24px for the
-   control itself when its label row provides the larger target. */
+
 input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
 
 @media (max-width: 820px) {
-  /* inline links inside content (sign-in prompts, back links) */
+
   main a:not(.btn):not(.cp-item):not(.cp-more):not(.card) {
     display: inline-flex;
     align-items: center;
     min-height: 44px;
   }
-  /* the checkbox itself stays 22px; the row that contains it is 44px */
+
   .leaderboard__opt,
   label:has(input[type="checkbox"]) { min-height: 44px; display: inline-flex; align-items: center; }
-  /* footer column headings keep their look but the class is now h3 */
+
   .footer__head { font-size: var(--t-sm); letter-spacing: .1em; text-transform: uppercase; margin: 0 0 .5rem; }
 }
 
-/* ===========================================================================
-   BORDER AND SHADOW HIERARCHY
-   ---------------------------------------------------------------------------
-   The paper identity used one treatment everywhere: a 2px border and a 5px hard
-   shadow on cards, panels, buttons, inputs, tables and modals alike. When the
-   signature shape is on everything it stops reading as a signature.
-
-   Three tiers now:
-     1. SIGNATURE  — the plan, the missing slot, the hero plate.
-                     2px border + the full 5px offset shadow.
-     2. INTERACTIVE — buttons, inputs, item cards.
-                     2px border + a 2px offset, lifting to 5px on hover.
-     3. CONTENT     — panels, tables, notification lists, modals.
-                     border only. No shadow: they are surfaces, not objects.
-   =========================================================================== */
-
-/* 2. interactive: lighter at rest, heavier on hover */
 .card,
 .item-card {
   box-shadow: var(--shadow-sm);
@@ -1593,7 +1391,6 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
   transform: translate(-1px, -1px);
 }
 
-/* 3. content: no shadow at all */
 .panel,
 .notifications__panel,
 .modal__panel,
@@ -1602,11 +1399,10 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
   box-shadow: none;
 }
 .modal__panel {
-  /* a modal is a lifted object, so it keeps a shadow — but the lighter one */
+
   box-shadow: var(--shadow-sm);
 }
 
-/* 1. signature: the plan and the slot keep the full treatment */
 .cplan__map,
 .cplan__panel,
 .slot,
@@ -1618,51 +1414,26 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
   .card:hover, .card:focus-visible, .item-card:hover { transform: none !important; }
 }
 
-/* At 320px the brand subtitle ran underneath the theme toggle and Menu button.
-   It is decorative, so it goes rather than being squeezed. */
 @media (max-width: 420px) {
   .site-header__inner .logo span { display: none; }
   .site-header__inner .logo { padding-right: 100px; }
 }
 
-/* ===========================================================================
-   HERO — FLOATING OBJECTS
-   ---------------------------------------------------------------------------
-   Five objects suspended around the board. Depth is carried by three things at
-   once: size, blur and shadow softness. Objects further back are smaller,
-   slightly blurred and cast a wider, fainter shadow — which is what actually
-   makes a flat SVG read as a physical thing sitting in space.
-
-   They drift on a long, slow loop with different periods so the group never
-   pulses in unison, and each one shifts against the pointer at a different
-   rate (data-depth) for parallax.
-   =========================================================================== */
-
 .hero__aside { position: relative; }
 
-/* Backstop against any decorative bleed producing horizontal scroll. `clip`
-   trims it without creating a scroll container, so nothing else changes. */
 .hero { overflow-x: clip; }
 
-/* the hero needs room above so the top objects clear the fixed header */
 .hero { padding-top: clamp(28px, 4vw, 52px); }
 
 .hero__aside .slot,
 .hero__aside .slot__cap,
 .hero__aside .slot__note { position: relative; z-index: 1; }
 
-/* The hero grid collapses to one column at 980px, not 820px. The board cap and
-   the object layer must follow that same breakpoint — leaving them at 820 meant
-   a 160px-wide window where the board stretched the full page width. */
 @media (max-width: 1100px) {
   .objs { display: none; }
   .hero__aside { max-width: 560px; }
 }
 
-/* Below 820px the board IS the experience. The floating objects were colliding
-   with the board, its caption and the "on the board now" line, so they are
-   removed rather than shrunk — a small version of a desktop composition reads
-   as clutter, not as design. */
 @media (max-width: 820px) {
   .hero__aside { max-width: none; }
 }
@@ -1671,48 +1442,25 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
   .obj { animation: none !important; transition: none !important; transform: rotate(var(--rot, 0deg)) !important; }
 }
 
-/* ===========================================================================
-   CAMPUS PLAN — SIGNATURE TREATMENT
-   ---------------------------------------------------------------------------
-   The diagram was readable but flat: every block was the same rectangle with
-   the same fill, and the only signal of lost-vs-found was the colour of the
-   count digit. Three changes give it presence without turning it into a
-   dashboard:
-
-     1. Each block carries a very slight tone tint, so the map reads at a
-        glance before any digit is parsed.
-     2. Blocks have an inner light edge and a soft outer shadow, so they sit on
-        the paper rather than being drawn on it.
-     3. The selected block lifts and gains weight; hover previews that lift.
-
-   Geometry is untouched — every rect keeps its exact coordinates.
-   =========================================================================== */
-
 .cplan__svg .blk rect {
-  /* an inner top highlight + a soft cast shadow reads as a physical tile */
+
   filter: drop-shadow(0 2px 3px rgba(43, 38, 34, .10));
   transition: fill .2s ease, stroke .2s ease, filter .2s ease;
 }
 
 .cplan__svg .blk { transition: transform .22s cubic-bezier(.2,.7,.3,1); transform-origin: center; }
 
-/* tone tints — deliberately faint; the digit carries the detail */
 .cplan__svg .blk.tone-lost rect  { fill: color-mix(in srgb, var(--primary) 7%, var(--blk)); }
 .cplan__svg .blk.tone-found rect { fill: color-mix(in srgb, var(--teal) 9%, var(--blk)); }
 .cplan__svg .blk.tone-both rect  { fill: color-mix(in srgb, var(--mustard) 12%, var(--blk)); }
 .cplan__svg .blk.tone-none rect  { fill: transparent; }
 
-/* hover: a preview of selection, never competing with the real one */
 .cplan__svg .blk:hover rect {
   filter: drop-shadow(0 5px 8px rgba(43, 38, 34, .16));
   stroke: var(--ink);
 }
 .cplan__svg .blk:hover { transform: translateY(-2px); }
 
-/* selected: the strongest state on the page.
-   The fill is restated here because the tone tints above are equally specific
-   and come later in the file — without this the selected block kept its faint
-   tint and its light-on-light text became unreadable. */
 .cplan__svg .blk.on rect,
 .cplan__svg .blk.tone-lost.on rect,
 .cplan__svg .blk.tone-found.on rect,
@@ -1724,7 +1472,6 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
 .cplan__svg .blk.on { transform: translateY(-3px); }
 .cplan__svg .blk.on .ct { fill: var(--primary-ink); }
 
-/* keyboard focus must be as visible as selection */
 .cplan__svg .blk:focus-visible rect {
   stroke: var(--ink);
   stroke-width: 3;
@@ -1738,7 +1485,6 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
   .cplan__svg .blk.on { transform: none !important; }
 }
 
-/* ---------- the selected-place panel ---------- */
 .cplan__panel .cp-item {
   transition: transform .18s cubic-bezier(.2,.7,.3,1), box-shadow .18s ease;
 }
@@ -1750,19 +1496,6 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
   .cplan__panel .cp-item:hover { transform: none; }
 }
 
-/* ===========================================================================
-   ITEM CARDS — EDITORIAL TREATMENT
-   ---------------------------------------------------------------------------
-   The cards already carried the taped-note idea: a slight rotation, a strip of
-   tape, a hard shadow. What they lacked was photographic discipline — the media
-   box was a fixed 120px regardless of the image inside it, so a portrait photo
-   and a landscape photo produced different visual weights and the grid lost its
-   rhythm.
-
-   The media box now holds a fixed aspect ratio, so every card in a row lines up
-   exactly and nothing shifts as images load.
-   =========================================================================== */
-
 .card__media {
   height: auto;
   aspect-ratio: 4 / 3;
@@ -1770,14 +1503,13 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
 }
 
 .card__media img {
-  /* slow, small scale on hover — a crop change, not a zoom effect */
+
   transition: transform .5s cubic-bezier(.2,.7,.3,1);
   will-change: transform;
 }
 .card:hover .card__media img,
 .card:focus-visible .card__media img { transform: scale(1.04); }
 
-/* the empty state should look drawn, not broken */
 .card__media--empty {
   background:
     repeating-linear-gradient(45deg,
@@ -1792,7 +1524,6 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
   letter-spacing: .04em;
 }
 
-/* metadata reads as data, not prose */
 .card__meta {
   font-family: var(--mono);
   font-size: var(--t-xs);
@@ -1806,8 +1537,6 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
   margin-top: auto;
 }
 
-/* Lost and Found must not rely on colour alone. Each tag carries a leading
-   marker glyph, so the distinction survives greyscale and colour blindness. */
 .tag--lost::before,
 .tag--found::before {
   content: "";
@@ -1820,7 +1549,6 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
 .tag--lost::before  { background: currentColor; }
 .tag--found::before { background: transparent; border: 1.5px solid currentColor; }
 
-/* a gentle lift that matches the taped-note idea rather than a SaaS float */
 .card:hover,
 .card:focus-visible {
   box-shadow: 0 10px 18px rgba(43, 38, 34, .16);
@@ -1837,13 +1565,6 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
   .card__media { aspect-ratio: 16 / 10; }
 }
 
-/* ===========================================================================
-   ACTIVE FILTER CHIPS
-   ---------------------------------------------------------------------------
-   The result bar said how many results there were but never why. These chips
-   name each filter that is actually narrowing the board, and each one removes
-   itself. The row is hidden entirely when nothing is applied.
-   =========================================================================== */
 .active-filters {
   display: flex;
   flex-wrap: wrap;
@@ -1883,7 +1604,6 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
 }
 .chip:hover .chip__x { color: var(--primary); }
 
-/* ---- search field: make the focus state unmistakable ---- */
 #search { transition: border-color .16s ease, box-shadow .16s ease; }
 #search:focus-visible {
   outline: none;
@@ -1891,7 +1611,6 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent);
 }
 
-/* ---- detail modal: give the title real presence ---- */
 #modal-item-title {
   font-family: var(--serif);
   font-size: var(--t-xl);
@@ -1910,7 +1629,7 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
 #modal-item .detail-list dd { margin: 2px 0 12px; font-size: var(--t-base); }
 
 @media (max-width: 560px) {
-  .chip { min-height: 44px; }   /* touch target on small screens */
+  .chip { min-height: 44px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1918,11 +1637,6 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
   .chip:hover { transform: none !important; }
 }
 
-/* ===========================================================================
-   STAGE 6D FINAL — DETAIL MODAL, FORM SECTIONS, CONTROL STATES
-   =========================================================================== */
-
-/* ---- detail modal ---- */
 .modal__actions {
   display: flex;
   gap: .75rem;
@@ -1931,7 +1645,6 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
 }
 .modal__note { margin-top: 1rem; }
 
-/* the photo gets a fixed proportion so the dialog does not jump between items */
 #modal-item-body .detail-media {
   aspect-ratio: 16 / 10;
   overflow: hidden;
@@ -1944,8 +1657,6 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
   width: 100%; height: 100%; object-fit: cover; display: block;
 }
 
-/* status is the field that decides what the reader can do next, so it is a
-   badge, not another line in the definition list */
 .detail-status {
   display: flex;
   align-items: center;
@@ -1981,7 +1692,6 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
 .status-pill--returned { border-color: var(--ink);     color: var(--ink); background: var(--sunken); }
 .status-pill--hidden   { border-color: var(--ink-3);   color: var(--ink-3); }
 
-/* ---- report form sections ---- */
 .form-section {
   border: 0;
   border-top: 1px solid var(--line-soft);
@@ -2000,11 +1710,8 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
 }
 .form-section .field + .field { margin-top: 12px; }
 
-/* required marker — announced by the field's own required attribute, so the
-   asterisk is decorative and hidden from assistive tech */
 .req { color: var(--primary); font-weight: 700; margin-left: 2px; }
 
-/* ---- control states: selects and inputs ---- */
 .input, .select, .textarea {
   transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
 }
@@ -2033,7 +1740,6 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
   .input, .select, .textarea { transition: none !important; }
 }
 
-/* ---- upload: filename and remove ---- */
 .upload-file {
   margin: 8px 0 0;
   font-family: var(--mono);
@@ -2050,21 +1756,12 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
   .upload-remove { min-height: 44px; width: 100%; justify-content: center; }
 }
 
-/* Between 641px and 980px the full header is shown (the disclosure menu only
-   takes over at 640), but there is not enough room for brand, nav and five
-   actions on one line — the actions overflowed the viewport by 125px at 980.
-   Letting both rows wrap is the smallest fix that keeps every control visible. */
 @media (max-width: 1100px) {
   .site-header__inner { flex-wrap: wrap; row-gap: 8px; }
   .site-header__inner .nav { flex-wrap: wrap; row-gap: 4px; }
   .header-actions { flex-wrap: wrap; row-gap: 6px; }
 }
 
-/* The password reveal was 34px tall at every width — under the 44px target even
-   for a mouse, and the earlier touch-target pass only covered widths below
-   820px. Controls are now 44px at all widths; only inline text links keep their
-   natural height on desktop, where WCAG 2.5.8's 24px floor applies rather than
-   2.5.5's 44px. */
 .password-field__toggle {
   width: 44px;
   height: 44px;
@@ -2072,16 +1769,10 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
   min-height: 44px;
 }
 @media (min-width: 821px) {
-  /* desktop inline links: comfortably above the 24px AA floor */
+
   main a:not(.btn):not(.card):not(.chip) { min-height: 24px; display: inline-block; }
 }
 
-/* ---------------------------------------------------------------------------
-   Back to top
-   The pill stretches to its container, so the label was hugging the left edge.
-   An id selector is used because a later `.btn` rule was overriding the base
-   `justify-content`. Centring the label is the intent at every width.
-   --------------------------------------------------------------------------- */
 #back-to-top {
   display: inline-flex;
   align-items: center;
@@ -2093,11 +1784,6 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
   #back-to-top { width: auto; min-width: 168px; }
 }
 
-/* ---------------------------------------------------------------------------
-   Card message button and the conversation panel.
-   The card is a div with role="button", so this real button inside it is valid
-   markup and gets its own focus ring.
-   --------------------------------------------------------------------------- */
 .card__msg {
   margin-top: 10px; min-height: 40px; width: 100%;
   font: inherit; font-size: var(--t-sm); font-weight: 700;
@@ -2129,9 +1815,6 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
   .bubble { max-width: 92%; }
 }
 
-/* ---------------------------------------------------------------------------
-   Conversations page: a list of people on the left, the exchange on the right.
-   --------------------------------------------------------------------------- */
 .cv { display:grid; grid-template-columns:280px 1fr; gap:18px; align-items:start; }
 .cv__list { background:var(--surface); border:2px solid var(--line); border-radius:var(--radius); overflow:hidden; }
 .cv__listhead { font-family:var(--mono); font-size:var(--t-xs); letter-spacing:.14em; text-transform:uppercase;
@@ -2153,14 +1836,10 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
   .cv__panel { order:1; }
 }
 
-/* The conversation list shows the listing title, who wrote, and the count. */
 .cv__person { flex-wrap:wrap; row-gap:2px; }
 .cv__person .cv__name { flex:1 1 auto; }
 .cv__sub { flex:0 0 100%; font-size:11.5px; color:var(--ink-3); }
 
-/* ---------------------------------------------------------------------------
-   Profile page
-   --------------------------------------------------------------------------- */
 .panel { background:var(--surface); border:2px solid var(--line); border-radius:var(--radius);
   padding:16px 18px; box-shadow:var(--shadow); }
 .detail-row { display:flex; justify-content:space-between; gap:16px; padding:10px 0;
@@ -2174,31 +1853,15 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
   text-transform:uppercase; color:var(--ink-3); border-bottom:2px solid var(--line); padding:10px 12px; }
 .table td { padding:12px; border-bottom:1px solid var(--line-soft); }
 
-/* the typing line replaces the note under a conversation header */
 .cv__typing { color:var(--primary); font-style:italic; }
 a.card { text-decoration:none; color:inherit; }
 
-/* profile photo */
 .avatar-row { display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
 .avatar { width:84px; height:84px; border-radius:50%; border:2px solid var(--line);
   background:var(--sunken) center/cover no-repeat; display:grid; place-items:center;
   font-family:var(--serif); font-size:30px; font-weight:700; color:var(--ink-3); flex:0 0 auto; }
 .avatar-row__meta { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 
-/* ===========================================================================
-   THEME TRANSITION
-   ---------------------------------------------------------------------------
-   Three effects run together when the theme is switched:
-
-   1. The incoming palette expands from the toggle as a circle. theme.js drives
-      the clip-path on ::view-transition-new(root); the rules below stop the
-      default crossfade from fighting it.
-   2. The outgoing page fades underneath that circle over 500ms.
-   3. The icon spins and flips, animated in JS so it stays in step.
-
-   Where View Transitions is unavailable the colours still transition, so the
-   change is smooth rather than abrupt.
-   =========================================================================== */
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation: none;
@@ -2215,7 +1878,6 @@ a.card { text-decoration:none; color:inherit; }
   to { opacity: 0; }
 }
 
-/* Fallback path: no View Transitions. Colours ease instead of snapping. */
 html.theme-changing,
 html.theme-changing body,
 html.theme-changing .site-header,
@@ -2238,10 +1900,8 @@ html.theme-changing .btn {
   [data-theme-toggle] [data-theme-icon] { transition: none; }
 }
 
-/* the avatar circle is also a drop target */
 .avatar--over { outline:3px dashed var(--primary); outline-offset:3px; }
 
-/* A native file input, styled but not hidden: it must be pressable directly. */
 .file-input { font:inherit; font-size:var(--t-sm); color:var(--ink-2); max-width:260px; }
 .file-input::file-selector-button {
   font:inherit; font-size:var(--t-sm); font-weight:700; cursor:pointer;
@@ -2252,20 +1912,15 @@ html.theme-changing .btn {
 }
 .file-input::file-selector-button:hover { background:var(--sunken); }
 
-/* the file field must never be covered by anything */
 .file-input { position:relative; z-index:2; pointer-events:auto; }
 
-/* a photo attached to a chat message */
 .bubble__photo { display:block; max-width:260px; width:100%; height:auto;
   border:2px solid var(--line); border-radius:8px; margin-bottom:6px; }
 
-/* read receipt on your own messages */
 .bubble__seen { color:var(--teal); font-weight:700; }
 
-/* online state under the conversation header */
 .cv__online { color:var(--teal); font-weight:700; }
 
-/* read receipts drawn as ticks, no icon font needed */
 .tick { width:13px; height:10px; vertical-align:-1px; color:var(--ink-3); }
 .tick--read { width:18px; color:var(--teal); }
 .bubble__del { display:block; margin-top:4px; font:inherit; font-size:11px;
@@ -2273,12 +1928,6 @@ html.theme-changing .btn {
   text-decoration:underline; }
 .bubble__del:hover { color:var(--danger); }
 
-/* ---------------------------------------------------------------------------
-   Conversation composer
-   ---------------------------------------------------------------------------
-   The textarea takes the free space; the two buttons keep their natural width
-   and never wrap. Without this "Attach photo" broke onto two lines whenever the
-   composer was narrow. */
 .thread__form { display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap; }
 .thread__form .textarea { flex:1 1 200px; min-width:0; }
 .thread__form .btn { flex:0 0 auto; white-space:nowrap; }
