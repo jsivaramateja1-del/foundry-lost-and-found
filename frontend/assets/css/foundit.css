@@ -2157,3 +2157,19 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
 .cv__person { flex-wrap:wrap; row-gap:2px; }
 .cv__person .cv__name { flex:1 1 auto; }
 .cv__sub { flex:0 0 100%; font-size:11.5px; color:var(--ink-3); }
+
+/* ---------------------------------------------------------------------------
+   Profile page
+   --------------------------------------------------------------------------- */
+.panel { background:var(--surface); border:2px solid var(--line); border-radius:var(--radius);
+  padding:16px 18px; box-shadow:var(--shadow); }
+.detail-row { display:flex; justify-content:space-between; gap:16px; padding:10px 0;
+  border-bottom:1px solid var(--line-soft); font-size:var(--t-base); }
+.detail-row:last-child { border-bottom:0; }
+.detail-row__k { color:var(--ink-3); font-family:var(--mono); font-size:var(--t-xs);
+  letter-spacing:.12em; text-transform:uppercase; }
+.detail-row__v { font-weight:600; text-align:right; overflow-wrap:anywhere; }
+.table { width:100%; border-collapse:collapse; font-size:var(--t-sm); }
+.table th { text-align:left; font-family:var(--mono); font-size:var(--t-xs); letter-spacing:.12em;
+  text-transform:uppercase; color:var(--ink-3); border-bottom:2px solid var(--line); padding:10px 12px; }
+.table td { padding:12px; border-bottom:1px solid var(--line-soft); }
