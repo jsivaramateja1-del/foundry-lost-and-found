@@ -515,6 +515,20 @@ router.patch('/me/avatar', protect, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * Presence heartbeat.
+ *
+ * Called once a minute by any signed-in page, so someone can appear Online even
+ * when they do not have a conversation open. One UPDATE of one column; no row is
+ * created and nothing is logged.
+ */
+router.post('/heartbeat', protect, async (req, res, next) => {
+  try {
+    await one('update users set last_seen_at = now() where id = $1', [req.user.id]);
+    res.status(204).end();
+  } catch (err) { next(err); }
+});
+
 router.get('/me', protect, async (req, res) => {
   res.status(200).json({ user: publicUser(req.user) });
 });

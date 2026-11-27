@@ -2264,3 +2264,11 @@ html.theme-changing .btn {
 
 /* online state under the conversation header */
 .cv__online { color:var(--teal); font-weight:700; }
+
+/* read receipts drawn as ticks, no icon font needed */
+.tick { width:13px; height:10px; vertical-align:-1px; color:var(--ink-3); }
+.tick--read { width:18px; color:var(--teal); }
+.bubble__del { display:block; margin-top:4px; font:inherit; font-size:11px;
+  color:var(--ink-3); background:none; border:0; padding:0; cursor:pointer;
+  text-decoration:underline; }
+.bubble__del:hover { color:var(--danger); }

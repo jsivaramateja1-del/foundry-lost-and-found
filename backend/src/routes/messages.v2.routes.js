@@ -56,4 +56,13 @@ router.post('/typing', protect, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/** Delete one of your own messages. */
+router.delete('/:messageId', protect, async (req, res, next) => {
+  try {
+    const gone = await messages.removeOwn(req.params.messageId, req.user.id);
+    if (!gone) return res.status(404).json({ message: 'That message is not yours to delete' });
+    res.status(204).end();
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

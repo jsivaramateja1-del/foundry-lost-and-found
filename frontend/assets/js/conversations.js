@@ -52,15 +52,34 @@
     return "Last seen " + (days === 1 ? "yesterday" : days + "d ago");
   }
 
+  /* WhatsApp-style ticks drawn inline, because the design uses no icon font.
+     One grey tick means sent; two teal ticks mean read. */
+  function tick(readAt) {
+    var path = '<path d="M1 5.5 L4 8.5 L11 1.5"></path>';
+    if (!readAt) {
+      return '<svg class="tick" viewBox="0 0 13 10" aria-label="Sent" role="img">' +
+        '<g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" ' +
+        'stroke-linejoin="round">' + path + '</g></svg>';
+    }
+    return '<svg class="tick tick--read" viewBox="0 0 18 10" aria-label="Seen" role="img">' +
+      '<g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" ' +
+      'stroke-linejoin="round">' + path +
+      '<path d="M6 5.5 L9 8.5 L16 1.5"></path></g></svg>';
+  }
+
   function bubble(m) {
     var mine = m.sender_id === state.me;
     var photo = m.image_url
       ? '<img class="bubble__photo" src="' + ui.esc(m.image_url) + '" alt="Photo attached to this message">'
       : '';
     var text = m.body ? '<p class="bubble__body">' + ui.esc(m.body) + '</p>' : '';
-    return '<div class="bubble ' + (mine ? 'bubble--mine' : '') + '">' + photo + text +
+    var del = mine
+      ? '<button type="button" class="bubble__del" data-del="' + ui.esc(m.id) + '" ' +
+        'aria-label="Delete this message">Delete</button>'
+      : '';
+    return '<div class="bubble ' + (mine ? 'bubble--mine' : '') + '">' + photo + text + del +
       '<p class="bubble__meta">' + ui.esc(m.sender_name) + ' · ' + ui.date(m.created_at) +
-        (mine ? (m.read_at ? ' · <span class="bubble__seen">Seen</span>' : ' · Sent') : '') +
+        (mine ? ' ' + tick(m.read_at) : '') +
       '</p>' +
     '</div>';
   }
@@ -150,6 +169,18 @@
       var list = state.withId ? data.messages : [];
       thread.innerHTML = list.length ? list.map(bubble).join('')
         : '<p class="thread__empty">No messages yet. Say hello.</p>';
+      thread.querySelectorAll('[data-del]').forEach(function (b) {
+        b.addEventListener('click', async function () {
+          if (!window.confirm('Delete this message?')) return;
+          try {
+            await api('/items/' + encodeURIComponent(itemId) + '/messages/' +
+              encodeURIComponent(b.dataset.del), { method: 'DELETE', auth: true });
+            await loadThread();
+          } catch (err) {
+            pageError((err && err.message) || 'That message could not be deleted.');
+          }
+        });
+      });
       thread.scrollTop = thread.scrollHeight;
       document.getElementById('cv-claim-wrap').hidden = data.isReporter;
       pageError('');

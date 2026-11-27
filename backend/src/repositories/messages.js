@@ -232,3 +232,21 @@ async function presenceOf(userId) {
 
 module.exports.touchPresence = touchPresence;
 module.exports.presenceOf = presenceOf;
+
+/**
+ * Remove one of your own messages.
+ *
+ * Scoped to the sender: the WHERE clause carries sender_id, so nobody can
+ * delete another person's message even by guessing its id. Returns false when
+ * nothing matched, which the route turns into a 404 rather than leaking whether
+ * the id exists.
+ */
+async function removeOwn(messageId, userId) {
+  const row = await one(
+    'delete from messages where id = $1 and sender_id = $2 returning id',
+    [messageId, userId]
+  );
+  return !!row;
+}
+
+module.exports.removeOwn = removeOwn;

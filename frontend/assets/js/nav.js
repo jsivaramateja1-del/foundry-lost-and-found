@@ -27,8 +27,22 @@
     if (who) who.textContent = (inAuth && user) ? user.name : '';
   }
 
+  /* Tell the server we are around, once a minute, so we can show as Online on
+     pages other than a conversation. One UPDATE of one column per minute. */
+  function startHeartbeat() {
+    var A = auth();
+    if (!A || !A.isLoggedIn) return;
+    var ping = function () {
+      if (document.hidden) return;
+      api('/auth/heartbeat', { method: 'POST', auth: true }).catch(function () {});
+    };
+    ping();
+    setInterval(ping, 60000);
+  }
+
   function init() {
     paint();
+    startHeartbeat();
 
     var logout = document.getElementById('header-logout');
     if (logout) {
