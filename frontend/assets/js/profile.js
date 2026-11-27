@@ -56,48 +56,70 @@
     if (!f) return;
     var note = document.getElementById("avatar-note");
 
-    /* URL.createObjectURL instead of FileReader.
-       FileReader pulls the whole file into a data URL in memory and reports
-       "could not be read" when that fails - which is what happened with a real
-       camera photo. An object URL is a reference, not a copy, so the browser
-       decodes the image straight from disk. It is also revoked afterwards so
-       the memory is released. */
-    var url = URL.createObjectURL(f);
-    var img = new Image();
+    /* Same path as shrinkImage in app.js, which already uploads item photos
+       successfully in this browser: FileReader -> data URL -> canvas.
+       A blob: URL was tried first and failed with net::ERR_FAILED and a 0 KB
+       transfer, even with blob: allowed in img-src. data: URLs work. */
+    if (!/^image\/(png|jpeg|webp)$/.test(f.type || "")) {
+      note.textContent = "Choose a PNG, JPEG or WebP image. This file is " +
+        (f.type || "an unknown type") + ".";
+      return;
+    }
+    if (!f.size) {
+      note.textContent = "That file is empty (0 bytes).";
+      return;
+    }
 
-    img.onload = function () {
-      try {
-        var scale = Math.min(1, 320 / Math.max(img.width, img.height));
-        var c = document.createElement("canvas");
-        c.width = Math.round(img.width * scale) || 1;
-        c.height = Math.round(img.height * scale) || 1;
-        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-        var data = c.toDataURL("image/jpeg", 0.85);
-        note.textContent = "Uploading… (" + Math.round(data.length / 1024) + " KB)";
-        api("/auth/me/avatar", { method: "PATCH", auth: true, body: { avatar: data } })
-          .then(function (r) {
-            var av = document.getElementById("avatar-preview");
-            av.style.backgroundImage = "url(" + r.avatarUrl + ")";
-            av.textContent = "";
-            note.textContent = "Photo updated.";
-          })
-          .catch(function (e) { note.textContent = (e && e.message) || "That photo could not be saved."; });
-      } catch (e) {
-        note.textContent = "That image could not be processed: " + (e && e.message);
-      } finally {
-        URL.revokeObjectURL(url);
-      }
+    note.textContent = "Reading the file…";
+    var reader = new FileReader();
+
+    reader.onerror = function () {
+      note.textContent = "That file could not be read from disk.";
     };
-    img.onerror = function () {
-      URL.revokeObjectURL(url);
-      /* This message used to claim the file was not an image. It was wrong: a
-         Content-Security-Policy block also lands here, and that hid the real
-         cause for hours. Name both possibilities. */
-      note.textContent = "That image could not be displayed. Either the file is " +
-        "not an image this browser can open, or the page's security policy " +
-        "blocked it - check the Console for a Content-Security-Policy message.";
+
+    reader.onload = function () {
+      var img = new Image();
+
+      img.onerror = function () {
+        note.textContent = "That image could not be decoded by this browser.";
+      };
+
+      img.onload = function () {
+        try {
+          var scale = Math.min(1, 320 / Math.max(img.width, img.height));
+          var c = document.createElement("canvas");
+          c.width = Math.max(1, Math.round(img.width * scale));
+          c.height = Math.max(1, Math.round(img.height * scale));
+          var ctx = c.getContext("2d");
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, c.width, c.height);
+          ctx.drawImage(img, 0, 0, c.width, c.height);
+
+          var data = c.toDataURL("image/jpeg", 0.85);
+          var bytes = Math.floor(((data.split(",")[1] || "").length * 3) / 4);
+          if (bytes > 400 * 1024) {
+            data = c.toDataURL("image/jpeg", 0.7);
+            bytes = Math.floor(((data.split(",")[1] || "").length * 3) / 4);
+          }
+          note.textContent = "Uploading… (" + Math.round(bytes / 1024) + " KB)";
+
+          api("/auth/me/avatar", { method: "PATCH", auth: true, body: { avatar: data } })
+            .then(function (r) {
+              var av = document.getElementById("avatar-preview");
+              av.style.backgroundImage = "url(" + r.avatarUrl + ")";
+              av.textContent = "";
+              note.textContent = "Photo updated.";
+            })
+            .catch(function (e) { note.textContent = (e && e.message) || "That photo could not be saved."; });
+        } catch (e) {
+          note.textContent = "That image could not be processed: " + (e && e.message);
+        }
+      };
+
+      img.src = reader.result;
     };
-    img.src = url;
+
+    reader.readAsDataURL(f);
   }
 
   if (fileInput) {
