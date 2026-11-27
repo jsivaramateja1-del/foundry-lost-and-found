@@ -32,10 +32,10 @@
     errorBox.dataset.show = msg ? 'true' : 'false';
   }
 
-  if (typeof Auth === 'undefined' || !Auth.isLoggedIn) {
-    Auth.requireLogin('conversations.html');
-    return;
-  }
+  /* Split on purpose: if Auth itself is missing, calling requireLogin on it
+     would throw a ReferenceError instead of sending the visitor to log in. */
+  if (typeof Auth === "undefined") { window.location.replace("auth.html"); return; }
+  if (!Auth.isLoggedIn) { Auth.requireLogin("conversations.html"); return; }
   state.me = Auth.user && Auth.user.id;
 
   function bubble(m) {

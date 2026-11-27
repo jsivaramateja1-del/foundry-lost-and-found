@@ -62,7 +62,7 @@
       '<h3 class="card__title">' + esc(item.title) + '</h3>' +
       '<p class="card__desc">' + esc(item.description) + '</p>' +
       '<div class="card__meta"><span>' + esc(place) + '</span><span>' + when(item.date) + '</span></div>' +
-    '</article>';
+    '</a>';
   }
 
   function load() {

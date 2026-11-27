@@ -98,8 +98,11 @@
 
   function init() {
     document.querySelectorAll("[data-theme-toggle]").forEach(function (b) {
-      if (b.dataset.themeWired === "1") return;
+      /* api.js's initTheme may have bound this button already, under its own
+         flag. Two handlers flip the attribute twice and cancel each other out. */
+      if (b.dataset.themeWired === "1" || b.dataset.themeBound === "1") return;
       b.dataset.themeWired = "1";
+      b.dataset.themeBound = "1";
       b.addEventListener("click", toggle);
     });
     document.querySelectorAll("[data-theme-icon]").forEach(paintIcon);

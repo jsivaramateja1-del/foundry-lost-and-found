@@ -20,10 +20,10 @@
     box.dataset.show = msg ? "true" : "false";
   }
 
-  if (typeof Auth === "undefined" || !Auth.isLoggedIn) {
-    Auth.requireLogin("profile.html");
-    return;
-  }
+  /* Split on purpose: if Auth itself is missing, calling requireLogin on it
+     would throw a ReferenceError instead of sending the visitor to log in. */
+  if (typeof Auth === "undefined") { window.location.replace("auth.html"); return; }
+  if (!Auth.isLoggedIn) { Auth.requireLogin("profile.html"); return; }
 
   function row(label, value) {
     return '<div class="detail-row"><span class="detail-row__k">' + esc(label) +
@@ -50,7 +50,6 @@
 
   /* Shrink before upload, the same way item photos are shrunk. */
   var fileInput = document.getElementById("avatar-file");
-  var pickBtn = null;
   var preview = document.getElementById("avatar-preview");
 
   function upload(f) {
@@ -84,9 +83,6 @@
       reader.readAsDataURL(f);
   }
 
-  if (pickBtn && fileInput) {
-    pickBtn.addEventListener("click", function () { fileInput.click(); });
-  }
   if (fileInput) {
     fileInput.addEventListener("change", function () {
       upload(fileInput.files && fileInput.files[0]);
