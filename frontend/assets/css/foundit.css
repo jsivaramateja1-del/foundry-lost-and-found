@@ -2272,3 +2272,13 @@ html.theme-changing .btn {
   color:var(--ink-3); background:none; border:0; padding:0; cursor:pointer;
   text-decoration:underline; }
 .bubble__del:hover { color:var(--danger); }
+
+/* ---------------------------------------------------------------------------
+   Conversation composer
+   ---------------------------------------------------------------------------
+   The textarea takes the free space; the two buttons keep their natural width
+   and never wrap. Without this "Attach photo" broke onto two lines whenever the
+   composer was narrow. */
+.thread__form { display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap; }
+.thread__form .textarea { flex:1 1 200px; min-width:0; }
+.thread__form .btn { flex:0 0 auto; white-space:nowrap; }
