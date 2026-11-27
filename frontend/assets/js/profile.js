@@ -51,13 +51,10 @@
   /* Shrink before upload, the same way item photos are shrunk. */
   var fileInput = document.getElementById("avatar-file");
   var pickBtn = document.getElementById("avatar-pick");
-  if (pickBtn && fileInput) {
-    pickBtn.addEventListener("click", function () { fileInput.click(); });
-  }
-  if (fileInput) {
-    fileInput.addEventListener("change", function () {
-      var f = fileInput.files && fileInput.files[0];
-      if (!f) return;
+  var preview = document.getElementById("avatar-preview");
+
+  function upload(f) {
+    if (!f) return;
       var note = document.getElementById("avatar-note");
       note.textContent = "Reading the file…";
       var reader = new FileReader();
@@ -85,8 +82,35 @@
       };
       reader.onerror = function () { note.textContent = "That file could not be read."; };
       reader.readAsDataURL(f);
-    });
+  }
 
+  if (pickBtn && fileInput) {
+    pickBtn.addEventListener("click", function () { fileInput.click(); });
+  }
+  if (fileInput) {
+    fileInput.addEventListener("change", function () {
+      upload(fileInput.files && fileInput.files[0]);
+    });
+  }
+
+  /* Two more ways in, so a picker that will not open cannot block this:
+     drop the file on the circle, or click the circle itself. */
+  if (preview) {
+    preview.style.cursor = "pointer";
+    preview.addEventListener("click", function () { if (fileInput) fileInput.click(); });
+    ["dragenter", "dragover"].forEach(function (t) {
+      preview.addEventListener(t, function (e) { e.preventDefault(); preview.classList.add("avatar--over"); });
+    });
+    ["dragleave", "drop"].forEach(function (t) {
+      preview.addEventListener(t, function (e) { e.preventDefault(); preview.classList.remove("avatar--over"); });
+    });
+    preview.addEventListener("drop", function (e) {
+      var dt = e.dataTransfer;
+      if (dt && dt.files && dt.files[0]) upload(dt.files[0]);
+    });
+  }
+
+  if (document.getElementById("avatar-clear")) {
     document.getElementById("avatar-clear").addEventListener("click", function () {
       api("/auth/me/avatar", { method: "PATCH", auth: true, body: { avatar: "" } })
         .then(function () {

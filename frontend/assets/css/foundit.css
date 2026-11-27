@@ -2237,3 +2237,6 @@ html.theme-changing .btn {
   ::view-transition-new(root) { animation: none !important; }
   [data-theme-toggle] [data-theme-icon] { transition: none; }
 }
+
+/* the avatar circle is also a drop target */
+.avatar--over { outline:3px dashed var(--primary); outline-offset:3px; }
