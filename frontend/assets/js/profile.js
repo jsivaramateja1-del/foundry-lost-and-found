@@ -91,19 +91,24 @@
 
   /* Two more ways in, so a picker that will not open cannot block this:
      drop the file on the circle, or click the circle itself. */
-  if (preview) {
-    preview.style.cursor = "pointer";
-    preview.addEventListener("click", function () { if (fileInput) fileInput.click(); });
+  /* The whole photo panel accepts a drop, not just the circle - a small target
+     is easy to miss, and the file dialog is out of our hands. */
+  var dropZone = document.getElementById("avatar-drop") || preview;
+  if (dropZone) {
     ["dragenter", "dragover"].forEach(function (t) {
-      preview.addEventListener(t, function (e) { e.preventDefault(); preview.classList.add("avatar--over"); });
+      dropZone.addEventListener(t, function (e) { e.preventDefault(); dropZone.classList.add("avatar--over"); });
     });
     ["dragleave", "drop"].forEach(function (t) {
-      preview.addEventListener(t, function (e) { e.preventDefault(); preview.classList.remove("avatar--over"); });
+      dropZone.addEventListener(t, function (e) { e.preventDefault(); dropZone.classList.remove("avatar--over"); });
     });
-    preview.addEventListener("drop", function (e) {
+    dropZone.addEventListener("drop", function (e) {
       var dt = e.dataTransfer;
       if (dt && dt.files && dt.files[0]) upload(dt.files[0]);
     });
+  }
+  if (preview) {
+    preview.style.cursor = "pointer";
+    preview.addEventListener("click", function () { if (fileInput) fileInput.click(); });
   }
 
   if (document.getElementById("avatar-clear")) {

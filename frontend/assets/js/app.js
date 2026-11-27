@@ -885,7 +885,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   paintAuthState();
-  initMobileNav();
   initScrollReveal();
   initNotifications();
   initTheme();

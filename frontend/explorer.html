@@ -15,14 +15,8 @@
   old links keep working, and it forwards the query string so deep links still
   land on the right place.
 -->
-<link rel="stylesheet" href="assets/css/foundit.css?v=20261127j" />
-<script>
-  (function () {
-    var q = window.location.search || '';
-    // index.html reads ?location= itself, so pass it straight through.
-    window.location.replace('index.html' + q + (q ? '&' : '?') + 'from=explorer#cplan');
-  })();
-</script>
+<link rel="stylesheet" href="assets/css/foundit.css?v=20261127k" />
+<script src="assets/js/explorer-redirect.js?v=20261127k"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -34,6 +28,6 @@
       <p>JavaScript is off, so the automatic redirect did not run. Use the link above.</p>
     </noscript>
   </main>
-<script src="assets/js/theme.js?v=20261127j"></script>
+<script src="assets/js/theme.js?v=20261127k"></script>
 </body>
 </html>
