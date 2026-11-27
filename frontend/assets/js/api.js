@@ -191,14 +191,10 @@ function initTheme() {
   // operating system setting entirely.
   // Bind the toggle. Nothing did this before, so the button was inert on every
   // page and the choice was never stored.
-  document.querySelectorAll('[data-theme-toggle]').forEach(function (btn) {
-    if (btn.dataset.themeBound === 'true') return;
-    btn.dataset.themeBound = 'true';
-    btn.addEventListener('click', function () {
-      var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-      try { localStorage.setItem('foundry.theme', next); } catch (e) { /* private mode */ }
-      applyTheme(next);
-    });
+  /* The toggle is bound in theme.js, which animates the change. Binding it here
+     as well made one click toggle twice and appear to do nothing. */
+  document.querySelectorAll('[data-theme-icon]').forEach(function (el) {
+    el.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '\u2600' : '\u263e';
   });
 
   var decided = document.documentElement.getAttribute('data-theme');

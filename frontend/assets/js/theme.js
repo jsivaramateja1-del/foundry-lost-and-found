@@ -100,7 +100,7 @@
     document.querySelectorAll("[data-theme-toggle]").forEach(function (b) {
       /* api.js's initTheme may have bound this button already, under its own
          flag. Two handlers flip the attribute twice and cancel each other out. */
-      if (b.dataset.themeWired === "1" || b.dataset.themeBound === "1") return;
+      if (b.dataset.themeWired || b.dataset.themeBound) return;
       b.dataset.themeWired = "1";
       b.dataset.themeBound = "1";
       b.addEventListener("click", toggle);
