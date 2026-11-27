@@ -105,6 +105,18 @@ app.get('/api/health/ready', async (req, res) => {
   });
 });
 
+/* API responses are live data and must never be cached.
+   Express sets an ETag on every res.json by default, so the browser revalidates
+   and the server answers 304 Not Modified. That made the board, the stats and
+   the conversations keep showing whatever was cached first - including an empty
+   list - and no amount of reloading fetched fresh data. */
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  next();
+});
+
 app.use('/api/auth', require('./routes/auth.v2.routes'));
 app.use('/api/items', require('./routes/items.v2.routes'));
 app.use('/api/claims', require('./routes/claims.v2.routes'));
