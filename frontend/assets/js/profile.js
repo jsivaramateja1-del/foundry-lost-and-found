@@ -32,7 +32,12 @@
 
   api("/auth/me", { auth: true }).then(function (d) {
     var u = (d && d.user) || {};
-    document.getElementById("profile-card").innerHTML =
+    var av = document.getElementById("avatar-preview");
+    if (av) {
+      if (u.avatarUrl) { av.style.backgroundImage = 'url(' + u.avatarUrl + ')'; av.textContent = ''; }
+      else { av.textContent = (u.name || "?").trim().charAt(0).toUpperCase(); }
+    }
+    document.getElementById("profile-fields").innerHTML =
       row("Name", u.name) +
       row("Email", u.email) +
       row("Role", u.role) +
@@ -42,6 +47,50 @@
       row("Items returned", u.returns == null ? "0" : u.returns) +
       row("On the leaderboard", u.leaderboardOptOut ? "No, you opted out" : "Yes");
   }).catch(function (e) { fail((e && e.message) || "Could not load your profile"); });
+
+  /* Shrink before upload, the same way item photos are shrunk. */
+  var fileInput = document.getElementById("avatar-file");
+  if (fileInput) {
+    fileInput.addEventListener("change", function () {
+      var f = fileInput.files && fileInput.files[0];
+      if (!f) return;
+      var note = document.getElementById("avatar-note");
+      note.textContent = "Uploading…";
+      var reader = new FileReader();
+      reader.onload = function () {
+        var img = new Image();
+        img.onload = function () {
+          var scale = Math.min(1, 320 / Math.max(img.width, img.height));
+          var c = document.createElement("canvas");
+          c.width = Math.round(img.width * scale);
+          c.height = Math.round(img.height * scale);
+          c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+          var data = c.toDataURL("image/jpeg", 0.85);
+          api("/auth/me/avatar", { method: "PATCH", auth: true, body: { avatar: data } })
+            .then(function (r) {
+              var av = document.getElementById("avatar-preview");
+              av.style.backgroundImage = "url(" + r.avatarUrl + ")";
+              av.textContent = "";
+              note.textContent = "Photo updated.";
+            })
+            .catch(function (e) { note.textContent = (e && e.message) || "That photo could not be saved."; });
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(f);
+    });
+
+    document.getElementById("avatar-clear").addEventListener("click", function () {
+      api("/auth/me/avatar", { method: "PATCH", auth: true, body: { avatar: "" } })
+        .then(function () {
+          var av = document.getElementById("avatar-preview");
+          av.style.backgroundImage = "";
+          av.textContent = "?";
+          document.getElementById("avatar-note").textContent = "Photo removed.";
+        })
+        .catch(function () { document.getElementById("avatar-note").textContent = "Could not remove the photo."; });
+    });
+  }
 
   api("/dashboard/me", { auth: true }).then(function (d) {
     var items = (d && (d.items || d.listings)) || [];

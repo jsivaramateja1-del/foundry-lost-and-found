@@ -52,7 +52,8 @@
         '<rect x="3" y="4" width="18" height="16" rx="2"></rect>' +
         '<circle cx="8.5" cy="9.5" r="1.5"></circle>' +
         '<path d="M21 16l-5-5-4 4-2-2-5 5"></path></svg><span>No photo</span></div>';
-    return '<article class="card" style="cursor:default">' +
+    return '<a class="card" href="index.html?item=' + encodeURIComponent(item.id) +
+      '" aria-label="Open ' + esc(item.title) + '">' +
       media +
       '<div class="card__top">' +
         '<span class="tag tag--' + esc(item.type) + '">' + (item.type === 'lost' ? 'Lost' : 'Found') + '</span>' +

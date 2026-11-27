@@ -10,6 +10,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+const { one } = require('../config/pg');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 
@@ -486,6 +487,30 @@ router.post('/logout', protect, async (req, res, next) => {
 });
 
 /** GET /api/auth/me */
+/**
+ * Save or clear the profile photo. The value is a data URL produced by the
+ * browser after it has already shrunk the image, so the server only has to
+ * check the type and the ceiling.
+ */
+router.patch('/me/avatar', protect, async (req, res, next) => {
+  try {
+    const raw = typeof req.body.avatar === 'string' ? req.body.avatar : '';
+    if (raw === '') {
+      await one('update users set avatar_url = null where id = $1', [req.user.id]);
+      return res.status(200).json({ avatarUrl: null });
+    }
+    if (!/^data:image\/(png|jpeg|webp);base64,/.test(raw)) {
+      return res.status(400).json({ message: 'Choose a PNG, JPEG or WebP image' });
+    }
+    if (raw.length > 400 * 1024) {
+      return res.status(400).json({ message: 'That photo is too large (max 400 KB)' });
+    }
+    const row = await one('update users set avatar_url = $2 where id = $1 returning avatar_url', [req.user.id, raw]);
+    if (!row) return res.status(404).json({ message: 'Your account could not be found' });
+    res.status(200).json({ avatarUrl: row.avatar_url });
+  } catch (err) { next(err); }
+});
+
 router.get('/me', protect, async (req, res) => {
   res.status(200).json({ user: publicUser(req.user) });
 });

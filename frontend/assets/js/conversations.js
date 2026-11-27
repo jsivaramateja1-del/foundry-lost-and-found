@@ -93,10 +93,19 @@
       empty.hidden = true;
       form.hidden = false;
       listHead.textContent = 'On this listing';
-      title.textContent = data.isReporter ? 'People who wrote to you' : 'Message the person who posted it';
-      sub.textContent = data.isReporter
-        ? 'Only you can see these. Reply to anyone who has written about this item.'
-        : 'Only the person who posted this item can see what you write.';
+      /* The header names the person you are talking to, the way a chat app
+         does, rather than describing the page. */
+      var peer = null;
+      if (data.isReporter) {
+        var found = (data.conversations || []).filter(function (c) { return c.otherId === state.withId; })[0];
+        peer = found ? found.otherName : null;
+        title.textContent = peer || 'People who wrote to you';
+      } else {
+        peer = (data.conversations && data.conversations[0] && data.conversations[0].otherName) || null;
+        title.textContent = peer || 'The person who posted this item';
+      }
+      sub.textContent = data.otherTyping ? 'typing…' : 'Only the two of you can see this.';
+      sub.className = data.otherTyping ? 'note cv__typing' : 'note';
 
       people.innerHTML = data.isReporter && data.conversations.length
         ? data.conversations.map(function (c) {
@@ -123,6 +132,16 @@
       pageError((err && err.message) || 'Could not open this conversation.');
     }
   }
+
+  /* Tell the other side we are typing, at most once every two seconds. */
+  var lastPing = 0;
+  body.addEventListener('input', function () {
+    var now = Date.now();
+    if (now - lastPing < 2000 || !itemId) return;
+    lastPing = now;
+    api('/items/' + encodeURIComponent(itemId) + '/messages/typing', { method: 'POST', auth: true })
+      .catch(function () { /* a missed ping is harmless */ });
+  });
 
   form.addEventListener('submit', async function (e) {
     e.preventDefault();
@@ -162,7 +181,7 @@
 
   if (itemId) {
     loadThread();
-    state.timer = setInterval(function () { if (!document.hidden) loadThread(); }, 6000);
+    state.timer = setInterval(function () { if (!document.hidden) loadThread(); }, 3000);
   } else {
     showList();
   }

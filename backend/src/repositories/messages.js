@@ -183,3 +183,25 @@ async function myConversations(userId) {
 }
 
 module.exports.myConversations = myConversations;
+
+/** Record that this user is typing on this item. Throttled by the caller. */
+async function markTyping(itemId, userId) {
+  await one(
+    `insert into typing (item_id, user_id, updated_at) values ($1,$2,now())
+     on conflict (item_id, user_id) do update set updated_at = now()`,
+    [itemId, userId]
+  );
+}
+
+/** Is anyone other than `userId` typing on this item in the last 5 seconds? */
+async function typingOn(itemId, userId) {
+  const row = await one(
+    `select count(*)::int as n from typing
+      where item_id = $1 and user_id <> $2 and updated_at > now() - interval '5 seconds'`,
+    [itemId, userId]
+  );
+  return !!(row && row.n > 0);
+}
+
+module.exports.markTyping = markTyping;
+module.exports.typingOn = typingOn;

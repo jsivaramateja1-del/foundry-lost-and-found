@@ -269,3 +269,22 @@ CREATE TABLE IF NOT EXISTS messages (
 
 CREATE INDEX IF NOT EXISTS messages_item_idx ON messages (item_id, created_at);
 CREATE INDEX IF NOT EXISTS messages_inbox_idx ON messages (recipient_id, read_at);
+
+-- ---------------------------------------------------------------------------
+-- Typing indicator.
+--
+-- Polling, not websockets: this stack has no socket layer. A row is written
+-- when someone types and refreshed at most once every two seconds; the other
+-- party sees "typing…" while that row is younger than five seconds.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS typing (
+  item_id   uuid NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  user_id   uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (item_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS typing_item_idx ON typing (item_id, updated_at);
+
+-- Profile photo. Stored the same way item photos are (a data URL), so it needs
+-- no extra service. Nullable: most accounts will never set one.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url text;

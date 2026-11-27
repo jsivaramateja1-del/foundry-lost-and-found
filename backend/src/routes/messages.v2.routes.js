@@ -28,7 +28,8 @@ router.get('/', protect, async (req, res, next) => {
       messages: thread,
       isReporter: audience.isReporter,
       reporterId: audience.reporterId,
-      conversations: conversations || []
+      conversations: conversations || [],
+      otherTyping: await messages.typingOn(req.params.id, req.user.id)
     });
   } catch (err) { next(err); }
 });
@@ -39,6 +40,14 @@ router.post('/', protect, async (req, res, next) => {
     const result = await messages.send(req.params.id, req.user.id, body.recipientId, body.body);
     if (!result.ok) return res.status(result.status).json({ message: result.error });
     res.status(201).json({ message: result.message });
+  } catch (err) { next(err); }
+});
+
+/** Pinged while the user types, so the other side can show "typing…". */
+router.post('/typing', protect, async (req, res, next) => {
+  try {
+    await messages.markTyping(req.params.id, req.user.id);
+    res.status(204).end();
   } catch (err) { next(err); }
 });
 

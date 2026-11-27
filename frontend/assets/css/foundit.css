@@ -2173,3 +2173,14 @@ input[type="checkbox"] { width: 24px; height: 24px; min-width: 24px; }
 .table th { text-align:left; font-family:var(--mono); font-size:var(--t-xs); letter-spacing:.12em;
   text-transform:uppercase; color:var(--ink-3); border-bottom:2px solid var(--line); padding:10px 12px; }
 .table td { padding:12px; border-bottom:1px solid var(--line-soft); }
+
+/* the typing line replaces the note under a conversation header */
+.cv__typing { color:var(--primary); font-style:italic; }
+a.card { text-decoration:none; color:inherit; }
+
+/* profile photo */
+.avatar-row { display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+.avatar { width:84px; height:84px; border-radius:50%; border:2px solid var(--line);
+  background:var(--sunken) center/cover no-repeat; display:grid; place-items:center;
+  font-family:var(--serif); font-size:30px; font-weight:700; color:var(--ink-3); flex:0 0 auto; }
+.avatar-row__meta { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
