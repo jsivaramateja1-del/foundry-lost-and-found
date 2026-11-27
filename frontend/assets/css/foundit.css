@@ -2184,3 +2184,56 @@ a.card { text-decoration:none; color:inherit; }
   background:var(--sunken) center/cover no-repeat; display:grid; place-items:center;
   font-family:var(--serif); font-size:30px; font-weight:700; color:var(--ink-3); flex:0 0 auto; }
 .avatar-row__meta { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+
+/* ===========================================================================
+   THEME TRANSITION
+   ---------------------------------------------------------------------------
+   Three effects run together when the theme is switched:
+
+   1. The incoming palette expands from the toggle as a circle. theme.js drives
+      the clip-path on ::view-transition-new(root); the rules below stop the
+      default crossfade from fighting it.
+   2. The outgoing page fades underneath that circle over 500ms.
+   3. The icon spins and flips, animated in JS so it stays in step.
+
+   Where View Transitions is unavailable the colours still transition, so the
+   change is smooth rather than abrupt.
+   =========================================================================== */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) {
+  z-index: 1;
+  animation: theme-fade-out 500ms cubic-bezier(.4,0,.2,1) forwards;
+}
+::view-transition-new(root) {
+  z-index: 2;
+}
+@keyframes theme-fade-out {
+  to { opacity: 0; }
+}
+
+/* Fallback path: no View Transitions. Colours ease instead of snapping. */
+html.theme-changing,
+html.theme-changing body,
+html.theme-changing .site-header,
+html.theme-changing .card,
+html.theme-changing .panel,
+html.theme-changing .btn {
+  transition: background-color 500ms cubic-bezier(.4,0,.2,1),
+              color 500ms cubic-bezier(.4,0,.2,1),
+              border-color 500ms cubic-bezier(.4,0,.2,1);
+}
+
+[data-theme-toggle] [data-theme-icon] {
+  display: inline-block;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) { animation: none !important; }
+  [data-theme-toggle] [data-theme-icon] { transition: none; }
+}

@@ -39,20 +39,6 @@
       });
     }
 
-    var theme = document.querySelector('[data-theme-toggle]');
-    if (theme) {
-      var icon = theme.querySelector('[data-theme-icon]');
-      var paintIcon = function () {
-        if (icon) icon.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '☀' : '☾';
-      };
-      paintIcon();
-      theme.addEventListener('click', function () {
-        var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-        document.documentElement.setAttribute('data-theme', next);
-        try { localStorage.setItem('foundry.theme', next); } catch (e) { /* private mode */ }
-        paintIcon();
-      });
-    }
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
