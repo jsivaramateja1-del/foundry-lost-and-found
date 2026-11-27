@@ -600,7 +600,11 @@ function prepareReportForm(meta) {
   state.metaFailed = false;
 
   category.innerHTML = meta.categories.map((c) => `<option value="${ui.esc(c)}">${ui.esc(c)}</option>`).join('');
-  location.innerHTML = meta.locations.map((l) => `<option value="${ui.esc(l)}">${ui.esc(l)}</option>`).join('');
+  /* Other is offered so something lost where none of the fifteen places cover
+     can still be filed; choosing it reveals the 'type it' box below. The server
+     accepts it only when that box is filled. */
+  location.innerHTML = meta.locations.map((l) => `<option value="${ui.esc(l)}">${ui.esc(l)}</option>`).join('')
+    + '<option value="Other">Other (type it)</option>';
 
   const customCategoryField = document.getElementById('rf-custom-category-field');
   const customLocationField = document.getElementById('rf-custom-location-field');

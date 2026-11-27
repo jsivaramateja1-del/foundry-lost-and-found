@@ -243,7 +243,18 @@ router.post('/', itemIpLimit, protect, itemAccountLimit, async (req, res, next) 
     if (title.length < 2) return res.status(400).json({ message: 'A title is required' });
     if (title.length > 120) return res.status(400).json({ message: 'Title is too long (max 120 characters)' });
     if (!CATEGORIES.includes(category)) return res.status(400).json({ message: 'Unknown category' });
-    if (!LOCATIONS.includes(location)) return res.status(400).json({ message: 'Unknown location' });
+    /* 'Other' is allowed here, and only here, so a student can file something
+       lost somewhere the fifteen campus places do not cover. It must come with
+       a typed place, otherwise the listing is unfindable. LOCATIONS itself is
+       untouched, so the campus plan keeps its fifteen blocks and the filter
+       list is unchanged. */
+    if (location === 'Other') {
+      if (!oneValue(b.customLocation).trim()) {
+        return res.status(400).json({ message: 'Type where it was, since you chose Other' });
+      }
+    } else if (!LOCATIONS.includes(location)) {
+      return res.status(400).json({ message: 'Unknown location' });
+    }
     if (!TYPES.includes(type)) return res.status(400).json({ message: 'type must be lost or found' });
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ message: 'date must be YYYY-MM-DD' });
 

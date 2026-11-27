@@ -303,3 +303,14 @@ ALTER TABLE messages ADD CONSTRAINT messages_body_check
 -- Presence: updated whenever someone opens or polls a conversation, so the other
 -- person can be shown as Online, or as "last seen" a while ago.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at timestamptz;
+
+-- 'Other' is allowed as a location so a student can file something lost
+-- somewhere the fifteen campus places do not cover, with the actual place typed
+-- into custom_location. The fifteen real places are unchanged, so the campus
+-- plan and the filter list are unaffected.
+ALTER TABLE items DROP CONSTRAINT IF EXISTS items_location_check;
+ALTER TABLE items ADD CONSTRAINT items_location_check
+  CHECK (location IN ('AB1','AB2','Sai Baba Temple','Girls Hostel','Lords',
+    'Animal Planet','Guruvayur','Mamatha','Harihar','Football Ground',
+    'Cricket Nets','Volleyball Courts','Tennis Court','Basketball Court',
+    'Outside Campus','Other'));
