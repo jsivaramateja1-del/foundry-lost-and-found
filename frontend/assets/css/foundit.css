@@ -2258,3 +2258,6 @@ html.theme-changing .btn {
 /* a photo attached to a chat message */
 .bubble__photo { display:block; max-width:260px; width:100%; height:auto;
   border:2px solid var(--line); border-radius:8px; margin-bottom:6px; }
+
+/* read receipt on your own messages */
+.bubble__seen { color:var(--teal); font-weight:700; }

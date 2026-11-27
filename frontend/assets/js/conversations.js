@@ -45,7 +45,9 @@
       : '';
     var text = m.body ? '<p class="bubble__body">' + ui.esc(m.body) + '</p>' : '';
     return '<div class="bubble ' + (mine ? 'bubble--mine' : '') + '">' + photo + text +
-      '<p class="bubble__meta">' + ui.esc(m.sender_name) + ' · ' + ui.date(m.created_at) + '</p>' +
+      '<p class="bubble__meta">' + ui.esc(m.sender_name) + ' · ' + ui.date(m.created_at) +
+        (mine ? (m.read_at ? ' · <span class="bubble__seen">Seen</span>' : ' · Sent') : '') +
+      '</p>' +
     '</div>';
   }
 
