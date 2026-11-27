@@ -177,7 +177,7 @@ function applyTheme(theme) {
   const value = theme === 'light' ? 'light' : 'dark';
   document.documentElement.dataset.theme = value;
   document.querySelectorAll('[data-theme-icon]').forEach((node) => {
-    node.textContent = value === 'light' ? '☀' : '☾';
+    node.textContent = value === 'light' ? '\u263e' : '\u2600';
   });
   document.querySelectorAll('[data-theme-toggle]').forEach((node) => {
     node.setAttribute('aria-label', value === 'light' ? 'Switch to dark theme' : 'Switch to light theme');
@@ -193,10 +193,6 @@ function initTheme() {
   // page and the choice was never stored.
   /* The toggle is bound in theme.js, which animates the change. Binding it here
      as well made one click toggle twice and appear to do nothing. */
-  document.querySelectorAll('[data-theme-icon]').forEach(function (el) {
-    el.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '\u2600' : '\u263e';
-  });
-
   var decided = document.documentElement.getAttribute('data-theme');
   if (decided === 'light' || decided === 'dark') {
     applyTheme(decided);

@@ -75,7 +75,14 @@
       return;
     }
 
-    var vt = document.startViewTransition(function () { applyTheme(next); });
+    /* The theme is applied by this callback. If the browser accepts the
+       transition but never runs the callback - which some do - the theme would
+       silently never change. `commit` runs once, from whichever path gets there
+       first, so the change is guaranteed. */
+    var applied = false;
+    function commit() { if (!applied) { applied = true; applyTheme(next); } }
+    var vt = document.startViewTransition(commit);
+    setTimeout(commit, 80);
 
     // The circle is drawn on the incoming snapshot, so the new palette is what
     // expands. The outgoing snapshot fades underneath it.
