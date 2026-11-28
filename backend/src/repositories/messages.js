@@ -77,10 +77,16 @@ async function send(itemId, senderId, recipientId, body, image) {
   const audience = await audienceFor(itemId, senderId);
   if (!audience) return { ok: false, status: 403, error: 'That listing does not exist' };
 
-  if (!audience.isReporter && recipientId !== audience.reporterId) {
-    return { ok: false, status: 400, error: 'You can only message the person who posted this item' };
-  }
-  if (audience.isReporter && !audience.others.includes(recipientId)) {
+  /* Someone who is not the reporter has exactly one possible correspondent: the
+     reporter. The listing detail deliberately omits reportedBy for non-owners, so
+     the caller often cannot name the recipient; default to the only valid one
+     rather than rejecting a request that has no other correct answer. */
+  if (!audience.isReporter) {
+    if (recipientId && recipientId !== audience.reporterId) {
+      return { ok: false, status: 400, error: 'You can only message the person who posted this item' };
+    }
+    recipientId = audience.reporterId;
+  } else if (!audience.others.includes(recipientId)) {
     return { ok: false, status: 400, error: 'That person has not written to you about this item' };
   }
   if (senderId === recipientId) return { ok: false, status: 400, error: 'You cannot message yourself' };
