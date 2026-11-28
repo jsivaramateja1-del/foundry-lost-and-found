@@ -6,11 +6,11 @@
   <title>Foundry — Campus Lost &amp; Found | Sai University</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <meta name="description" content="A shared space for Sai University students to report lost belongings, browse found items and coordinate safe returns." />
-  <script src="assets/js/theme-init.js?v=20261128A"></script>
+  <script src="assets/js/theme-init.js?v=20261128B"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400;1,9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/foundit.css?v=20261128A" />
+  <link rel="stylesheet" href="assets/css/foundit.css?v=20261128B" />
   <meta name="theme-color" content="#F4EDE0" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#121110" media="(prefers-color-scheme: dark)">
 </head>
@@ -402,12 +402,25 @@
       <dl class="detail-list" id="modal-item-body"></dl>
       <div class="modal__actions">
         <button class="btn btn--solid" id="btn-claim">Claim this item</button>
+        <button class="btn" id="btn-message" type="button" hidden>Message</button>
 
         <a class="btn" id="btn-share-wa" href="#" target="_blank" rel="noopener noreferrer">
           Share on WhatsApp
         </a>
         <button class="btn" data-close-modal>Close</button>
       </div>
+
+      <div class="modal__compose" id="message-compose" hidden>
+        <label class="field__label" for="message-first">Message the person who posted this</label>
+        <textarea id="message-first" rows="3" maxlength="1000"
+                  placeholder="Say who you are and why you are writing"></textarea>
+        <div class="modal__actions">
+          <button class="btn btn--solid" id="btn-message-send" type="button">Send message</button>
+          <button class="btn" id="btn-message-cancel" type="button">Cancel</button>
+        </div>
+        <p class="form-note" id="message-error" role="alert" hidden></p>
+      </div>
+
       <p class="form-note modal__note">
         Claims are sent to whoever posted this listing. The finder is emailed when their item is claimed.
       </p>
@@ -571,9 +584,9 @@
     </div>
   </div>
 
-  <script src="assets/js/api.js?v=20261128A"></script>
-<script src="assets/js/theme.js?v=20261128A"></script>
-  <script src="assets/js/app.js?v=20261128A"></script>
-  <script src="assets/js/plan.js?v=20261128A"></script>
+  <script src="assets/js/api.js?v=20261128B"></script>
+<script src="assets/js/theme.js?v=20261128B"></script>
+  <script src="assets/js/app.js?v=20261128B"></script>
+  <script src="assets/js/plan.js?v=20261128B"></script>
 </body>
 </html>

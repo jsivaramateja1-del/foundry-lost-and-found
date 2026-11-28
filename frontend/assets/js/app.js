@@ -567,6 +567,14 @@ async function openItem(id) {
       claimBtn.textContent = 'Claim this item';
     }
 
+    state.currentItem = item;
+    const messageBtn = document.getElementById('btn-message');
+    messageBtn.hidden = !(Auth.isLoggedIn && !mine);
+    messageBtn.textContent = item.type === 'found' ? 'Message the finder' : 'Message the owner';
+    document.getElementById('message-compose').hidden = true;
+    document.getElementById('message-first').value = '';
+    showFormMessage('message-error', '');
+
     const reportFormEl = document.getElementById('report-item-form');
     reportFormEl.hidden = true;
     document.getElementById('btn-report-item').setAttribute('aria-expanded', 'false');
@@ -961,6 +969,48 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('report-form').addEventListener('submit', submitReport);
   document.getElementById('claim-form').addEventListener('submit', submitClaim);
   document.getElementById('btn-claim').addEventListener('click', openClaim);
+
+  const messageToggle = document.getElementById('btn-message');
+  const messageCompose = document.getElementById('message-compose');
+  const messageInput = document.getElementById('message-first');
+  const messageSend = document.getElementById('btn-message-send');
+
+  messageToggle.addEventListener('click', () => {
+    if (!Auth.isLoggedIn) {
+      ui.toast('Please log in to send a message');
+      Auth.requireLogin('index.html');
+      return;
+    }
+    messageCompose.hidden = !messageCompose.hidden;
+    if (!messageCompose.hidden) messageInput.focus();
+  });
+
+  document.getElementById('btn-message-cancel').addEventListener('click', () => {
+    messageCompose.hidden = true;
+    showFormMessage('message-error', '');
+  });
+
+  messageSend.addEventListener('click', async () => {
+    const text = messageInput.value.trim();
+    if (!text) {
+      showFormMessage('message-error', 'Write a message first');
+      return;
+    }
+    if (!state.currentItem) return;
+    messageSend.disabled = true;
+    try {
+      await api(`/items/${state.currentItem.id}/messages`, {
+        method: 'POST',
+        auth: true,
+        body: { recipientId: state.currentItem.reportedBy, body: text }
+      });
+      window.location.href = 'conversations.html';
+    } catch (err) {
+      showFormMessage('message-error', err.message || 'That message did not send');
+    } finally {
+      messageSend.disabled = false;
+    }
+  });
 
   const reportToggle = document.getElementById('btn-report-item');
   const reportForm = document.getElementById('report-item-form');
