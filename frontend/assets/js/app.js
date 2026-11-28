@@ -569,7 +569,7 @@ async function openItem(id) {
 
     state.currentItem = item;
     const messageBtn = document.getElementById('btn-message');
-    messageBtn.hidden = !(Auth.isLoggedIn && !mine);
+    messageBtn.hidden = !!mine;
     messageBtn.textContent = item.type === 'found' ? 'Message the finder' : 'Message the owner';
     document.getElementById('message-compose').hidden = true;
     document.getElementById('message-first').value = '';
