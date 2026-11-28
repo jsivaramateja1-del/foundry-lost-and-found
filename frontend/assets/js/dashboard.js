@@ -219,6 +219,41 @@ if (!Auth.isLoggedIn) {
       _lastFocused = null;
     }
 
+    let pendingHandover = null;
+
+    const handoverForm = document.getElementById('handover-form');
+    if (handoverForm) {
+      handoverForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const field = document.getElementById('handover-code');
+        const errorBox = document.getElementById('handover-error');
+        const submit = document.getElementById('handover-submit');
+        const code = field.value.trim();
+        if (!/^[0-9]{6}$/.test(code)) {
+          errorBox.textContent = 'Enter the six digits shown on the claimant dashboard.';
+          errorBox.hidden = false;
+          field.focus();
+          return;
+        }
+        submit.disabled = true;
+        try {
+          await api(`/claims/${pendingHandover}/complete`, { method: 'POST', body: { code }, auth: true });
+          closeModalEl(document.getElementById('modal-handover'));
+          ui.toast('Handover confirmed — the listing is now marked returned');
+          await refresh();
+        } catch (err) {
+          errorBox.textContent = err.message || 'That code was not accepted.';
+          errorBox.hidden = false;
+        } finally {
+          submit.disabled = false;
+        }
+      });
+    }
+
+    document.querySelectorAll('[data-close-handover]').forEach((btn) => {
+      btn.addEventListener('click', () => closeModalEl(document.getElementById('modal-handover')));
+    });
+
     function openModalEl(node) {
       _lastFocused = document.activeElement;
       node.dataset.open = 'true';
@@ -399,10 +434,15 @@ if (!Auth.isLoggedIn) {
           ui.toast('Claim rejected');
         } else if (handover) {
 
-          const code = window.prompt('Enter the six-digit handover code from the claimant:');
-          if (!code) { button.disabled = false; return; }
-          await api(`/claims/${handover.dataset.handover}/complete`, { method: 'POST', body: { code: code.trim() }, auth: true });
-          ui.toast('Handover confirmed — the listing is now marked returned');
+          pendingHandover = handover.dataset.handover;
+          document.getElementById('handover-code').value = '';
+          const codeError = document.getElementById('handover-error');
+          codeError.textContent = '';
+          codeError.hidden = true;
+          openModalEl(document.getElementById('modal-handover'));
+          document.getElementById('handover-code').focus();
+          button.disabled = false;
+          return;
         } else if (remove) {
           await api(`/items/${remove.dataset.delete}`, { method: 'DELETE', auth: true });
           ui.toast('Listing deleted');

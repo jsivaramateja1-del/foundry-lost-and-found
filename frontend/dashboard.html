@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dashboard — Foundry</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <script src="assets/js/theme-init.js?v=20261128G"></script>
+  <script src="assets/js/theme-init.js?v=20261128H"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400;1,9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/foundit.css?v=20261128G" />
+  <link rel="stylesheet" href="assets/css/foundit.css?v=20261128H" />
   <meta name="theme-color" content="#F4EDE0" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#121110" media="(prefers-color-scheme: dark)">
 </head>
@@ -136,6 +136,33 @@
     </section>
   </main>
 
+  <div class="modal" id="modal-handover" role="dialog" aria-modal="true" aria-labelledby="modal-handover-title">
+    <div class="modal__panel">
+      <div class="modal__head">
+        <div>
+          <p class="eyebrow">Confirm handover</p>
+          <h2 id="modal-handover-title">Enter the claimant's code</h2>
+        </div>
+        <button class="modal__close" type="button" data-close-handover aria-label="Close">&#10005;</button>
+      </div>
+
+      <p class="form-note">Ask the claimant for the six-digit code shown on their dashboard. Entering it marks the item returned and awards the points.</p>
+
+      <form class="form-grid" id="handover-form" novalidate>
+        <div class="form-error" id="handover-error" role="alert" hidden></div>
+        <div class="field">
+          <label for="handover-code">Six-digit code</label>
+          <input class="input" id="handover-code" inputmode="numeric" maxlength="6"
+                 autocomplete="one-time-code" placeholder="000000" required>
+        </div>
+        <div class="modal__actions">
+          <button class="btn btn--solid" type="submit" id="handover-submit">Confirm handover</button>
+          <button class="btn" type="button" data-close-handover>Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div class="modal" id="modal-edit" role="dialog" aria-modal="true" aria-labelledby="modal-edit-title">
     <div class="modal__panel">
       <div class="modal__head">
@@ -211,8 +238,8 @@
     </div>
   </div>
 
-  <script src="assets/js/api.js?v=20261128G"></script>
-<script src="assets/js/theme.js?v=20261128G"></script>
-  <script src="assets/js/dashboard.js?v=20261128G"></script>
+  <script src="assets/js/api.js?v=20261128H"></script>
+<script src="assets/js/theme.js?v=20261128H"></script>
+  <script src="assets/js/dashboard.js?v=20261128H"></script>
 </body>
 </html>
