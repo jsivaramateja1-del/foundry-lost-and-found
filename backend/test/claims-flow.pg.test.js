@@ -7,6 +7,16 @@
  * points awarded. Every step is asserted, so a regression anywhere in the chain
  * fails here.
  */
+const URL = process.env.TEST_DATABASE_URL;
+if (!URL) {
+  if (process.env.CI === 'true') { console.error('\n  FAILED - TEST_DATABASE_URL is required in CI.\n'); process.exit(1); }
+  console.log('\n  SKIPPED - TEST_DATABASE_URL is not set.\n');
+  process.exit(0);
+}
+process.env.DATABASE_URL = URL;
+process.env.PG_NO_SSL = 'true';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'claims_test_secret_that_is_over_32_chars';
+
 const { connectDB, many, one } = require('../src/config/pg');
 const jwt = require('jsonwebtoken');
 const request = require('supertest');

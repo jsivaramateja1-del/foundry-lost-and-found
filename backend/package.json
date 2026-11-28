@@ -10,7 +10,7 @@
     "dev:pg": "nodemon server.v2.js",
     "db:init": "psql \"$DATABASE_URL\" -f db/schema.sql",
     "create-admin": "node scripts/create-admin-pg.js",
-    "test": "npm run test:auth-v2 && npm run test:connection",
+    "test": "node test/run-all.js",
     "test:auth-v2": "node test/auth-v2.test.js",
     "test:pg": "node test/pg.integration.test.js",
     "test:boot-v2": "node test/boot-v2.test.js",
