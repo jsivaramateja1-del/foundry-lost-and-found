@@ -31,20 +31,20 @@ const PEXELS = (id, ext) =>
 /**
  * Catalogue: keywords -> Pexels photo id.
  *
- * Most specific first, because a listing is matched against the first entry it
- * hits. Every id was opened and its own description read before being added, so
- * each depicts the thing it is attached to.
+ * Order matters: a listing is matched against the first entry it hits, and the
+ * whole title, sub-category, category and description are searched together.
+ * 'student id card' therefore has to come before the vehicle entry, or the 'car'
+ * inside 'card' would match a car.
  *
- * Deliberately absent:
- *   - cricket bat. Searching returned a cricket ball on grass, not a bat, so the
- *     listing stays unmatched rather than being shown the wrong object.
- *   - student ID card. No verified photograph yet.
- *   - 'coat' and 'lab coat' are not under the hoodie entry, and 'earbud' is not
- *     under the headphones entry: a lab coat is not a hoodie and earbuds are not
- *     over-ear headphones.
+ * Every id was opened and its own description read before being added, so each
+ * depicts the thing it is attached to. Keyword lists are kept narrow: 'coat' is
+ * not under the hoodie entry and 'earbud' is not under the headphones entry,
+ * because a lab coat is not a hoodie and earbuds are not over-ear headphones.
  */
 const CATALOGUE = [
+  { keys: ['student id', 'id card', 'identity card', 'badge', 'lanyard'], id: 8761297 },
   { keys: ['football', 'soccer'], id: 12757100, ext: 'png' },
+  { keys: ['cricket'], id: 35981347 },
   { keys: ['umbrella'], id: 9838761 },
   { keys: ['earbud', 'airpod', 'earphone'], id: 26550470 },
   { keys: ['headset', 'headphone'], id: 6587325 },
@@ -55,6 +55,7 @@ const CATALOGUE = [
   { keys: ['lab coat'], id: 8851786 },
   { keys: ['water bottle', 'bottle', 'tumbler', 'flask'], id: 2832062 },
   { keys: ['hoodie', 'sweatshirt'], id: 6311642 },
+  { keys: ['car', 'suv', 'vehicle'], id: 4149331 },
 ];
 
 const MAX_SIDE = 1600;
