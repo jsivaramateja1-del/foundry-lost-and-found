@@ -25,16 +25,21 @@ const path = require('path');
 const https = require('https');
 const { execFileSync } = require('child_process');
 
-const PEXELS = (id) =>
-  `https://images.pexels.com/photos/${id}/pexels-photo-${id}.jpeg?auto=compress&cs=tinysrgb&w=1200`;
+const PEXELS = (id, ext) =>
+  `https://images.pexels.com/photos/${id}/pexels-photo-${id}.${ext || 'jpeg'}?auto=compress&cs=tinysrgb&w=1200`;
 
 /**
- * Catalogue: keyword -> Pexels photo id.
- * Each id was checked to depict the thing it is used for.
+ * Catalogue: keywords -> Pexels photo id.
+ *
+ * Most specific first, because a listing is matched against the first entry it
+ * hits. Every id below was opened and its own description read before it was
+ * added here, so each depicts the thing it is attached to.
  */
 const CATALOGUE = [
-  { keys: ['water bottle', 'bottle', 'tumbler', 'flask'], id: 2832062 },
+  { keys: ['football', 'soccer'], id: 12757100, ext: 'png' },
+  { keys: ['umbrella'], id: 9838761 },
   { keys: ['headset', 'headphone', 'earbud', 'airpod', 'earphone'], id: 6587325 },
+  { keys: ['water bottle', 'bottle', 'tumbler', 'flask'], id: 2832062 },
   { keys: ['hoodie', 'sweatshirt', 'jacket', 'lab coat', 'coat'], id: 6311642 },
 ];
 
@@ -45,11 +50,11 @@ function normalise(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-function pickId(item) {
+function pickPhoto(item) {
   const hay = [item.title, item.subcategory, item.category, item.description]
     .filter(Boolean).join(' ').toLowerCase();
   for (const entry of CATALOGUE) {
-    if (entry.keys.some((k) => hay.includes(k))) return entry.id;
+    if (entry.keys.some((k) => hay.includes(k))) return entry;
   }
   return null;
 }
@@ -174,8 +179,8 @@ async function main() {
         || files.find((f) => f.key.startsWith(key) || key.startsWith(f.key));
       if (hit) { source = () => Promise.resolve(fs.readFileSync(hit.file)); label = path.basename(hit.file); }
     } else {
-      const id = pickId(item);
-      if (id) { source = () => download(PEXELS(id)); label = 'pexels ' + id; }
+      const photo = pickPhoto(item);
+      if (photo) { source = () => download(PEXELS(photo.id, photo.ext)); label = 'pexels ' + photo.id; }
     }
 
     if (!source) { missed.push(item.title); continue; }
