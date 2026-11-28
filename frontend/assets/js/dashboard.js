@@ -57,7 +57,7 @@ if (!Auth.isLoggedIn) {
           </li>`).join('');
       }
 
-      document.getElementById('listings-body').innerHTML = data.items.length
+      document.getElementById('listings-body').innerHTML = (data.items || []).length
         ? data.items.map((i) => row([
             ui.esc(i.title),
             i.type === 'lost' ? 'Lost' : 'Found',
@@ -78,10 +78,10 @@ if (!Auth.isLoggedIn) {
         const mine = await api('/claims/mine', { auth: true });
         const codes = {};
         (mine.claims || []).forEach((c) => { if (c.handoverCode) codes[c.id] = c.handoverCode; });
-        data.claims.forEach((c) => { if (codes[c.id]) c.handoverCode = codes[c.id]; });
+        (data.claims || []).forEach((c) => { if (codes[c.id]) c.handoverCode = codes[c.id]; });
       } catch (err) {  }
 
-      document.getElementById('claims-body').innerHTML = data.claims.length
+      document.getElementById('claims-body').innerHTML = (data.claims || []).length
         ? data.claims.map((c) => row([
             ui.esc(c.itemTitle || c.item?.title || 'Item removed'),
             ui.esc(String(c.message).slice(0, 80)),
@@ -94,10 +94,10 @@ if (!Auth.isLoggedIn) {
         : '<tr><td colspan="5" class="table__empty">No claims yet.</td></tr>';
 
       let received = [];
-  let receivedFailed = false;
+      let receivedFailed = false;
       try {
         const res = await api('/claims/received', { auth: true });
-        received = res.claims;
+        received = res.claims || [];
       } catch (err) {
         ui.toast(`Could not load claims received: ${err.message}`);
         received = [];
