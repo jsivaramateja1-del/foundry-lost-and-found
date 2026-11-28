@@ -134,8 +134,9 @@ function card(item) {
         (m.locations || []).forEach(function (l) {
           var o = document.createElement('option'); o.value = l; o.textContent = l; loc.appendChild(o);
         });
-      })
-      .catch(function () {  });
+      }).catch(function () {
+    showError('Could not load the filter lists. Reload the page to try again.');
+  });
   })();
 
   var timer = null;

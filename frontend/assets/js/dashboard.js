@@ -241,7 +241,11 @@ if (!Auth.isLoggedIn) {
         meta.categories = data.categories;
         meta.locations = data.locations;
       } catch {
-
+        const box = document.getElementById('edit-error');
+        if (box) {
+          box.textContent = 'Could not load the category and location lists. Reload the page before editing.';
+          box.hidden = false;
+        }
       }
     })();
 
