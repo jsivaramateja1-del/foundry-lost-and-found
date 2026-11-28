@@ -22,6 +22,7 @@ router.get('/', protect, async (req, res, next) => {
       messages: thread,
       isReporter: audience.isReporter,
       reporterId: audience.reporterId,
+      canMessage: audience.isReporter ? (audience.others || []) : [audience.reporterId],
       conversations: conversations || [],
       otherTyping: await messages.typingOn(req.params.id, req.user.id),
       otherLastSeen: withId ? await messages.presenceOf(withId) : null

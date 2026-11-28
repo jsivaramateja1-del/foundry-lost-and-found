@@ -1,4 +1,7 @@
-if (!Auth.isLoggedIn) Auth.requireLogin('dashboard.html');
+if (!Auth.isLoggedIn) {
+  Auth.requireLogin('dashboard.html');
+  throw new Error('Not signed in — redirecting to login');
+}
 
     document.getElementById('who').textContent = Auth.user ? Auth.user.name : '';
     document.querySelectorAll('[data-admin-only]').forEach((n) => { n.hidden = !Auth.isAdmin; });

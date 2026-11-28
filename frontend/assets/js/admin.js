@@ -1,5 +1,6 @@
 if (!Auth.isLoggedIn) {
       Auth.requireLogin('admin.html');
+      throw new Error('Not signed in — redirecting to login');
     }
 
     document.getElementById('who').textContent = Auth.user ? Auth.user.name : '';
