@@ -130,6 +130,24 @@ function shrinkImage(file) {
   });
 }
 
+
+const CATEGORY_ART = {
+  'Bottles': '<path d="M10 2h4v3l1.5 3v12a2 2 0 0 1-2 2h-3a2 2 0 0 1-2-2V8L10 5z"/><path d="M9 12h6"/>',
+  'Electronics': '<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="2" y="14" width="4" height="6" rx="1.5"/><rect x="18" y="14" width="4" height="6" rx="1.5"/>',
+  'Clothing': '<path d="M8 3l4 2 4-2 5 3-2 4-2-1v11H7V9L5 10 3 6z"/>',
+  'Books & Notes': '<path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2z"/><path d="M8 3v18"/>',
+  'IDs & Cards': '<rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="8" cy="11" r="2"/><path d="M13 10h6M13 14h4M5 16h5"/>',
+  'Keys & Accessories': '<circle cx="8" cy="8" r="4"/><path d="M11 11l9 9M17 17l2-2M14 14l2-2"/>',
+  'Other': '<path d="M3 8l9-5 9 5v9l-9 5-9-5z"/><path d="M3 8l9 5 9-5M12 13v9"/>'
+};
+
+const artFor = (category) => {
+  const d = CATEGORY_ART[category] || CATEGORY_ART['Other'];
+  return '<svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="currentColor" '
+    + 'stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    + d + '</svg>';
+};
+
 function cardMarkup(item) {
   const place = item.location === 'Other' && item.customLocation ? item.customLocation : item.location;
   const category = item.category === 'Other' && item.customCategory ? item.customCategory : item.category;
@@ -138,12 +156,8 @@ function cardMarkup(item) {
   const photo = item.imageUrl
     ? `<div class="card__media"><img src="${ui.esc(item.imageUrl)}" alt="" loading="lazy" /></div>`
     : `<div class="card__media card__media--empty" aria-hidden="true">
-         <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.5">
-           <rect x="3" y="4" width="18" height="16" rx="2" />
-           <circle cx="8.5" cy="9.5" r="1.5" />
-           <path d="M21 16l-5-5-4 4-2-2-5 5" />
-         </svg>
-         <span>No photo</span>
+         ${artFor(item.category)}
+         <span>${ui.esc(item.subcategory || item.category || 'Item')}</span>
        </div>`;
   return `
     <div class="card" data-item-id="${item.id}" role="button" tabindex="0" aria-label="View ${ui.esc(item.title)}">

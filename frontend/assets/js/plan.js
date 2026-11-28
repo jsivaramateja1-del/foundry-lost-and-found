@@ -126,6 +126,32 @@
     return parts.length ? parts.join(', ') : 'nothing reported';
   }
 
+var CATEGORY_ART = {
+  'Bottles': '<path d="M10 2h4v3l1.5 3v12a2 2 0 0 1-2 2h-3a2 2 0 0 1-2-2V8L10 5z"/><path d="M9 12h6"/>',
+  'Electronics': '<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="2" y="14" width="4" height="6" rx="1.5"/><rect x="18" y="14" width="4" height="6" rx="1.5"/>',
+  'Clothing': '<path d="M8 3l4 2 4-2 5 3-2 4-2-1v11H7V9L5 10 3 6z"/>',
+  'Books & Notes': '<path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2z"/><path d="M8 3v18"/>',
+  'IDs & Cards': '<rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="8" cy="11" r="2"/><path d="M13 10h6M13 14h4M5 16h5"/>',
+  'Keys & Accessories': '<circle cx="8" cy="8" r="4"/><path d="M11 11l9 9M17 17l2-2M14 14l2-2"/>',
+  'Other': '<path d="M3 8l9-5 9 5v9l-9 5-9-5z"/><path d="M3 8l9 5 9-5M12 13v9"/>'
+};
+
+function categoryArt(category) {
+  var d = CATEGORY_ART[category] || CATEGORY_ART['Other'];
+  var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '22');
+  svg.setAttribute('height', '22');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.3');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.innerHTML = d;
+  return svg;
+}
+
   function listingRow(it) {
     var a = el('a', 'cp-item');
     a.href = '#';
@@ -142,6 +168,8 @@
         if (img.parentNode) img.parentNode.removeChild(img);
       });
       art.appendChild(img);
+    } else {
+      art.appendChild(categoryArt(it.category));
     }
     a.appendChild(art);
 
