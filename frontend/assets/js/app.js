@@ -982,7 +982,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
     messageCompose.hidden = !messageCompose.hidden;
-    if (!messageCompose.hidden) messageInput.focus();
+    if (!messageCompose.hidden) {
+      messageInput.focus();
+      if (messageCompose.scrollIntoView) {
+        messageCompose.scrollIntoView({ block: 'nearest' });
+      }
+    }
   });
 
   document.getElementById('btn-message-cancel').addEventListener('click', () => {

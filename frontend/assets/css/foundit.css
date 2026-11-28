@@ -1931,3 +1931,24 @@ html.theme-changing .btn {
 .thread__form { display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap; }
 .thread__form .textarea { flex:1 1 200px; min-width:0; }
 .thread__form .btn { flex:0 0 auto; white-space:nowrap; }
+
+.modal__compose {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.modal__compose[hidden] { display: none; }
+.modal__compose .field__label { display: block; margin-bottom: 8px; }
+.modal__compose textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 10px;
+  font: inherit;
+  padding: 10px 12px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  resize: vertical;
+}
+.modal__compose .modal__actions { margin-top: 0; }
